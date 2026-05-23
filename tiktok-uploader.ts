@@ -266,18 +266,24 @@ async function uploadSingleVideo(
       log('✓ Tombol Add diklik');
       await waitAndLog(page, log, 2000, 'dialog produk');
 
-      const dialog = page.getByRole('dialog', { name: /Add link|Tambah tautan/i });
+      // Scope all product interactions to the dialog to avoid scrolling behind the popup
+      let dialog = page.getByRole('dialog', { name: /Add link|Tambah tautan/i });
+      // Fallback: try any visible dialog/modal
+      if (!await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
+        dialog = page.getByRole('dialog').first();
+      }
       await dialog.waitFor({ state: 'visible', timeout: 10000 });
       log('✓ Dialog produk terbuka');
 
-      await page.getByRole('button', { name: /Next|Berikutnya/i }).click();
+      // All interactions are scoped to the dialog element
+      await dialog.getByRole('button', { name: /Next|Berikutnya/i }).click();
       log('✓ Klik Next');
       await waitAndLog(page, log, 2000, 'tab produk');
 
       try {
-        const myShopTab = page.locator('button').filter({ hasText: 'My shop' });
+        const myShopTab = dialog.locator('button').filter({ hasText: 'My shop' });
         if (await myShopTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-          const showcaseTab = page.locator('button').filter({ hasText: 'Showcase products' });
+          const showcaseTab = dialog.locator('button').filter({ hasText: 'Showcase products' });
           await showcaseTab.click();
           log('✓ Tab "Showcase products" diklik');
           await page.waitForTimeout(2000);
@@ -286,19 +292,21 @@ async function uploadSingleVideo(
         log('ℹ Tab My shop tidak terdeteksi');
       }
 
-      const searchInput = page.getByPlaceholder(/Search products|Cari produk/i);
+      // Search within the dialog
+      const searchInput = dialog.getByPlaceholder(/Search products|Cari produk/i);
       await searchInput.fill(config.productNameRadio);
       log(`✓ Mencari produk: ${config.productNameRadio}`);
 
       try {
-        await page.locator('.product-search-icon, [class*="product-search-icon"]').click({ timeout: 5000 });
+        await dialog.locator('.product-search-icon, [class*="product-search-icon"]').click({ timeout: 5000 });
       } catch {
-        await page.keyboard.press('Enter');
+        await searchInput.press('Enter');
       }
       await waitAndLog(page, log, 3000, 'hasil pencarian');
 
+      // Find radio buttons WITHIN the dialog only
       try {
-        const firstRadio = page.locator('input[type="radio"]').first();
+        const firstRadio = dialog.locator('input[type="radio"]').first();
         await firstRadio.waitFor({ state: 'attached', timeout: 8000 });
         
         let checked = false;
@@ -323,7 +331,7 @@ async function uploadSingleVideo(
           }
         }
 
-        // Try Method 3: Click parent element
+        // Try Method 3: Click parent element (label or container)
         if (!checked) {
           try {
             await firstRadio.locator('..').click({ timeout: 2000 });
@@ -345,6 +353,34 @@ async function uploadSingleVideo(
           }
         }
 
+        // Try Method 5: Scroll into view within dialog first, then click via JavaScript
+        if (!checked) {
+          try {
+            await firstRadio.scrollIntoViewIfNeeded();
+            await firstRadio.evaluate((el: HTMLInputElement) => {
+              el.click();
+              el.checked = true;
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            log('✓ Radio produk diklik (Metode 5: JS evaluate)');
+            checked = true;
+          } catch (err: any) {
+            log(`ℹ Metode 5 gagal: ${err.message}`);
+          }
+        }
+
+        // Try Method 6: Find product row/card and click it directly
+        if (!checked) {
+          try {
+            const productItem = dialog.locator('[class*="product"], [class*="item"], [class*="card"]').filter({ has: page.locator('input[type="radio"]') }).first();
+            await productItem.click({ timeout: 3000 });
+            log('✓ Radio produk diklik (Metode 6: product container click)');
+            checked = true;
+          } catch (err: any) {
+            log(`ℹ Metode 6 gagal: ${err.message}`);
+          }
+        }
+
         if (!checked) {
           throw new Error('Semua metode pemilihan produk gagal.');
         }
@@ -352,17 +388,17 @@ async function uploadSingleVideo(
         log('⚠ Gagal memilih radio produk: ' + e.message);
       }
 
-      await page.getByRole('button', { name: /Next|Berikutnya/i }).click();
+      await dialog.getByRole('button', { name: /Next|Berikutnya/i }).click();
       log('✓ Klik Next (step 2)');
       await waitAndLog(page, log, 2000, 'form produk');
 
       if (config.productTitle) {
-        const titleInput = page.getByRole('textbox', { name: /Product name|Nama produk/i });
+        const titleInput = dialog.getByRole('textbox', { name: /Product name|Nama produk/i });
         await titleInput.fill(config.productTitle);
         log(`✓ Judul produk: ${config.productTitle}`);
       }
 
-      await page.getByRole('button', { name: /^Add$|^Tambah$/i }).click();
+      await dialog.getByRole('button', { name: /^Add$|^Tambah$/i }).click();
       log('✓ Produk ditambahkan');
       await waitAndLog(page, log, 2000, 'produk disimpan');
     } catch (e: any) {
