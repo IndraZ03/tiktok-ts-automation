@@ -298,15 +298,58 @@ async function uploadSingleVideo(
       await waitAndLog(page, log, 3000, 'hasil pencarian');
 
       try {
-        const radio = page.locator(`input[type="radio"][name="${config.productNameRadio}"]`);
-        if (await radio.isVisible({ timeout: 5000 }).catch(() => false)) {
-          await radio.locator('..').click();
-        } else {
-          await page.locator('input[type="radio"]').first().locator('..').click();
+        const firstRadio = page.locator('input[type="radio"]').first();
+        await firstRadio.waitFor({ state: 'attached', timeout: 8000 });
+        
+        let checked = false;
+        
+        // Try Method 1: Playwright check() with force
+        try {
+          await firstRadio.check({ force: true, timeout: 2000 });
+          log('✓ Radio produk dicentang (Metode 1: check)');
+          checked = true;
+        } catch (err: any) {
+          log(`ℹ Metode 1 gagal: ${err.message}`);
         }
-        log('✓ Produk dipilih');
-      } catch {
-        log('⚠ Gagal memilih radio produk');
+
+        // Try Method 2: Playwright click() with force
+        if (!checked) {
+          try {
+            await firstRadio.click({ force: true, timeout: 2000 });
+            log('✓ Radio produk diklik (Metode 2: click)');
+            checked = true;
+          } catch (err: any) {
+            log(`ℹ Metode 2 gagal: ${err.message}`);
+          }
+        }
+
+        // Try Method 3: Click parent element
+        if (!checked) {
+          try {
+            await firstRadio.locator('..').click({ timeout: 2000 });
+            log('✓ Radio produk diklik (Metode 3: parent click)');
+            checked = true;
+          } catch (err: any) {
+            log(`ℹ Metode 3 gagal: ${err.message}`);
+          }
+        }
+
+        // Try Method 4: Click grandparent element
+        if (!checked) {
+          try {
+            await firstRadio.locator('xpath=../..').click({ timeout: 2000 });
+            log('✓ Radio produk diklik (Metode 4: grandparent click)');
+            checked = true;
+          } catch (err: any) {
+            log(`ℹ Metode 4 gagal: ${err.message}`);
+          }
+        }
+
+        if (!checked) {
+          throw new Error('Semua metode pemilihan produk gagal.');
+        }
+      } catch (e: any) {
+        log('⚠ Gagal memilih radio produk: ' + e.message);
       }
 
       await page.getByRole('button', { name: /Next|Berikutnya/i }).click();
