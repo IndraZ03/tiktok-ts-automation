@@ -235,7 +235,7 @@
       </div>
 
       <!-- RIGHT: Control, Queue, and Logs Panel -->
-      <div class="space-y-6">
+      <div class="space-y-6 lg:sticky lg:top-6 self-start">
         <!-- Global Controls -->
         <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
           <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-pink-400">
@@ -264,7 +264,7 @@
         </div>
 
         <!-- Live Streaming Log -->
-        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl flex flex-col" style="min-height: 400px;">
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl flex flex-col" style="height: 480px;">
           <div class="flex items-center justify-between mb-4">
             <h2 class="text-lg font-bold flex items-center gap-2 text-blue-400">
               <span>📝</span> Log Aktivitas Real-Time
@@ -451,7 +451,8 @@
           resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
           scheduleTime: '', intervalMinutes: 60,
-          addProduct: false, productNameRadio: '', productTitle: '', productDescription: ''
+          addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
+          headless: true
         };
 
         // Preload stock badges
@@ -610,6 +611,15 @@
                     </div>
                   </div>
 
+                  <!-- Headless Mode Option -->
+                  <div class="mt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="chk-headless-${fn}" type="checkbox" class="w-4 h-4 accent-pink-500"
+                             ${cfg.headless !== false ? 'checked' : ''}>
+                      <span class="text-xs text-gray-300 font-semibold">🖥 Headless Mode (tanpa browser)</span>
+                    </label>
+                  </div>
+
                   <div class="grid grid-cols-3 gap-2">
                     <div class="col-span-1">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Sched Date</label>
@@ -730,6 +740,7 @@
         productNameRadio: document.getElementById(`productNameRadio-${fn}`)?.value || '',
         productTitle: document.getElementById(`productTitle-${fn}`)?.value || '',
         productDescription: document.getElementById(`productDescription-${fn}`)?.value || '',
+        headless: document.getElementById(`chk-headless-${fn}`)?.checked || false,
       };
 
       try {

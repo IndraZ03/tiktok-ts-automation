@@ -1616,6 +1616,7 @@ interface GrokbotStateConfig {
   productNameRadio?: string;
   productTitle?: string;
   productDescription?: string;
+  headless?: boolean;
 }
 
 interface GrokbotData {
@@ -1670,7 +1671,7 @@ app.get('/api/grokbot/config', (req, res) => {
 });
 
 app.post('/api/grokbot/config/save', (req, res) => {
-  const { stateFile, grokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, addProduct, productNameRadio, productTitle, productDescription } = req.body;
+  const { stateFile, grokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, addProduct, productNameRadio, productTitle, productDescription, headless } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
   const data = loadGrokbotData();
   if (!data.states[stateFile]) {
@@ -1679,7 +1680,8 @@ app.post('/api/grokbot/config/save', (req, res) => {
       resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
       audioFolder: '', description: '', hashtags: '', scheduleDate: '',
       scheduleTime: '', intervalMinutes: 60,
-      addProduct: false, productNameRadio: '', productTitle: '', productDescription: ''
+      addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
+      headless: true
     };
   }
   const s = data.states[stateFile];
@@ -1701,6 +1703,7 @@ app.post('/api/grokbot/config/save', (req, res) => {
   if (productNameRadio !== undefined) s.productNameRadio = productNameRadio;
   if (productTitle !== undefined) s.productTitle = productTitle;
   if (productDescription !== undefined) s.productDescription = productDescription;
+  if (headless !== undefined) s.headless = !!headless;
   saveGrokbotData(data);
   res.json({ success: true });
 });
@@ -1798,7 +1801,7 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
     resolution: cfg.resolution || '720p',
     duration: cfg.duration || '10s',
     aspectRatio: cfg.aspectRatio || '9:16',
-    headless: true,
+    headless: cfg.headless !== false,
     downloadDir: GROK_DOWNLOAD_DIR,
     customDownloadDir: stateDownloadDir,
     totalVideos: totalRawToGenerate,
@@ -1883,7 +1886,7 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
     resolution: cfg.resolution || '720p',
     duration: cfg.duration || '10s',
     aspectRatio: cfg.aspectRatio || '9:16',
-    headless: true,
+    headless: cfg.headless !== false,
     downloadDir: GROK_DOWNLOAD_DIR,
     customDownloadDir: cadanganDir,
     totalVideos: 60, // 30 merged videos require 60 raw
@@ -1989,7 +1992,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
       productTitle: cfg.productTitle || '',
       productDescription: cfg.productDescription || '',
       skipSwitches: false,
-      headless: true,
+      headless: cfg.headless !== false,
       scheduleDate: schedDate,
       scheduleTime: schedTime,
       intervalMinutes: intervalMin,
@@ -2243,7 +2246,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
         resolution: cfg.resolution || '720p',
         duration: cfg.duration || '10s',
         aspectRatio: cfg.aspectRatio || '9:16',
-        headless: true, // Headless mode selalu true
+        headless: cfg.headless !== false, // Headless mode sesuai config
         downloadDir: GROK_DOWNLOAD_DIR,
         customDownloadDir: stateDownloadDir,
         totalVideos: totalRawToGenerate,
@@ -2335,7 +2338,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       productTitle: cfg.productTitle || '',
       productDescription: cfg.productDescription || '',
       skipSwitches: false, // jangan centang skip switches
-      headless: true, // headless mode selalu true
+      headless: cfg.headless !== false, // headless mode sesuai config
       scheduleDate: schedDate,
       scheduleTime: schedTime,
       intervalMinutes: intervalMin,
