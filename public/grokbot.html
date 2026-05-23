@@ -1,0 +1,1024 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grok to TikTok Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: #030712;
+      color: #f3f4f6;
+    }
+    #live-log {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+    }
+    #live-log div { padding: 3px 0; border-bottom: 1px solid rgba(255,255,255,0.02); }
+    .log-error { color: #f87171; background: rgba(239, 68, 68, 0.05); }
+    .log-success { color: #4ade80; background: rgba(34, 197, 94, 0.05); }
+    .log-warn { color: #fbbf24; background: rgba(245, 158, 11, 0.05); }
+    .log-info { color: #9ca3af; }
+
+    .multiselect-dropdown { position: relative; }
+    .multiselect-menu {
+      position: absolute; z-index: 50; top: 100%; left: 0; right: 0;
+      max-height: 280px; overflow-y: auto;
+      background: rgba(17, 24, 39, 0.95);
+      border: 1px solid rgba(236, 72, 153, 0.2);
+      border-radius: 16px;
+      margin-top: 6px; padding: 8px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      display: none;
+    }
+    .multiselect-menu.open { display: block; }
+    .multiselect-item {
+      display: flex; align-items: center; gap: 10px;
+      padding: 10px 14px; border-radius: 10px; cursor: pointer;
+      transition: all 0.2s ease;
+    }
+    .multiselect-item:hover { background: rgba(236, 72, 153, 0.1); }
+    .multiselect-item input { accent-color: #ec4899; width: 18px; height: 18px; }
+
+    .state-card {
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: linear-gradient(145deg, rgba(17, 24, 39, 0.8), rgba(31, 41, 55, 0.8));
+      backdrop-filter: blur(12px);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .state-card:hover {
+      border-color: rgba(236, 72, 153, 0.3);
+      box-shadow: 0 10px 30px -10px rgba(236, 72, 153, 0.15);
+      transform: translateY(-2px);
+    }
+
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    @keyframes pulse-run {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4); }
+      50% { opacity: 0.8; box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+    }
+    .running-pulse { animation: pulse-run 2s infinite; }
+
+    .gradient-btn {
+      background: linear-gradient(135deg, #a855f7, #ec4899);
+      transition: all 0.3s ease;
+    }
+    .gradient-btn:hover {
+      background: linear-gradient(135deg, #c084fc, #f472b6);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -10px rgba(236, 72, 153, 0.5);
+    }
+    .gradient-btn:active { transform: scale(0.98); }
+
+    .gradient-btn-green {
+      background: linear-gradient(135deg, #10b981, #059669);
+      transition: all 0.3s ease;
+    }
+    .gradient-btn-green:hover {
+      background: linear-gradient(135deg, #34d399, #10b981);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -10px rgba(16, 185, 129, 0.5);
+    }
+
+    .gradient-btn-blue {
+      background: linear-gradient(135deg, #3b82f6, #2563eb);
+      transition: all 0.3s ease;
+    }
+    .gradient-btn-blue:hover {
+      background: linear-gradient(135deg, #60a5fa, #3b82f6);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.5);
+    }
+
+    @keyframes shimmer {
+      0% { background-position: 0 0; }
+      100% { background-position: 1.5rem 0; }
+    }
+    .animate-shimmer {
+      background-size: 1.5rem 1.5rem;
+      animation: shimmer 1s linear infinite;
+    }
+    
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 99px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body class="min-h-screen relative overflow-x-hidden">
+  <!-- Glowing Background Orbs -->
+  <div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-purple-900/10 blur-[120px] pointer-events-none"></div>
+  <div class="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-pink-900/10 blur-[120px] pointer-events-none"></div>
+
+  <div class="max-w-7xl mx-auto p-6 relative z-10">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
+      <div>
+        <h1 class="text-4xl font-extrabold bg-gradient-to-r from-purple-400 via-fuchsia-500 to-pink-500 bg-clip-text text-transparent tracking-tight">
+          🤖 Grok to TikTok Bot
+        </h1>
+        <p class="text-gray-400 text-sm mt-1">Generate stok video otomatis dengan Grok AI dan upload terjadwal ke TikTok</p>
+      </div>
+      <div class="flex items-center gap-3 self-stretch md:self-auto justify-end">
+        <span id="status-badge" class="text-xs px-3.5 py-2 rounded-full bg-gray-800 border border-gray-700 text-gray-400 font-semibold flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-gray-500"></span> ⏸ Idle
+        </span>
+        <a href="/tiktok" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">TikTok Uploader →</a>
+        <a href="/grok" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">Grok Imagine →</a>
+        <a href="/" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">← State Manager</a>
+      </div>
+    </div>
+
+    <!-- State Selector -->
+    <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 mb-8 shadow-xl">
+      <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-purple-300">
+        <span>🔑</span> Pilih TikTok State (Login Session)
+      </h2>
+      <p class="text-gray-400 text-xs mb-4">Setiap state TikTok yang Anda pilih di sini akan memunculkan satu kartu konfigurasi mandiri di bawah.</p>
+      <div class="multiselect-dropdown" id="state-dropdown">
+        <button onclick="toggleDropdown()" type="button"
+                class="w-full bg-gray-950/80 border border-gray-800 hover:border-pink-500/50 rounded-2xl px-5 py-4 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-pink-500/20 transition-all duration-300">
+          <span id="dropdown-label" class="text-gray-400 truncate font-medium">-- Pilih State (bisa pilih banyak) --</span>
+          <span class="text-gray-500 flex-shrink-0 ml-2">▾</span>
+        </button>
+        <div class="multiselect-menu" id="dropdown-menu"></div>
+      </div>
+    </div>
+
+    <!-- Real-time Connected Progress Tracker -->
+    <div id="overall-progress-card" class="glass-panel rounded-3xl p-6 border border-gray-800/80 mb-8 shadow-xl hidden">
+      <h2 class="text-lg font-bold mb-4 flex items-center justify-between">
+        <span class="flex items-center gap-2.5 text-pink-300">
+          <span>🔄</span> Progress Status Real-Time 
+          <span id="progress-state-badge" class="text-xs px-3 py-1 rounded-full bg-pink-500/20 text-pink-400 border border-pink-500/30 font-bold uppercase tracking-wider"></span>
+        </span>
+        <span class="text-xs font-semibold text-gray-400" id="progress-active-task">Idle</span>
+      </h2>
+      
+      <!-- Contiguous 3-Segment Progress Bar -->
+      <div class="bg-gray-950/80 rounded-2xl p-1.5 border border-gray-900 shadow-inner">
+        <div class="h-14 w-full flex overflow-hidden rounded-xl bg-gray-900 shadow-inner">
+          <!-- Segment 1: Grok Generate (33.33%) -->
+          <div class="w-1/3 h-full bg-gray-950/30 relative border-r border-gray-800/50 flex items-center">
+            <div id="prog-generate" class="h-full bg-gradient-to-r from-purple-700 via-indigo-600 to-indigo-500 transition-all duration-500 relative" style="width: 0%;">
+              <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] animate-shimmer opacity-20"></div>
+            </div>
+            <span id="txt-generate" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">🧠 Grok Generate: 0%</span>
+          </div>
+          
+          <!-- Segment 2: Video Merger (33.33%) -->
+          <div class="w-1/3 h-full bg-gray-950/30 relative border-r border-gray-800/50 flex items-center">
+            <div id="prog-merge" class="h-full bg-gradient-to-r from-pink-600 via-fuchsia-600 to-purple-600 transition-all duration-500 relative" style="width: 0%;">
+              <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] animate-shimmer opacity-20"></div>
+            </div>
+            <span id="txt-merge" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">✂ Video Merger: 0%</span>
+          </div>
+
+          <!-- Segment 3: TikTok Upload (33.33%) -->
+          <div class="w-1/3 h-full bg-gray-950/30 relative flex items-center">
+            <div id="prog-upload" class="h-full bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 transition-all duration-500 relative" style="width: 0%;">
+              <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] animate-shimmer opacity-20"></div>
+            </div>
+            <span id="txt-upload" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">🚀 TikTok Upload: 0%</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Details Grid -->
+      <div class="grid grid-cols-3 gap-4 mt-4 text-center">
+        <div class="p-3.5 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-center transition-all hover:bg-gray-950/60">
+          <div class="text-[10px] text-gray-500 uppercase tracking-widest font-extrabold mb-0.5">Langkah 1</div>
+          <div class="text-xs font-bold text-indigo-400 flex items-center justify-center gap-1">🧠 Grok Generate</div>
+          <div class="text-xs text-gray-400 mt-1" id="lbl-generate">Persiapan</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-center transition-all hover:bg-gray-950/60">
+          <div class="text-[10px] text-gray-500 uppercase tracking-widest font-extrabold mb-0.5">Langkah 2</div>
+          <div class="text-xs font-bold text-fuchsia-400 flex items-center justify-center gap-1">✂ Video Merger</div>
+          <div class="text-xs text-gray-400 mt-1" id="lbl-merge">Menunggu</div>
+        </div>
+        <div class="p-3.5 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-center transition-all hover:bg-gray-950/60">
+          <div class="text-[10px] text-gray-500 uppercase tracking-widest font-extrabold mb-0.5">Langkah 3</div>
+          <div class="text-xs font-bold text-rose-400 flex items-center justify-center gap-1">🚀 TikTok Upload</div>
+          <div class="text-xs text-gray-400 mt-1" id="lbl-upload">Menunggu</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Main Workspace Layout -->
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <!-- LEFT + MIDDLE: Configuration Cards Container (Col Span 2) -->
+      <div class="lg:col-span-2 space-y-6" id="state-cards-container">
+        <div class="glass-panel rounded-3xl p-10 border border-gray-800/80 text-center py-16 text-gray-500 shadow-xl">
+          <div class="text-5xl mb-4">🤖</div>
+          <p class="text-xl font-bold text-gray-300 mb-2">Belum Ada State TikTok Terpilih</p>
+          <p class="text-sm text-gray-500 max-w-md mx-auto">Silakan pilih satu atau beberapa state TikTok di atas untuk menampilkan kartu konfigurasi masing-masing state.</p>
+        </div>
+      </div>
+
+      <!-- RIGHT: Control, Queue, and Logs Panel -->
+      <div class="space-y-6">
+        <!-- Global Controls -->
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
+          <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-pink-400">
+            <span>⚡</span> Kontrol Global
+          </h2>
+          <div class="space-y-3">
+            <button id="btn-full-auto" onclick="startFullAuto()"
+                    class="w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-pink-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+              🚀 Full Auto (Semua State Terpilih)
+            </button>
+            <button id="btn-stop" onclick="stopBot()" disabled
+                    class="w-full bg-gray-900 border border-red-900/30 hover:bg-red-650/20 hover:border-red-500 disabled:opacity-20 text-red-400 disabled:text-gray-500 disabled:pointer-events-none py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2">
+              <span>⛔</span> Hentikan Bot
+            </button>
+          </div>
+        </div>
+
+        <!-- Schedule Queue -->
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
+          <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-purple-400">
+            <span>📋</span> Antrian Jadwal Bot
+          </h2>
+          <div id="queue-container" class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+            <div class="text-sm text-gray-500 text-center py-6">Belum ada antrian aktif</div>
+          </div>
+        </div>
+
+        <!-- Live Streaming Log -->
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl flex flex-col" style="min-height: 400px;">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-bold flex items-center gap-2 text-blue-400">
+              <span>📝</span> Log Aktivitas Real-Time
+            </h2>
+            <button onclick="clearLog()" class="text-xs px-2.5 py-1 rounded bg-gray-800 text-gray-400 hover:text-white border border-gray-700 transition">Hapus</button>
+          </div>
+          <div id="live-log" class="flex-1 overflow-y-auto bg-gray-950/80 border border-gray-900 rounded-2xl p-4 space-y-1 select-text"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════
+    //  GLOBAL OPTIONS & STATE
+    // ═══════════════════════════════════════
+    let allStates = [];          // TikTok states [{name, filename, expiry}]
+    let selectedStates = [];     // Selected TikTok filenames [filename, ...]
+    let stateConfigs = {};       // Saved configs { filename: configObj }
+    
+    // Loaded lists from Grok endpoints
+    let grokStates = [];         // [{filename, name, expiry}]
+    let promptFiles = [];        // [filename, ...]
+    let bahanFolders = [];       // [foldername, ...]
+    let audioFolders = [];       // [foldername, ...]
+    
+    let eventSource = null;
+    let dropdownOpen = false;
+    let stockPollInterval = null;
+
+    // ═══════════════════════════════════════
+    //  ONLOAD INIT
+    // ═══════════════════════════════════════
+    window.onload = async () => {
+      addLog('🔄 Mempersiapkan Grokbot Dashboard...');
+      await preloadOptions();
+      await loadTikTokStates();
+      await loadConfigs();
+      pollStatus();
+      setInterval(pollStatus, 5000);
+      
+      // Start polling stock counts for active cards
+      stockPollInterval = setInterval(pollActiveStocks, 10000);
+    };
+
+    // ═══════════════════════════════════════
+    //  PRELOAD OPTION LISTS
+    // ═══════════════════════════════════════
+    async function preloadOptions() {
+      try {
+        const resGrok = await fetch('/api/states?platform=grok');
+        grokStates = await resGrok.json();
+        
+        const resPrompt = await fetch('/api/grok/prompts');
+        const dataPrompt = await resPrompt.json();
+        promptFiles = dataPrompt.files || [];
+        
+        const resBahan = await fetch('/api/grok/bahan');
+        const dataBahan = await resBahan.json();
+        bahanFolders = dataBahan.folders || [];
+        
+        const resAudio = await fetch('/api/grok/audio-folders');
+        const dataAudio = await resAudio.json();
+        audioFolders = dataAudio.folders || [];
+        
+        addLog(`✓ Memuat ${grokStates.length} Grok State, ${promptFiles.length} Prompt, ${bahanFolders.length} Bahan Folder, ${audioFolders.length} Audio Folder.`);
+      } catch (e) {
+        addLog('❌ Gagal preload options: ' + e.message);
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  LOAD TIKTOK STATES & CONFIGS
+    // ═══════════════════════════════════════
+    async function loadTikTokStates() {
+      try {
+        const res = await fetch('/api/states');
+        allStates = await res.json();
+        renderDropdown();
+      } catch (e) { 
+        addLog('❌ Gagal load states: ' + e.message); 
+      }
+    }
+
+    async function loadConfigs() {
+      try {
+        const res = await fetch('/api/grokbot/config');
+        const data = await res.json();
+        stateConfigs = data.states || {};
+        
+        // Restore selected states from localStorage if any
+        const savedSelection = localStorage.getItem('grokbot_selected_states');
+        if (savedSelection) {
+          try {
+            const parsed = JSON.parse(savedSelection);
+            selectedStates = parsed.filter(fn => allStates.some(s => s.filename === fn));
+            renderDropdown();
+            renderAllCards();
+          } catch {}
+        }
+      } catch (e) { 
+        addLog('❌ Gagal load config: ' + e.message); 
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  DROPDOWN CONTROLS
+    // ═══════════════════════════════════════
+    function toggleDropdown() {
+      dropdownOpen = !dropdownOpen;
+      document.getElementById('dropdown-menu').classList.toggle('open', dropdownOpen);
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!document.getElementById('state-dropdown').contains(e.target)) {
+        dropdownOpen = false;
+        document.getElementById('dropdown-menu').classList.remove('open');
+      }
+    });
+
+    function renderDropdown() {
+      const menu = document.getElementById('dropdown-menu');
+      menu.innerHTML = allStates.map(s => {
+        const checked = selectedStates.includes(s.filename) ? 'checked' : '';
+        const statusIcon = s.expiry.status === 'safe' ? '🟢' : s.expiry.status === 'warning' ? '🟡' : s.expiry.status === 'expired' ? '🔴' : '⏳';
+        return `<label class="multiselect-item hover:bg-gray-800 transition">
+          <input type="checkbox" ${checked} onchange="toggleState('${s.filename}')">
+          <span class="text-sm font-semibold flex-1">${statusIcon} ${s.name}</span>
+          <span class="text-xs text-gray-400 font-bold bg-gray-950 px-2 py-0.5 rounded-full border border-gray-800/80">${s.expiry.daysLeft != null ? s.expiry.daysLeft + ' hari' : ''}</span>
+        </label>`;
+      }).join('');
+      updateDropdownLabel();
+    }
+
+    function toggleState(filename) {
+      const idx = selectedStates.indexOf(filename);
+      if (idx >= 0) {
+        selectedStates.splice(idx, 1);
+      } else {
+        selectedStates.push(filename);
+      }
+      localStorage.setItem('grokbot_selected_states', JSON.stringify(selectedStates));
+      renderDropdown();
+      renderAllCards();
+    }
+
+    function updateDropdownLabel() {
+      const label = document.getElementById('dropdown-label');
+      if (selectedStates.length === 0) {
+        label.textContent = '-- Pilih State (bisa pilih banyak) --';
+        label.className = 'text-gray-400 truncate font-semibold';
+      } else {
+        const names = selectedStates.map(f => {
+          const s = allStates.find(a => a.filename === f);
+          return s ? s.name : f;
+        });
+        label.textContent = names.join(', ');
+        label.className = 'text-pink-400 font-bold truncate';
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  RENDER STATE CONFIG CARDS
+    // ═══════════════════════════════════════
+    function renderAllCards() {
+      const container = document.getElementById('state-cards-container');
+      if (selectedStates.length === 0) {
+        container.innerHTML = `
+        <div class="glass-panel rounded-3xl p-10 border border-gray-800/80 text-center py-16 text-gray-500 shadow-xl">
+          <div class="text-5xl mb-4">🤖</div>
+          <p class="text-xl font-bold text-gray-300 mb-2">Belum Ada State TikTok Terpilih</p>
+          <p class="text-sm text-gray-500 max-w-md mx-auto">Silakan pilih satu atau beberapa state TikTok di atas untuk menampilkan kartu konfigurasi masing-masing state.</p>
+        </div>`;
+        return;
+      }
+
+      container.innerHTML = selectedStates.map(fn => {
+        const state = allStates.find(s => s.filename === fn);
+        const name = state ? state.name : fn;
+        
+        // Default configs mapping
+        const cfg = stateConfigs[fn] || {
+          grokState: '', promptFile: '', bahanFolder: '', mode: 'Video',
+          resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
+          audioFolder: '', description: '', hashtags: '', scheduleDate: '',
+          scheduleTime: '', intervalMinutes: 60
+        };
+
+        // Preload stock badges
+        const today = new Date().toISOString().split('T')[0];
+        const nowTime = new Date().toTimeString().slice(0, 5);
+
+        // Map drop down options
+        const grokStateOpts = grokStates.map(gs => `<option value="${gs.filename}" ${cfg.grokState === gs.filename ? 'selected' : ''}>${gs.name}</option>`).join('');
+        const promptOpts = promptFiles.map(pf => `<option value="${pf}" ${cfg.promptFile === pf ? 'selected' : ''}>${pf.replace('.json', '')}</option>`).join('');
+        const bahanOpts = bahanFolders.map(bf => `<option value="${bf}" ${cfg.bahanFolder === bf ? 'selected' : ''}>${bf}</option>`).join('');
+        const audioOpts = audioFolders.map(af => `<option value="${af}" ${cfg.audioFolder === af ? 'selected' : ''}>${af}</option>`).join('');
+
+        return `
+        <div class="state-card rounded-3xl p-6 relative overflow-hidden" id="card-${fn}">
+          <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <h3 class="text-xl font-extrabold flex items-center gap-2.5 text-purple-300">
+              <span class="w-3 h-3 rounded-full bg-pink-500"></span>
+              ${escHtml(name)}
+            </h3>
+            
+            <!-- Live Stocks Display -->
+            <div class="flex flex-wrap items-center gap-2 text-xs font-bold">
+              <span class="bg-blue-900/30 border border-blue-800/40 text-blue-400 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                📁 Raw: <span id="stock-raw-${fn}">0</span>
+              </span>
+              <span class="bg-green-900/30 border border-green-800/40 text-green-400 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                🟢 Utama: <span id="stock-utama-${fn}">0</span>
+              </span>
+              <span class="bg-yellow-900/30 border border-yellow-800/40 text-yellow-400 px-3 py-1.5 rounded-xl flex items-center gap-1.5">
+                🟡 Cadangan: <span id="stock-cadangan-${fn}">0</span>
+              </span>
+            </div>
+          </div>
+
+          <!-- Configuration Inputs Group -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <!-- Grok Setup -->
+            <div class="p-4 rounded-2xl bg-gray-950/40 border border-gray-900">
+              <h4 class="text-xs font-extrabold uppercase tracking-widest text-purple-400 mb-3 flex items-center gap-1.5">
+                <span>🧠</span> Generator Grok AI
+              </h4>
+              
+              <div class="space-y-3">
+                <div>
+                  <label class="text-xs text-gray-400 font-semibold block mb-1">Grok State (Session)</label>
+                  <select id="grokState-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-purple-500 transition-all font-semibold">
+                    <option value="">-- Pilih Grok State --</option>
+                    ${grokStateOpts}
+                  </select>
+                </div>
+                
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Folder Bahan</label>
+                    <select id="bahanFolder-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-purple-500 transition-all font-semibold">
+                      <option value="">-- Pilih Bahan --</option>
+                      ${bahanOpts}
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Prompt Grok</label>
+                    <select id="promptFile-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-purple-500 transition-all font-semibold">
+                      <option value="">-- Pilih Prompt --</option>
+                      ${promptOpts}
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Mode</label>
+                    <select id="mode-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
+                      <option value="Video" ${cfg.mode === 'Video' ? 'selected' : ''}>Video</option>
+                      <option value="Image" ${cfg.mode === 'Image' ? 'selected' : ''}>Image</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Resolusi</label>
+                    <select id="resolution-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
+                      <option value="720p" ${cfg.resolution === '720p' ? 'selected' : ''}>720p</option>
+                      <option value="480p" ${cfg.resolution === '480p' ? 'selected' : ''}>480p</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Durasi</label>
+                    <select id="duration-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
+                      <option value="10s" ${cfg.duration === '10s' ? 'selected' : ''}>10s</option>
+                      <option value="6s" ${cfg.duration === '6s' ? 'selected' : ''}>6s</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Aspect Ratio</label>
+                    <select id="aspectRatio-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
+                      <option value="9:16" ${cfg.aspectRatio === '9:16' ? 'selected' : ''}>9:16 (Vertikal)</option>
+                      <option value="16:9" ${cfg.aspectRatio === '16:9' ? 'selected' : ''}>16:9 (Horizontal)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Merge 2 Video</label>
+                    <select id="merge-${fn}" onchange="toggleAudioGroup('${fn}')" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
+                      <option value="true" ${cfg.merge !== false ? 'selected' : ''}>Ya</option>
+                      <option value="false" ${cfg.merge === false ? 'selected' : ''}>Tidak</option>
+                    </select>
+                  </div>
+                  <div id="audio-group-${fn}" style="display: ${cfg.merge !== false ? 'block' : 'none'}">
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">Folder Audio</label>
+                    <select id="audioFolder-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
+                      <option value="">-- Pilih Audio --</option>
+                      ${audioOpts}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- TikTok Upload Setup -->
+            <div class="p-4 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-between">
+              <div>
+                <h4 class="text-xs font-extrabold uppercase tracking-widest text-pink-400 mb-3 flex items-center gap-1.5">
+                  <span>🚀</span> TikTok Uploader
+                </h4>
+                
+                <div class="space-y-3">
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1">📝 Deskripsi Video</label>
+                    <textarea id="description-${fn}" rows="2.5" placeholder="Tuliskan deskripsi video TikTok Anda di sini..."
+                              class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-pink-500 resize-none transition-all">${escHtml(cfg.description || '')}</textarea>
+                  </div>
+                  
+                  <div>
+                    <label class="text-xs text-gray-400 font-semibold block mb-1"># Hashtags (pisah koma)</label>
+                    <input id="hashtags-${fn}" type="text" placeholder="fyp, viral, grokbot" value="${escHtml(cfg.hashtags || '')}"
+                           class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-pink-500 transition-all font-semibold">
+                  </div>
+
+                  <div class="grid grid-cols-3 gap-2">
+                    <div class="col-span-1">
+                      <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Sched Date</label>
+                      <input id="scheduleDate-${fn}" type="date" value="${cfg.scheduleDate || today}"
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                    </div>
+                    <div class="col-span-1">
+                      <label class="text-[10px] text-gray-400 font-bold block mb-1">⏰ Sched Time</label>
+                      <input id="scheduleTime-${fn}" type="time" value="${cfg.scheduleTime || nowTime}"
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                    </div>
+                    <div class="col-span-1">
+                      <label class="text-[10px] text-gray-400 font-bold block mb-1">⏱ Interval (Min)</label>
+                      <input id="intervalMinutes-${fn}" type="number" min="1" value="${cfg.intervalMinutes || 60}"
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Save card configurations -->
+              <button onclick="saveConfig('${fn}')"
+                      class="w-full bg-gray-800 hover:bg-gray-700/80 text-gray-200 py-2.5 rounded-xl text-xs font-bold transition-all border border-gray-700 mt-4">
+                💾 Simpan Konfigurasi State
+              </button>
+            </div>
+          </div>
+
+          <!-- Bottom Actions inside card config -->
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <button onclick="generateUtama('${fn}')"
+                    class="gradient-btn-blue text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
+              📥 Generate Utama (max 30)
+            </button>
+            <button onclick="generateCadangan('${fn}')"
+                    class="gradient-btn-green text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
+              🟢 Generate Cadangan (30 merged)
+            </button>
+            <button onclick="scheduleState('${fn}')"
+                    class="gradient-btn text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
+              🚀 Jadwalkan & Upload
+            </button>
+          </div>
+        </div>`;
+      }).join('');
+
+      // Trigger immediate stock counts loading for the newly rendered cards
+      selectedStates.forEach(fn => loadStateStock(fn));
+    }
+
+    // ═══════════════════════════════════════
+    //  TOGGLE AUDIO GROUP PER CARD
+    // ═══════════════════════════════════════
+    function toggleAudioGroup(fn) {
+      const val = document.getElementById(`merge-${fn}`).value;
+      document.getElementById(`audio-group-${fn}`).style.display = val === 'true' ? 'block' : 'none';
+    }
+
+    // ═══════════════════════════════════════
+    //  POLL ACTIVE STOCKS
+    // ═══════════════════════════════════════
+    function pollActiveStocks() {
+      if (selectedStates.length > 0) {
+        selectedStates.forEach(fn => loadStateStock(fn));
+      }
+    }
+
+    async function loadStateStock(fn) {
+      try {
+        const res = await fetch(`/api/grokbot/stock?state=${encodeURIComponent(fn)}`);
+        const stock = await res.json();
+        const badgeRaw = document.getElementById(`stock-raw-${fn}`);
+        const badgeUtama = document.getElementById(`stock-utama-${fn}`);
+        const badgeCadangan = document.getElementById(`stock-cadangan-${fn}`);
+        if (badgeRaw) badgeRaw.textContent = stock.raw;
+        if (badgeUtama) badgeUtama.textContent = stock.utama;
+        if (badgeCadangan) badgeCadangan.textContent = stock.cadangan;
+      } catch {}
+    }
+
+    // ═══════════════════════════════════════
+    //  SAVE CONFIG
+    // ═══════════════════════════════════════
+    async function saveConfig(fn) {
+      const cfg = {
+        stateFile: fn,
+        grokState: document.getElementById(`grokState-${fn}`)?.value || '',
+        promptFile: document.getElementById(`promptFile-${fn}`)?.value || '',
+        bahanFolder: document.getElementById(`bahanFolder-${fn}`)?.value || '',
+        mode: document.getElementById(`mode-${fn}`)?.value || 'Video',
+        resolution: document.getElementById(`resolution-${fn}`)?.value || '720p',
+        duration: document.getElementById(`duration-${fn}`)?.value || '10s',
+        aspectRatio: document.getElementById(`aspectRatio-${fn}`)?.value || '9:16',
+        merge: document.getElementById(`merge-${fn}`)?.value === 'true',
+        audioFolder: document.getElementById(`audioFolder-${fn}`)?.value || '',
+        description: document.getElementById(`description-${fn}`)?.value || '',
+        hashtags: document.getElementById(`hashtags-${fn}`)?.value || '',
+        scheduleDate: document.getElementById(`scheduleDate-${fn}`)?.value || '',
+        scheduleTime: document.getElementById(`scheduleTime-${fn}`)?.value || '',
+        intervalMinutes: parseInt(document.getElementById(`intervalMinutes-${fn}`)?.value) || 60,
+      };
+
+      try {
+        const res = await fetch('/api/grokbot/config/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(cfg)
+        });
+        const data = await res.json();
+        if (data.success) {
+          stateConfigs[fn] = cfg;
+          addLog(`💾 Config berhasil disimpan untuk state: ${getStateName(fn)}`);
+          loadStateStock(fn);
+        } else {
+          addLog('❌ Gagal menyimpan konfigurasi: ' + (data.error || ''));
+        }
+      } catch (e) { 
+        addLog('❌ Error simpan config: ' + e.message); 
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  TRIGGER ACTIONS
+    // ═══════════════════════════════════════
+    async function generateUtama(fn) {
+      await saveConfig(fn);
+      addLog(`⚙️ Memulai Generate Stok Utama untuk state: ${getStateName(fn)}...`);
+      setBusy(true);
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/grokbot/generate-utama', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ Gagal: ' + (data.error || ''));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function generateCadangan(fn) {
+      await saveConfig(fn);
+      addLog(`⚙️ Memulai Generate Stok Cadangan untuk state: ${getStateName(fn)}...`);
+      setBusy(true);
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/grokbot/generate-cadangan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ Gagal: ' + (data.error || ''));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function scheduleState(fn) {
+      await saveConfig(fn);
+      addLog(`🚀 Menjadwalkan & Memulai Upload untuk state: ${getStateName(fn)}...`);
+      setBusy(true);
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/grokbot/schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ Gagal: ' + (data.error || ''));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function startFullAuto() {
+      if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
+
+      // Save all active configurations
+      for (const fn of selectedStates) {
+        await saveConfig(fn);
+      }
+
+      addLog(`🚀 Memulai Orchestrator FULL AUTO untuk ${selectedStates.length} state...`);
+      setBusy(true);
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/grokbot/full-auto', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFiles: selectedStates })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ Gagal: ' + (data.error || ''));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function stopBot() {
+      addLog('⛔ Mengirim perintah stop ke Grokbot...');
+      await fetch('/api/grokbot/stop', { method: 'POST' });
+      setBusy(false);
+    }
+
+    // ═══════════════════════════════════════
+    //  UI CONTROLS
+    // ═══════════════════════════════════════
+    function setBusy(busy) {
+      document.getElementById('btn-full-auto').disabled = busy;
+      document.getElementById('btn-stop').disabled = !busy;
+      const badge = document.getElementById('status-badge');
+      if (busy) {
+        badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-green-500 running-pulse"></span> 🟢 Running`;
+        badge.className = 'text-xs px-3.5 py-2 rounded-full bg-green-950/40 border border-green-800 text-green-400 font-semibold flex items-center gap-2';
+      } else {
+        badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-gray-500"></span> ⏸ Idle`;
+        badge.className = 'text-xs px-3.5 py-2 rounded-full bg-gray-800 border border-gray-700 text-gray-400 font-semibold flex items-center gap-2';
+        document.getElementById('overall-progress-card').classList.add('hidden');
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  SSE EVENTS LOGGER
+    // ═══════════════════════════════════════
+    function connectSSE() {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/api/grokbot/logs');
+      eventSource.onmessage = (e) => {
+        addLog(e.data);
+        
+        if (e.data.includes('GROKBOT FINISHED') || e.data.includes('GROKBOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED')) {
+          setBusy(false);
+          loadConfigs().then(() => {
+            selectedStates.forEach(fn => loadStateStock(fn));
+          });
+        }
+        
+        if (e.data.startsWith('[QUEUE_UPDATE]:')) {
+          try {
+            const queue = JSON.parse(e.data.substring('[QUEUE_UPDATE]:'.length));
+            renderQueue(queue);
+          } catch {}
+        }
+        
+        if (e.data.startsWith('[PROGRESS_UPDATE]:')) {
+          try {
+            const prog = JSON.parse(e.data.substring('[PROGRESS_UPDATE]:'.length));
+            updateProgressUI(prog);
+          } catch {}
+        }
+      };
+      eventSource.onerror = () => {};
+    }
+
+    // ═══════════════════════════════════════
+    //  POLL RUNNING STATE
+    // ═══════════════════════════════════════
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/grokbot/status');
+        const data = await res.json();
+        if (data.running) {
+          setBusy(true);
+          connectSSE();
+        }
+        if (data.queue) renderQueue(data.queue);
+        if (data.progress) updateProgressUI(data.progress);
+      } catch {}
+    }
+
+    // ═══════════════════════════════════════
+    //  QUEUE DISPLAY RENDER
+    // ═══════════════════════════════════════
+    function renderQueue(queue) {
+      const container = document.getElementById('queue-container');
+      if (!queue || queue.length === 0) {
+        container.innerHTML = '<div class="text-sm text-gray-500 text-center py-6">Belum ada antrian aktif</div>';
+        return;
+      }
+      container.innerHTML = queue.map(q => `
+        <div class="flex items-center justify-between px-4 py-3 rounded-2xl bg-gray-950/60 border border-gray-900">
+          <div class="flex items-center gap-2.5">
+            <span class="w-2.5 h-2.5 rounded-full ${q.active ? 'bg-green-500 running-pulse' : 'bg-gray-600'}"></span>
+            <span class="text-sm font-bold text-gray-200">${escHtml(q.stateName)}</span>
+          </div>
+          <div class="text-xs text-gray-400 font-semibold">
+            ${q.videoCount} video · ${q.scheduleStart || '?'} → ${q.scheduleEnd || '?'}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ═══════════════════════════════════════
+    //  UPDATE 3-SEGMENT PROGRESS UI
+    // ═══════════════════════════════════════
+    function updateProgressUI(prog) {
+      const card = document.getElementById('overall-progress-card');
+      if (!prog || !prog.currentState) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+      
+      const stateClean = prog.currentState.replace('tiktok-state-', '').replace('.json', '');
+      document.getElementById('progress-state-badge').textContent = stateClean;
+      
+      const gen = prog.generate || 0;
+      const mrg = prog.merge || 0;
+      const upl = prog.upload || 0;
+      
+      // Update bars width & texts
+      document.getElementById('prog-generate').style.width = gen + '%';
+      document.getElementById('txt-generate').textContent = `🧠 Grok Generate: ${gen}%`;
+      
+      document.getElementById('prog-merge').style.width = mrg + '%';
+      document.getElementById('txt-merge').textContent = `✂ Video Merger: ${mrg}%`;
+      
+      document.getElementById('prog-upload').style.width = upl + '%';
+      document.getElementById('txt-upload').textContent = `🚀 TikTok Upload: ${upl}%`;
+      
+      // Update step label texts & colors
+      const lblGen = document.getElementById('lbl-generate');
+      if (gen === 0) {
+        lblGen.textContent = 'Menunggu';
+        lblGen.className = 'text-xs mt-1 text-gray-500';
+      } else if (gen < 100) {
+        lblGen.textContent = `Generasi (${gen}%)`;
+        lblGen.className = 'text-xs mt-1 text-purple-400 font-bold animate-pulse';
+      } else {
+        lblGen.textContent = 'Selesai ✓';
+        lblGen.className = 'text-xs mt-1 text-green-400 font-bold';
+      }
+      
+      const lblMrg = document.getElementById('lbl-merge');
+      if (mrg === 0) {
+        lblMrg.textContent = gen < 100 ? 'Menunggu' : 'Persiapan';
+        lblMrg.className = 'text-xs mt-1 text-gray-500';
+      } else if (mrg < 100) {
+        lblMrg.textContent = `Merging (${mrg}%)`;
+        lblMrg.className = 'text-xs mt-1 text-fuchsia-400 font-bold animate-pulse';
+      } else {
+        lblMrg.textContent = 'Selesai ✓';
+        lblMrg.className = 'text-xs mt-1 text-green-400 font-bold';
+      }
+      
+      const lblUpl = document.getElementById('lbl-upload');
+      if (upl === 0) {
+        lblUpl.textContent = mrg < 100 ? 'Menunggu' : 'Persiapan';
+        lblUpl.className = 'text-xs mt-1 text-gray-500';
+      } else if (upl < 100) {
+        lblUpl.textContent = `Uploading (${upl}%)`;
+        lblUpl.className = 'text-xs mt-1 text-rose-400 font-bold animate-pulse';
+      } else {
+        lblUpl.textContent = 'Selesai ✓';
+        lblUpl.className = 'text-xs mt-1 text-green-400 font-bold';
+      }
+      
+      // Set active task description
+      let activeTask = 'Idle';
+      if (gen < 100) {
+        activeTask = `Sedang generate video mentah via Grok... (${gen}%)`;
+      } else if (mrg < 100) {
+        activeTask = `Sedang menggabungkan video dan menambahkan audio... (${mrg}%)`;
+      } else if (upl < 100) {
+        activeTask = `Sedang mengupload video hasil merge ke TikTok... (${upl}%)`;
+      } else {
+        activeTask = 'Semua proses batch selesai dengan sukses!';
+      }
+      document.getElementById('progress-active-task').textContent = activeTask;
+    }
+
+    // ═══════════════════════════════════════
+    //  LOGGER HELPERS
+    // ═══════════════════════════════════════
+    function addLog(msg) {
+      const el = document.getElementById('live-log');
+      const div = document.createElement('div');
+      const time = new Date().toLocaleTimeString('id-ID');
+
+      let cls = 'log-info';
+      if (msg.includes('❌')) cls = 'log-error';
+      else if (msg.includes('✓') || msg.includes('✅') || msg.includes('terupload') || msg.includes('FINISHED')) cls = 'log-success';
+      else if (msg.includes('⚠') || msg.includes('kurang')) cls = 'log-warn';
+
+      div.className = cls + ' px-2.5 py-1 rounded';
+      div.textContent = `[${time}] ${msg}`;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog() { 
+      document.getElementById('live-log').innerHTML = ''; 
+    }
+
+    // ═══════════════════════════════════════
+    //  GLOBAL HELPERS
+    // ═══════════════════════════════════════
+    function getStateName(fn) {
+      const s = allStates.find(a => a.filename === fn);
+      return s ? s.name : fn;
+    }
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>

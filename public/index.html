@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StorageState Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 p-8 space-y-10">
+  
+  <!-- Navigation Header -->
+  <div class="max-w-3xl mx-auto flex justify-between items-center bg-white shadow-md rounded-2xl p-4 border border-gray-200">
+    <span class="font-bold text-gray-800">⚡ Navigasi Bot:</span>
+    <div class="flex gap-3">
+      <a href="/tiktok" class="bg-pink-100 hover:bg-pink-200 text-pink-700 px-4 py-2 rounded-xl text-sm font-semibold transition">
+        🎬 TikTok Uploader
+      </a>
+      <a href="/grok" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-xl text-sm font-semibold transition">
+        🧠 Grok Imagine
+      </a>
+      <a href="/ytbot" class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-xl text-sm font-semibold transition">
+        🤖 YT to TikTok Bot
+      </a>
+    </div>
+  </div>
+
+  <!-- ================= TIKTOK SECTION ================= -->
+  <div class="max-w-3xl mx-auto bg-white shadow-2xl rounded-3xl p-8 border-t-8 border-pink-500">
+    <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">🎥 TikTok StorageState Manager</h1>
+
+    <div class="mb-10 border-b pb-8">
+      <h2 class="text-xl font-semibold mb-4 text-gray-800">➕ Buat State Login Baru</h2>
+      <div class="flex gap-3">
+        <input id="tiktok-state-name" type="text" placeholder="Masukkan nama state (contoh: akun1)" 
+               class="flex-1 border border-gray-300 rounded-2xl px-5 py-4 focus:outline-none focus:border-pink-500 text-lg">
+        <button onclick="startLogin('tiktok')" class="bg-pink-600 hover:bg-pink-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap">
+          🚀 Buka Browser
+        </button>
+      </div>
+    </div>
+
+    <div class="mb-8">
+      <h2 class="text-xl font-semibold mb-3 text-gray-800">📋 Daftar State yang Tersimpan</h2>
+      <div id="tiktok-state-list" class="space-y-3"></div>
+    </div>
+
+    <div id="tiktok-in-progress" class="hidden mt-10 p-8 bg-yellow-50 border border-yellow-400 rounded-3xl">
+      <p class="text-yellow-800 text-lg font-medium mb-6">
+        ✅ Browser sudah terbuka dengan mode stealth!<br>
+        Silakan login manual di jendela browser yang muncul.
+      </p>
+      <button onclick="saveLogin('tiktok')" class="w-full bg-green-600 hover:bg-green-700 text-white py-6 rounded-3xl text-2xl font-bold flex items-center justify-center gap-3">
+        ✅ Sudah Login - Simpan Session
+      </button>
+    </div>
+  </div>
+
+  <!-- ================= SUPERGROK SECTION ================= -->
+  <div class="max-w-3xl mx-auto bg-gray-900 shadow-2xl rounded-3xl p-8 border-t-8 border-blue-500 text-gray-100">
+    <h1 class="text-3xl font-bold mb-8 text-center">🧠 SuperGrok StorageState Manager</h1>
+
+    <div class="mb-10 border-b border-gray-700 pb-8">
+      <h2 class="text-xl font-semibold mb-4">➕ Buat State Login Baru</h2>
+      <div class="flex gap-3">
+        <input id="grok-state-name" type="text" placeholder="Masukkan nama state (contoh: grok_premium)" 
+               class="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500 text-lg text-white">
+        <button onclick="startLogin('grok')" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap">
+          🚀 Buka Browser
+        </button>
+      </div>
+    </div>
+
+    <div class="mb-8">
+      <h2 class="text-xl font-semibold mb-3">📋 Daftar State yang Tersimpan</h2>
+      <div id="grok-state-list" class="space-y-3"></div>
+    </div>
+
+    <div id="grok-in-progress" class="hidden mt-10 p-8 bg-gray-800 border border-blue-500 rounded-3xl">
+      <p class="text-blue-200 text-lg font-medium mb-6">
+        ✅ Browser sudah terbuka dengan mode stealth di X/Grok!<br>
+        Silakan login manual di jendela browser yang muncul.
+      </p>
+      <button onclick="saveLogin('grok')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-6 rounded-3xl text-2xl font-bold flex items-center justify-center gap-3">
+        ✅ Sudah Login - Simpan Session
+      </button>
+    </div>
+  </div>
+
+  <script>
+    async function loadStates(platform) {
+      const res = await fetch(`/api/states?platform=${platform}`);
+      const states = await res.json();
+      const list = document.getElementById(`${platform}-state-list`);
+
+      if (states.length === 0) {
+        list.innerHTML = `<p class="text-gray-400 italic text-center py-8">Belum ada state ${platform} tersimpan</p>`;
+        return;
+      }
+
+      list.innerHTML = states.map(s => {
+        let badge = '';
+        if (s.expiry.status === 'safe') {
+           badge = `<span class="px-4 py-2 text-sm font-medium bg-green-100 text-green-700 rounded-2xl">🟢 Aman (${s.expiry.daysLeft} hari)</span>`;
+        } else if (s.expiry.status === 'warning') {
+           badge = `<span class="px-4 py-2 text-sm font-medium bg-yellow-100 text-yellow-700 rounded-2xl">🟡 Hampir expired (${s.expiry.daysLeft} hari)</span>`;
+        } else if (s.expiry.status === 'expired') {
+           badge = `<span class="px-4 py-2 text-sm font-medium bg-red-100 text-red-700 rounded-2xl">🔴 Sudah expired</span>`;
+        } else {
+           badge = `<span class="px-4 py-2 text-sm font-medium bg-gray-200 text-gray-600 rounded-2xl dark:bg-gray-700 dark:text-gray-300">⏳ Tdk diketahui</span>`;
+        }
+
+        const isGrok = platform === 'grok';
+        const cardClass = isGrok ? 'bg-gray-800 border-gray-700' : 'bg-gray-50';
+        const textClass = isGrok ? 'text-gray-400' : 'text-gray-500';
+
+        return `
+          <div class="${cardClass} p-6 rounded-3xl flex justify-between items-start border">
+            <div>
+              <div class="font-semibold text-xl">${s.filename}</div>
+              <div class="text-sm ${textClass} mt-1">${s.expiry.expiresAt ? 'Expired: ' + s.expiry.expiresAt : 'Expiry tidak terdeteksi'}</div>
+            </div>
+            <div class="flex flex-col items-end gap-3">
+              ${badge}
+              <div class="flex gap-2 mt-2">
+                <button onclick="startLoginWithState('${s.filename}', '${platform}')" class="${isGrok ? 'bg-blue-600 hover:bg-blue-700' : 'bg-pink-600 hover:bg-pink-700'} text-white text-sm px-4 py-2.5 rounded-2xl flex items-center gap-2">
+                  🌐 Buka Browser
+                </button>
+                <button onclick="copyCodegenCommand('${s.filename}', '${platform}')" class="bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2.5 rounded-2xl flex items-center gap-2">
+                  📋 Codegen
+                </button>
+              </div>
+            </div>
+          </div>`;
+      }).join('');
+    }
+
+    async function startLoginWithState(filename, platform) {
+      const res = await fetch('/api/start-login-with-state', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename, platform })
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById(`${platform}-in-progress`).classList.remove('hidden');
+        alert(data.message);
+      } else {
+        alert('❌ ' + data.error);
+      }
+    }
+
+    async function startLogin(platform) {
+      const name = document.getElementById(`${platform}-state-name`).value.trim();
+      if (!name) return alert('❌ Masukkan nama state dulu!');
+
+      const res = await fetch('/api/start-login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, platform })
+      });
+      const data = await res.json();
+      if (data.success) {
+        document.getElementById(`${platform}-in-progress`).classList.remove('hidden');
+        alert(data.message);
+      } else {
+        alert('❌ ' + data.error);
+      }
+    }
+
+    async function saveLogin(platform) {
+      const res = await fetch('/api/save-login', { method: 'POST' });
+      const data = await res.json();
+      
+      if (data.success) {
+        alert('✅ ' + data.message);
+        document.getElementById(`${platform}-in-progress`).classList.add('hidden');
+        document.getElementById(`${platform}-state-name`).value = '';
+        loadStates(platform);
+      } else {
+        alert('❌ ' + data.error);
+      }
+    }
+
+    async function copyCodegenCommand(filename, platform) {
+      const res = await fetch(`/api/codegen-command?filename=${filename}&platform=${platform}`);
+      const data = await res.json();
+      await navigator.clipboard.writeText(data.command);
+      alert('✅ Command codegen sudah dicopy!\nPaste di terminal sekarang.');
+    }
+
+    function loadAll() {
+      loadStates('tiktok');
+      loadStates('grok');
+    }
+
+    // Refresh daftar state setiap 30 detik
+    setInterval(loadAll, 30000);
+    window.onload = loadAll;
+  </script>
+</body>
+</html>

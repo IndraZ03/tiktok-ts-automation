@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# User-requested ignored folders
+grok-states/
+tiktok-states/
+merged-videos/
+vid-dummy/
+ytbot-videos/
+
+# Temporary directories
+_tmp_uploads/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+*.log

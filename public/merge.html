@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Video Merger</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="min-h-screen bg-zinc-950 text-zinc-100">
+  <main class="mx-auto flex min-h-screen max-w-4xl flex-col justify-center px-5 py-10">
+    <section class="border border-zinc-800 bg-zinc-900 p-6 shadow-2xl sm:p-8">
+      <div class="mb-7 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <h1 class="text-3xl font-bold tracking-normal">Video Merger</h1>
+          <p class="mt-2 text-sm text-zinc-400">Gabungkan 2 video tanpa re-encode, lalu opsional ganti audio asli dengan MP3 atau WAV.</p>
+        </div>
+        <a href="/" class="text-sm font-medium text-cyan-300 hover:text-cyan-200">Kembali</a>
+      </div>
+
+      <form id="merge-form" class="space-y-5">
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-zinc-200">Video pertama</span>
+          <input id="video-1" name="videos" type="file" accept="video/*" required
+                 class="block w-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-200 file:mr-4 file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 hover:file:bg-cyan-400">
+        </label>
+
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-zinc-200">Video kedua</span>
+          <input id="video-2" name="videos" type="file" accept="video/*" required
+                 class="block w-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-200 file:mr-4 file:border-0 file:bg-cyan-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 hover:file:bg-cyan-400">
+        </label>
+
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-zinc-200">Sound pengganti</span>
+          <input id="sound" name="sound" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"
+                 class="block w-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-200 file:mr-4 file:border-0 file:bg-emerald-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 hover:file:bg-emerald-400">
+        </label>
+
+        <div class="block">
+          <span class="mb-2 block text-sm font-semibold text-zinc-200">Save ke folder</span>
+          <div class="flex items-center gap-3">
+            <button id="btn-save-folder" type="button" onclick="pickSaveFolder()"
+                    class="shrink-0 bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-cyan-400">
+              📂 Open Folder
+            </button>
+            <div id="save-folder-display" class="min-w-0 flex-1 truncate border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-400">
+              Default: merged-videos/
+            </div>
+            <input type="hidden" id="save-folder" name="saveFolder" value="">
+          </div>
+        </div>
+
+        <div class="grid gap-3 border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300 sm:grid-cols-4">
+          <div>
+            <div class="text-zinc-500">Mode</div>
+            <div class="font-semibold text-zinc-100">Concat demuxer</div>
+          </div>
+          <div>
+            <div class="text-zinc-500">Codec</div>
+            <div class="font-semibold text-zinc-100">-c copy</div>
+          </div>
+          <div>
+            <div class="text-zinc-500">Kualitas</div>
+            <div class="font-semibold text-zinc-100">Tanpa re-encode</div>
+          </div>
+          <div>
+            <div class="text-zinc-500">Audio</div>
+            <div class="font-semibold text-zinc-100">Replace audio</div>
+          </div>
+        </div>
+
+        <button id="submit-btn" type="submit"
+                class="w-full bg-cyan-500 px-5 py-4 text-base font-bold text-zinc-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">
+          Merge Video
+        </button>
+      </form>
+
+      <div id="status" class="mt-5 hidden border px-4 py-3 text-sm"></div>
+    </section>
+  </main>
+
+  <script>
+    async function pickSaveFolder() {
+      const btn = document.getElementById('btn-save-folder');
+      btn.disabled = true;
+      btn.textContent = '⏳ Membuka...';
+      try {
+        const res = await fetch('/api/browse-folder');
+        const data = await res.json();
+        if (data.success && data.folder) {
+          document.getElementById('save-folder').value = data.folder;
+          document.getElementById('save-folder-display').textContent = data.folder;
+          document.getElementById('save-folder-display').title = data.folder;
+        }
+      } catch (e) {
+        console.error('Browse folder error:', e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📂 Open Folder';
+      }
+    }
+
+    const form = document.getElementById('merge-form');
+    const statusBox = document.getElementById('status');
+    const submitBtn = document.getElementById('submit-btn');
+
+    function showStatus(type, html) {
+      statusBox.className = 'mt-5 border px-4 py-3 text-sm';
+      if (type === 'success') {
+        statusBox.classList.add('border-emerald-500', 'bg-emerald-950', 'text-emerald-100');
+      } else if (type === 'loading') {
+        statusBox.classList.add('border-cyan-500', 'bg-cyan-950', 'text-cyan-100');
+      } else {
+        statusBox.classList.add('border-red-500', 'bg-red-950', 'text-red-100');
+      }
+      statusBox.innerHTML = html;
+    }
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+
+      const firstVideo = document.getElementById('video-1').files[0];
+      const secondVideo = document.getElementById('video-2').files[0];
+      const sound = document.getElementById('sound').files[0];
+      if (!firstVideo || !secondVideo) {
+        showStatus('error', 'Pilih 2 video terlebih dahulu.');
+        return;
+      }
+      if (sound && !/\.(mp3|wav)$/i.test(sound.name)) {
+        showStatus('error', 'Sound harus berupa file .mp3 atau .wav.');
+        return;
+      }
+
+      const formData = new FormData();
+      formData.append('videos', firstVideo);
+      formData.append('videos', secondVideo);
+      if (sound) {
+        formData.append('sound', sound);
+      }
+      const saveFolder = document.getElementById('save-folder').value;
+      if (saveFolder) {
+        formData.append('saveFolder', saveFolder);
+      }
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Sedang merge...';
+      showStatus('loading', sound
+        ? 'Upload, merge, dan replace audio sedang berjalan. Video tetap <strong>-c:v copy</strong>; audio asli dimatikan dan diganti sound baru.'
+        : 'Upload dan merge sedang berjalan. Karena memakai <strong>-c copy</strong>, proses biasanya cepat kalau format kedua video kompatibel.');
+
+      try {
+        const response = await fetch('/api/merge', {
+          method: 'POST',
+          body: formData,
+        });
+        const data = await response.json();
+
+        if (!response.ok || !data.success) {
+          throw new Error(data.error || 'Gagal merge video.');
+        }
+
+        const audioInfo = data.audioReplaced ? ' Audio asli sudah diganti dengan sound baru.' : '';
+        showStatus('success', `Selesai.${audioInfo} <a class="font-bold underline" href="${data.downloadUrl}">Download ${data.filename}</a>`);
+        form.reset();
+      } catch (error) {
+        showStatus('error', error.message);
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Merge Video';
+      }
+    });
+  </script>
+</body>
+</html>

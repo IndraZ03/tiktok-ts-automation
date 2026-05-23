@@ -1,0 +1,567 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Auto Uploader</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    #live-log { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; }
+    #live-log div { padding: 2px 0; }
+    .log-error { color: #ef4444; }
+    .log-success { color: #22c55e; }
+    .log-warn { color: #f59e0b; }
+    .log-info { color: #94a3b8; }
+
+    @keyframes pulse-upload {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(236, 72, 153, 0.4); }
+      50% { opacity: 0.7; box-shadow: 0 0 0 6px rgba(236, 72, 153, 0); }
+    }
+    .uploading-pulse {
+      animation: pulse-upload 1.5s ease-in-out infinite;
+    }
+    .video-item {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .video-item:hover {
+      background: rgba(255, 255, 255, 0.04);
+    }
+    .video-item.uploaded-item {
+      opacity: 0.65;
+    }
+    .video-item.uploading-now {
+      background: rgba(236, 72, 153, 0.08);
+      border-left: 3px solid #ec4899;
+    }
+    .check-btn {
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+      cursor: pointer;
+    }
+    .check-btn:hover {
+      transform: scale(1.2);
+    }
+    .del-btn {
+      transition: all 0.2s ease;
+      opacity: 0;
+    }
+    .video-item:hover .del-btn {
+      opacity: 1;
+    }
+    .folder-path {
+      background: linear-gradient(135deg, rgba(236,72,153,0.06), rgba(168,85,247,0.06));
+      border: 1px solid rgba(236,72,153,0.15);
+    }
+    .interval-badge {
+      background: linear-gradient(135deg, rgba(236,72,153,0.15), rgba(168,85,247,0.15));
+    }
+    .scroll-fade {
+      mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+      -webkit-mask-image: linear-gradient(to bottom, black 85%, transparent 100%);
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+  <div class="max-w-6xl mx-auto p-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-8">
+      <h1 class="text-3xl font-bold bg-gradient-to-r from-pink-500 via-red-500 to-yellow-500 bg-clip-text text-transparent">
+        🎬 TikTok Auto Uploader
+      </h1>
+      <a href="/" class="text-sm text-gray-400 hover:text-white transition">← State Manager</a>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <!-- LEFT COLUMN: Settings -->
+      <div class="space-y-5">
+
+        <!-- 1. Video Settings -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">📁 Video Settings</h2>
+          <div class="space-y-3">
+            <!-- Folder selector -->
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">Folder Video</label>
+              <div class="flex gap-2 items-center">
+                <button id="btn-open-folder" onclick="openFolder()"
+                        class="bg-gradient-to-r from-pink-600 to-purple-600 hover:from-pink-500 hover:to-purple-500 px-4 py-2.5 rounded-xl text-sm font-medium transition-all flex items-center gap-2 flex-shrink-0 shadow-lg shadow-pink-500/10">
+                  📂 Open Folder
+                </button>
+                <div id="folder-display" class="folder-path rounded-xl px-3 py-2 text-sm text-gray-400 truncate flex-1 min-w-0">
+                  Belum ada folder dipilih
+                </div>
+                <input type="hidden" id="video-folder" value="">
+              </div>
+            </div>
+
+            <!-- Start from dropdown + refresh -->
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">Mulai dari Video</label>
+              <div class="flex gap-2">
+                <select id="video-select" class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500 transition">
+                  <option value="">-- Pilih folder dulu --</option>
+                </select>
+                <button onclick="refreshVideos()" title="Refresh daftar video"
+                        class="bg-gray-700 hover:bg-gray-600 active:scale-95 px-3 py-2.5 rounded-xl text-sm transition-all flex-shrink-0">
+                  🔄
+                </button>
+              </div>
+            </div>
+
+            <!-- Interval -->
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">Interval Antar Video</label>
+              <div class="flex items-center gap-2">
+                <input id="interval-minutes" type="number" min="1" value="60" placeholder="60"
+                       class="w-28 bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500 transition"
+                       oninput="updateIntervalHelper()">
+                <span class="text-sm text-gray-400">menit</span>
+                <span id="interval-helper" class="text-xs text-pink-300 interval-badge px-2 py-1 rounded-lg ml-1">= 1 jam 0 mnt</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 2. Video Queue -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold flex items-center gap-2">📋 Antrian Video</h2>
+            <div class="flex items-center gap-2">
+              <span id="video-stats" class="text-xs text-gray-500 bg-gray-800 px-2.5 py-1 rounded-lg">0 video</span>
+            </div>
+          </div>
+          <div id="video-list" class="max-h-72 overflow-y-auto space-y-0.5 rounded-xl bg-gray-950/70 p-2"
+               style="min-height: 80px;">
+            <div class="text-sm text-gray-500 text-center py-6">Pilih folder untuk melihat daftar video</div>
+          </div>
+        </div>
+
+        <!-- 3. Product Settings -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">🛒 Product Settings</h2>
+          <label class="flex items-center gap-2 mb-3 cursor-pointer">
+            <input id="chk-product" type="checkbox" class="w-4 h-4 accent-pink-500" onchange="toggleProduct()">
+            <span class="text-sm">Tambahkan Product</span>
+          </label>
+          <div id="product-fields" class="hidden space-y-3">
+            <input id="product-name-radio" type="text" placeholder="Nama Produk (Radio)" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500">
+            <input id="product-title" type="text" placeholder="Judul Produk" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500">
+            <textarea id="product-desc" placeholder="Deskripsi Produk" rows="2" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500 resize-none"></textarea>
+          </div>
+        </div>
+
+        <!-- 4. Caption -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">📝 Caption & Hashtag</h2>
+          <div class="space-y-3">
+            <textarea id="description" placeholder="Deskripsi video..." rows="3" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500 resize-none"></textarea>
+            <input id="hashtags" type="text" placeholder="Hashtag (pisah koma): fyp,viral,trending" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500">
+          </div>
+        </div>
+
+        <!-- 5. System Settings -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800">
+          <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">⚙️ System Settings</h2>
+          <div class="space-y-3">
+            <div class="grid grid-cols-2 gap-3">
+              <div>
+                <label class="text-sm text-gray-400 block mb-1">Schedule Date</label>
+                <input id="schedule-date" type="date" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500">
+              </div>
+              <div>
+                <label class="text-sm text-gray-400 block mb-1">Schedule Time</label>
+                <input id="schedule-time" type="time" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500">
+              </div>
+            </div>
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">State (Session)</label>
+              <select id="state-select" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-pink-500">
+                <option value="">-- Pilih State --</option>
+              </select>
+            </div>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="chk-switches" type="checkbox" class="w-4 h-4 accent-pink-500">
+              <span class="text-sm">Skip Switches (Branded, AI-generated, etc)</span>
+            </label>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input id="chk-headless" type="checkbox" class="w-4 h-4 accent-pink-500">
+              <span class="text-sm">Headless Mode (tanpa tampilan browser)</span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Action Buttons -->
+        <div class="flex gap-3">
+          <button id="btn-start" onclick="startUpload()"
+                  class="flex-1 bg-gradient-to-r from-pink-600 to-red-600 hover:from-pink-500 hover:to-red-500 active:scale-[0.98] text-white py-4 rounded-2xl text-lg font-bold transition-all shadow-lg shadow-pink-500/20">
+            🚀 Mulai Upload
+          </button>
+          <button id="btn-stop" onclick="stopUpload()" disabled
+                  class="bg-gray-700 hover:bg-red-600 disabled:opacity-30 text-white px-6 py-4 rounded-2xl text-lg font-bold transition-all">
+            ⛔ Stop
+          </button>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: Live Log -->
+      <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 flex flex-col" style="min-height:600px;">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-lg font-semibold flex items-center gap-2">📋 Live Log</h2>
+          <button onclick="clearLog()" class="text-xs text-gray-500 hover:text-white transition">Clear</button>
+        </div>
+        <div id="live-log" class="flex-1 overflow-y-auto bg-gray-950 rounded-xl p-4 space-y-0.5"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════
+    //  STATE
+    // ═══════════════════════════════════════
+    let videoList = [];       // [{ name: string, uploaded: boolean }]
+    let currentFolder = '';
+    let currentUploadingVideo = null;
+    let eventSource = null;
+
+    // ═══════════════════════════════════════
+    //  LOAD STATES
+    // ═══════════════════════════════════════
+    async function loadStates() {
+      const res = await fetch('/api/states');
+      const states = await res.json();
+      const sel = document.getElementById('state-select');
+      sel.innerHTML = '<option value="">-- Pilih State --</option>';
+      states.forEach(s => {
+        const opt = document.createElement('option');
+        opt.value = s.filename;
+        opt.textContent = `${s.name} (${s.expiry.status})`;
+        sel.appendChild(opt);
+      });
+    }
+
+    // ═══════════════════════════════════════
+    //  FOLDER BROWSE (Open Folder dialog)
+    // ═══════════════════════════════════════
+    async function openFolder() {
+      const btn = document.getElementById('btn-open-folder');
+      btn.disabled = true;
+      btn.innerHTML = '⏳ Membuka...';
+
+      try {
+        const res = await fetch('/api/browse-folder');
+        const data = await res.json();
+        if (data.success && data.folder) {
+          currentFolder = data.folder;
+          document.getElementById('video-folder').value = currentFolder;
+          document.getElementById('folder-display').textContent = currentFolder;
+          document.getElementById('folder-display').title = currentFolder;
+          await loadVideosWithStatus();
+          addLog(`📂 Folder dipilih: ${currentFolder}`);
+        } else {
+          addLog('ℹ Tidak ada folder dipilih');
+        }
+      } catch (e) {
+        addLog('❌ Gagal membuka dialog folder: ' + e.message);
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '📂 Open Folder';
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  LOAD VIDEOS + UPLOADED STATUS
+    // ═══════════════════════════════════════
+    async function loadVideosWithStatus() {
+      if (!currentFolder) return;
+      try {
+        const [videosRes, uploadedRes] = await Promise.all([
+          fetch('/api/tiktok/videos?folder=' + encodeURIComponent(currentFolder)),
+          fetch('/api/tiktok/uploaded?folder=' + encodeURIComponent(currentFolder))
+        ]);
+        const videosData = await videosRes.json();
+        const uploadedData = await uploadedRes.json();
+
+        videoList = (videosData.videos || []).map(v => ({
+          name: v,
+          uploaded: !!uploadedData.uploaded[v]
+        }));
+
+        renderVideoList();
+        renderDropdown();
+      } catch (e) {
+        addLog('❌ Gagal memuat video: ' + e.message);
+      }
+    }
+
+    function refreshVideos() {
+      if (!currentFolder) {
+        addLog('⚠ Pilih folder terlebih dahulu');
+        return;
+      }
+      addLog('🔄 Merefresh daftar video...');
+      loadVideosWithStatus();
+    }
+
+    // ═══════════════════════════════════════
+    //  RENDER VIDEO LIST
+    // ═══════════════════════════════════════
+    function renderVideoList() {
+      const container = document.getElementById('video-list');
+      const statsEl = document.getElementById('video-stats');
+
+      if (videoList.length === 0) {
+        container.innerHTML = '<div class="text-sm text-gray-500 text-center py-6">Tidak ada video ditemukan</div>';
+        statsEl.textContent = '0 video';
+        return;
+      }
+
+      const uploadedCount = videoList.filter(v => v.uploaded).length;
+      const pendingCount = videoList.length - uploadedCount;
+      statsEl.innerHTML = `<span class="text-green-400">${uploadedCount} ✓</span> · <span class="text-gray-300">${pendingCount} pending</span> · ${videoList.length} total`;
+
+      container.innerHTML = videoList.map((v, i) => {
+        const isUploading = currentUploadingVideo === v.name;
+        const itemCls = [
+          'video-item flex items-center gap-2 px-3 py-2 rounded-lg',
+          v.uploaded ? 'uploaded-item' : '',
+          isUploading ? 'uploading-now' : ''
+        ].join(' ');
+
+        const checkCls = v.uploaded
+          ? 'bg-green-500/20 border-green-500 text-green-400'
+          : 'border-gray-600 text-transparent hover:border-gray-400';
+
+        const checkIcon = isUploading
+          ? '<span class="uploading-pulse inline-block w-2.5 h-2.5 rounded-full bg-pink-500"></span>'
+          : (v.uploaded ? '✓' : '');
+
+        const nameCls = v.uploaded
+          ? 'text-gray-500 line-through'
+          : (isUploading ? 'text-pink-300 font-medium' : 'text-gray-200');
+
+        const deleteBtn = v.uploaded
+          ? `<button onclick="deleteVideo(${i})" class="del-btn text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-2 py-1 rounded-lg transition-all flex-shrink-0" title="Hapus file video">🗑️</button>`
+          : '';
+
+        return `
+          <div class="${itemCls}" data-video="${v.name}">
+            <button onclick="toggleUploaded(${i})" class="check-btn flex-shrink-0 w-6 h-6 rounded-full border-2 flex items-center justify-center text-xs ${checkCls}" title="${v.uploaded ? 'Klik untuk unmark' : 'Belum terupload'}">
+              ${checkIcon}
+            </button>
+            <span class="text-sm truncate flex-1 ${nameCls}" title="${v.name}">${v.name}</span>
+            ${deleteBtn}
+          </div>
+        `;
+      }).join('');
+    }
+
+    function renderDropdown() {
+      const sel = document.getElementById('video-select');
+      sel.innerHTML = '';
+      const pendingVideos = videoList.filter(v => !v.uploaded);
+      if (pendingVideos.length > 0) {
+        pendingVideos.forEach(v => {
+          const opt = document.createElement('option');
+          opt.value = v.name;
+          opt.textContent = v.name;
+          sel.appendChild(opt);
+        });
+      } else if (videoList.length > 0) {
+        sel.innerHTML = '<option value="">-- Semua video sudah terupload --</option>';
+      } else {
+        sel.innerHTML = '<option value="">-- Pilih folder dulu --</option>';
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  TOGGLE UPLOADED STATUS
+    // ═══════════════════════════════════════
+    async function toggleUploaded(index) {
+      const video = videoList[index];
+      if (!video) return;
+      const newStatus = !video.uploaded;
+      try {
+        await fetch('/api/tiktok/mark-uploaded', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: currentFolder, video: video.name, uploaded: newStatus })
+        });
+        video.uploaded = newStatus;
+        renderVideoList();
+        renderDropdown();
+        addLog(newStatus ? `✓ ${video.name} ditandai sudah terupload` : `↩ ${video.name} di-unmark`);
+      } catch (e) {
+        addLog('❌ Gagal update status: ' + e.message);
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  DELETE UPLOADED VIDEO
+    // ═══════════════════════════════════════
+    async function deleteVideo(index) {
+      const video = videoList[index];
+      if (!video) return;
+      if (!confirm(`Hapus file "${video.name}" dari folder?\nFile akan dihapus permanen.`)) return;
+      try {
+        await fetch('/api/tiktok/delete-uploaded-video', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folder: currentFolder, video: video.name })
+        });
+        videoList.splice(index, 1);
+        renderVideoList();
+        renderDropdown();
+        addLog(`🗑️ ${video.name} dihapus`);
+      } catch (e) {
+        addLog('❌ Gagal menghapus video: ' + e.message);
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  INTERVAL HELPER
+    // ═══════════════════════════════════════
+    function updateIntervalHelper() {
+      const mins = parseInt(document.getElementById('interval-minutes').value) || 0;
+      const hours = Math.floor(mins / 60);
+      const remMins = mins % 60;
+      let text = '';
+      if (hours > 0) text += `${hours} jam `;
+      if (remMins > 0 || hours === 0) text += `${remMins} mnt`;
+      document.getElementById('interval-helper').textContent = `= ${text.trim()}`;
+    }
+
+    // ═══════════════════════════════════════
+    //  TOGGLE PRODUCT
+    // ═══════════════════════════════════════
+    function toggleProduct() {
+      document.getElementById('product-fields').classList.toggle('hidden', !document.getElementById('chk-product').checked);
+    }
+
+    // ═══════════════════════════════════════
+    //  LOGGING
+    // ═══════════════════════════════════════
+    function addLog(msg) {
+      const el = document.getElementById('live-log');
+      const div = document.createElement('div');
+      const time = new Date().toLocaleTimeString('id-ID');
+
+      let cls = 'log-info';
+      if (msg.includes('❌')) cls = 'log-error';
+      else if (msg.includes('✓') || msg.includes('✅') || msg.includes('🎉')) cls = 'log-success';
+      else if (msg.includes('⚠')) cls = 'log-warn';
+
+      div.className = cls;
+      div.textContent = `[${time}] ${msg}`;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById('live-log').innerHTML = '';
+    }
+
+    // ═══════════════════════════════════════
+    //  START UPLOAD
+    // ═══════════════════════════════════════
+    async function startUpload() {
+      const videoFolder = document.getElementById('video-folder').value.trim();
+      const startFromVideo = document.getElementById('video-select').value;
+      const description = document.getElementById('description').value;
+      const hashtags = document.getElementById('hashtags').value;
+      const addProduct = document.getElementById('chk-product').checked;
+      const productNameRadio = document.getElementById('product-name-radio')?.value || '';
+      const productTitle = document.getElementById('product-title')?.value || '';
+      const productDescription = document.getElementById('product-desc')?.value || '';
+      const skipSwitches = document.getElementById('chk-switches').checked;
+      const headless = document.getElementById('chk-headless').checked;
+      const scheduleDate = document.getElementById('schedule-date').value;
+      const scheduleTime = document.getElementById('schedule-time').value;
+      const stateFile = document.getElementById('state-select').value;
+      const intervalMinutes = parseInt(document.getElementById('interval-minutes').value) || 60;
+
+      if (!videoFolder) return alert('Pilih folder video terlebih dahulu!');
+      if (!startFromVideo) return alert('Pilih video untuk memulai!');
+      if (!stateFile) return alert('Pilih state/session!');
+
+      const pendingCount = videoList.filter(v => !v.uploaded).length;
+      addLog(`🚀 Mengirim perintah upload (${pendingCount} video pending, interval ${intervalMinutes} menit)...`);
+
+      // Start SSE log stream
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/api/tiktok/logs');
+      eventSource.onmessage = (e) => {
+        addLog(e.data);
+
+        // Handle special events
+        if (e.data.startsWith('[VIDEO_UPLOADED]:')) {
+          const filename = e.data.substring('[VIDEO_UPLOADED]:'.length);
+          const video = videoList.find(v => v.name === filename);
+          if (video) {
+            video.uploaded = true;
+            currentUploadingVideo = null;
+            renderVideoList();
+            renderDropdown();
+          }
+        } else if (e.data.startsWith('[VIDEO_STARTED]:')) {
+          const filename = e.data.substring('[VIDEO_STARTED]:'.length);
+          currentUploadingVideo = filename;
+          renderVideoList();
+        } else if (e.data.startsWith('[VIDEO_SKIPPED]:')) {
+          currentUploadingVideo = null;
+          renderVideoList();
+        } else if (e.data.includes('UPLOAD PROCESS FINISHED') || e.data.includes('Proses selesai')) {
+          currentUploadingVideo = null;
+          renderVideoList();
+        }
+      };
+      eventSource.onerror = () => { addLog('⚠ Log stream terputus'); eventSource.close(); };
+
+      document.getElementById('btn-start').disabled = true;
+      document.getElementById('btn-stop').disabled = false;
+
+      try {
+        const res = await fetch('/api/tiktok/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            videoFolder, startFromVideo, description, hashtags,
+            addProduct, productNameRadio, productTitle, productDescription,
+            skipSwitches, headless, scheduleDate, scheduleTime, stateFile,
+            intervalMinutes,
+          })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ ' + (data.error || 'Gagal memulai'));
+          document.getElementById('btn-start').disabled = false;
+          document.getElementById('btn-stop').disabled = true;
+        }
+      } catch (e) {
+        addLog('❌ Request error: ' + e.message);
+        document.getElementById('btn-start').disabled = false;
+        document.getElementById('btn-stop').disabled = true;
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  STOP UPLOAD
+    // ═══════════════════════════════════════
+    async function stopUpload() {
+      addLog('⛔ Menghentikan upload...');
+      await fetch('/api/tiktok/stop', { method: 'POST' });
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-stop').disabled = true;
+      currentUploadingVideo = null;
+      renderVideoList();
+      if (eventSource) { eventSource.close(); eventSource = null; }
+    }
+
+    // ═══════════════════════════════════════
+    //  INIT
+    // ═══════════════════════════════════════
+    window.onload = () => {
+      loadStates();
+      updateIntervalHelper();
+    };
+  </script>
+</body>
+</html>

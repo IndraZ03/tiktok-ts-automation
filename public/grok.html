@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grok Imagine Generator</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    body{font-family:'Inter',sans-serif;background:#0a0a0f;color:#e2e8f0;min-height:100vh}
+    .bg-pattern{position:fixed;inset:0;background:radial-gradient(ellipse at 20% 50%,rgba(99,102,241,.08),transparent 50%),radial-gradient(ellipse at 80% 20%,rgba(168,85,247,.06),transparent 50%);pointer-events:none;z-index:0}
+    .container{max-width:1200px;margin:0 auto;padding:24px;position:relative;z-index:1}
+    h1{font-size:2rem;font-weight:800;background:linear-gradient(135deg,#818cf8,#a78bfa,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;letter-spacing:-.02em}
+    .header{display:flex;align-items:center;justify-content:space-between;margin-bottom:28px}
+    .header a{color:#64748b;font-size:.85rem;text-decoration:none;transition:color .2s}
+    .header a:hover{color:#e2e8f0}
+    .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
+    @media(max-width:900px){.grid{grid-template-columns:1fr}}
+    .card{background:rgba(15,15,25,.85);border:1px solid rgba(99,102,241,.12);border-radius:18px;padding:22px;backdrop-filter:blur(12px)}
+    .card h2{font-size:1.05rem;font-weight:700;margin-bottom:16px;display:flex;align-items:center;gap:8px;color:#c4b5fd}
+    label.field-label{display:block;font-size:.8rem;color:#94a3b8;margin-bottom:5px;font-weight:500}
+    select,input[type="text"]{width:100%;background:#12121f;border:1px solid rgba(99,102,241,.18);border-radius:12px;padding:10px 14px;color:#e2e8f0;font-size:.88rem;font-family:inherit;outline:none;transition:border-color .2s}
+    select:focus,input:focus{border-color:#818cf8}
+    textarea{width:100%;background:#12121f;border:1px solid rgba(99,102,241,.18);border-radius:12px;padding:10px 14px;color:#e2e8f0;font-size:.88rem;font-family:inherit;outline:none;resize:none;transition:border-color .2s}
+    textarea:focus{border-color:#818cf8}
+    .field-group{margin-bottom:14px}
+    .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+    .btn{border:none;border-radius:12px;padding:12px 20px;font-family:inherit;font-weight:600;font-size:.9rem;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:6px}
+    .btn-primary{background:linear-gradient(135deg,#6366f1,#8b5cf6);color:#fff;box-shadow:0 4px 20px rgba(99,102,241,.25)}
+    .btn-primary:hover{box-shadow:0 4px 28px rgba(99,102,241,.4);transform:translateY(-1px)}
+    .btn-danger{background:linear-gradient(135deg,#ef4444,#dc2626);color:#fff}
+    .btn-danger:hover{box-shadow:0 4px 20px rgba(239,68,68,.3)}
+    .btn-secondary{background:rgba(99,102,241,.12);color:#a5b4fc;border:1px solid rgba(99,102,241,.2)}
+    .btn-secondary:hover{background:rgba(99,102,241,.2)}
+    .btn-sm{padding:8px 14px;font-size:.8rem;border-radius:10px}
+    .btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+    .btn-group{display:flex;gap:10px;margin-top:10px}
+    .add-btns{display:flex;gap:8px;margin-bottom:14px}
+    /* Stats */
+    .stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px}
+    .stat-card{background:rgba(15,15,25,.7);border:1px solid rgba(99,102,241,.1);border-radius:14px;padding:16px;text-align:center}
+    .stat-card .num{font-size:1.8rem;font-weight:800}
+    .stat-card .lbl{font-size:.75rem;color:#94a3b8;margin-top:2px}
+    .stat-success .num{color:#34d399}
+    .stat-failed .num{color:#f87171}
+    .stat-saved .num{color:#60a5fa}
+    .stat-dl .num{color:#a78bfa}
+    /* Log */
+    #live-log{font-family:'Cascadia Code','Fira Code',monospace;font-size:.78rem;flex:1;overflow-y:auto;background:#08080e;border-radius:12px;padding:12px;min-height:150px;max-height:250px}
+    .video-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:14px;margin-top:14px}
+    .video-card{background:rgba(15,15,25,.7);border:1px solid rgba(99,102,241,.12);border-radius:14px;overflow:hidden;position:relative;transition:border-color .2s}
+    .video-card:hover{border-color:rgba(99,102,241,.3)}
+    .video-card video,.video-card img{width:100%;height:160px;object-fit:cover;display:block;background:#000}
+    .video-card .info{padding:10px}
+    .video-card .fname{font-size:.75rem;color:#a5b4fc;word-break:break-all;margin-bottom:6px}
+    .video-card .meta{font-size:.7rem;color:#64748b}
+    .video-card .actions{display:flex;gap:6px;margin-top:8px}
+    .video-card .actions button,.video-card .actions a{flex:1}
+    .dl-badge{position:absolute;top:8px;right:8px;background:#22c55e;color:#fff;font-size:.65rem;padding:3px 8px;border-radius:8px;font-weight:600}
+    .btn-delete{background:rgba(239,68,68,.15);color:#f87171;border:1px solid rgba(239,68,68,.2)}
+    .btn-delete:hover{background:rgba(239,68,68,.25)}
+    .video-card .thumb{cursor:pointer}
+    /* Video preview modal */
+    .preview-overlay{position:fixed;inset:0;background:rgba(0,0,0,.85);backdrop-filter:blur(8px);z-index:200;display:none;align-items:center;justify-content:center;flex-direction:column}
+    .preview-overlay.active{display:flex}
+    .preview-overlay video{max-width:90vw;max-height:80vh;border-radius:14px;box-shadow:0 0 40px rgba(99,102,241,.3)}
+    .preview-overlay .close-preview{position:absolute;top:20px;right:28px;background:none;border:none;color:#fff;font-size:2rem;cursor:pointer;opacity:.7;transition:opacity .2s}
+    .preview-overlay .close-preview:hover{opacity:1}
+    .preview-overlay .preview-name{color:#a5b4fc;font-size:.85rem;margin-top:12px}
+    #live-log div{padding:2px 0;line-height:1.5}
+    .log-error{color:#f87171}.log-success{color:#34d399}.log-warn{color:#fbbf24}.log-info{color:#94a3b8}
+    /* Modal */
+    .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(4px);z-index:100;display:none;align-items:center;justify-content:center}
+    .modal-overlay.active{display:flex}
+    .modal{background:#13131f;border:1px solid rgba(99,102,241,.15);border-radius:20px;padding:28px;width:90%;max-width:480px;max-height:80vh;overflow-y:auto}
+    .modal h3{font-size:1.1rem;font-weight:700;color:#c4b5fd;margin-bottom:16px}
+    .modal .close-btn{position:absolute;top:14px;right:18px;background:none;border:none;color:#94a3b8;font-size:1.3rem;cursor:pointer}
+    .file-drop{border:2px dashed rgba(99,102,241,.25);border-radius:12px;padding:24px;text-align:center;color:#94a3b8;font-size:.85rem;cursor:pointer;transition:border-color .2s}
+    .file-drop:hover{border-color:#818cf8}
+    .file-drop.dragover{border-color:#a78bfa;background:rgba(99,102,241,.05)}
+    .file-list{margin-top:10px;font-size:.8rem;color:#a5b4fc}
+    .pulse{animation:pulse 2s ease-in-out infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+    .generating-badge{display:inline-flex;align-items:center;gap:6px;background:rgba(99,102,241,.15);color:#a5b4fc;padding:6px 14px;border-radius:20px;font-size:.8rem;font-weight:600}
+    .generating-badge .dot{width:8px;height:8px;background:#818cf8;border-radius:50%;animation:pulse 1s ease-in-out infinite}
+    /* Browser progress bars */
+    .browser-bars{margin-top:14px}
+    .browser-bar{background:rgba(15,15,25,.6);border:1px solid rgba(99,102,241,.1);border-radius:10px;padding:10px 14px;margin-bottom:8px}
+    .browser-bar .bar-header{display:flex;justify-content:space-between;font-size:.78rem;margin-bottom:6px}
+    .browser-bar .bar-label{color:#a5b4fc;font-weight:600}
+    .browser-bar .bar-msg{color:#94a3b8}
+    .browser-bar .bar-track{height:6px;background:rgba(99,102,241,.1);border-radius:4px;overflow:hidden}
+    .browser-bar .bar-fill{height:100%;border-radius:4px;transition:width .3s ease}
+    .bar-fill-running{background:linear-gradient(90deg,#6366f1,#a78bfa)}
+    .bar-fill-done{background:#34d399}
+    .bar-fill-error{background:#f87171}
+  </style>
+</head>
+<body>
+<div class="bg-pattern"></div>
+<div class="container">
+  <div class="header">
+    <h1>🧠 Grok Imagine Generator</h1>
+    <a href="/">← State Manager</a>
+  </div>
+
+  <!-- Stats -->
+  <div class="stats" style="grid-template-columns:repeat(4,1fr)">
+    <div class="stat-card stat-success"><div class="num" id="stat-success">0</div><div class="lbl">✅ Berhasil</div></div>
+    <div class="stat-card stat-failed"><div class="num" id="stat-failed">0</div><div class="lbl">❌ Gagal</div></div>
+    <div class="stat-card stat-saved"><div class="num" id="stat-saved">0</div><div class="lbl">💾 Tersimpan</div></div>
+    <div class="stat-card stat-dl"><div class="num" id="stat-downloaded">0</div><div class="lbl">📥 Didownload</div></div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT: Configuration -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+
+      <!-- Bahan & Prompt -->
+      <div class="card">
+        <h2>📁 Bahan & Prompt</h2>
+        <div class="add-btns">
+          <button class="btn btn-secondary btn-sm" onclick="openModal('bahan')">＋ Tambah Bahan</button>
+          <button class="btn btn-secondary btn-sm" onclick="openModal('prompt')">＋ Tambah Prompt</button>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Folder Bahan (Gambar)</label>
+          <select id="bahan-select"><option value="">-- Pilih Folder --</option></select>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Prompt</label>
+          <select id="prompt-select"><option value="">-- Pilih Prompt --</option></select>
+        </div>
+      </div>
+
+      <!-- Video Settings -->
+      <div class="card">
+        <h2>⚙️ Konfigurasi Generate</h2>
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label">Mode</label>
+            <select id="cfg-mode"><option value="Video" selected>Video</option><option value="Image">Image</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Resolusi</label>
+            <select id="cfg-resolution"><option value="480p">480p</option><option value="720p" selected>720p</option></select>
+          </div>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label">Durasi</label>
+            <select id="cfg-duration"><option value="6s">6s</option><option value="10s" selected>10s</option></select>
+          </div>
+          <div class="field-group">
+            <label class="field-label">Aspect Ratio</label>
+            <select id="cfg-aspect"><option value="9:16" selected>9:16</option><option value="16:9">16:9</option></select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Grok State (Session)</label>
+          <select id="state-select"><option value="">-- Pilih State --</option></select>
+        </div>
+        <div class="field-row">
+          <div class="field-group">
+            <label class="field-label">Merge 2 Video</label>
+            <select id="cfg-merge" onchange="toggleAudioSelect()">
+              <option value="tidak" selected>Tidak</option>
+              <option value="ya">Ya</option>
+            </select>
+          </div>
+          <div class="field-group" id="audio-folder-group" style="display:none">
+            <label class="field-label">Folder Audio</label>
+            <select id="audio-select">
+              <option value="">-- Pilih Audio --</option>
+            </select>
+          </div>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Jumlah Video</label>
+          <input type="number" id="cfg-total" value="1" min="1" max="100" style="text-align:center">
+          <small style="color:#94a3b8;margin-top:4px;display:block">Otomatis dibagi rata ke max 5 browser parallel.</small>
+        </div>
+        <div class="field-group" style="display:flex;align-items:center;gap:8px;margin-top:12px;margin-bottom:12px">
+          <input id="cfg-headless" type="checkbox" checked style="width:16px;height:16px;accent-color:#818cf8;cursor:pointer">
+          <label for="cfg-headless" style="font-size:.85rem;color:#e2e8f0;cursor:pointer;user-select:none">Headless Mode (Tanpa Tampilan Browser)</label>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="saveConfig()" style="margin-top:6px">💾 Simpan Konfigurasi</button>
+      </div>
+
+      <!-- Action Buttons -->
+      <div class="btn-group">
+        <button id="btn-generate" class="btn btn-primary" style="flex:1;padding:16px" onclick="startGenerate()">🚀 Generate</button>
+        <button id="btn-stop" class="btn btn-danger" style="display:none;padding:16px" onclick="stopGenerate()">⛔ Stop Generate</button>
+      </div>
+      <div id="gen-status" style="display:none;margin-top:-8px">
+        <span class="generating-badge"><span class="dot"></span>Sedang Generate...</span>
+      </div>
+    </div>
+
+    <!-- RIGHT: Live Log -->
+    <div class="card" style="display:flex;flex-direction:column">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin-bottom:0">📋 Live Log</h2>
+        <button class="btn btn-secondary btn-sm" onclick="clearLog()">Clear</button>
+      </div>
+      <div id="live-log"></div>
+
+      <!-- Browser Progress Bars -->
+      <div id="browser-progress" class="browser-bars"></div>
+    </div>
+
+    <!-- Video Preview -->
+    <div class="card" style="margin-top:20px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin-bottom:0">🎬 Video Tersimpan</h2>
+        <button class="btn btn-secondary btn-sm" onclick="loadVideos()">🔄 Refresh</button>
+      </div>
+      <div id="video-preview" class="video-grid"><p style="color:#64748b;font-size:.85rem">Pilih state lalu klik Refresh</p></div>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Tambah Bahan -->
+<div class="modal-overlay" id="modal-bahan">
+  <div class="modal">
+    <h3>📁 Tambah Folder Bahan</h3>
+    <div class="field-group">
+      <label class="field-label">Nama Folder Bahan</label>
+      <input type="text" id="new-bahan-name" placeholder="contoh: tab_xprime">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Upload Gambar (multi)</label>
+      <div class="file-drop" id="bahan-drop" onclick="document.getElementById('bahan-files').click()">
+        📷 Klik atau drag gambar ke sini
+      </div>
+      <input type="file" id="bahan-files" accept="image/*" multiple style="display:none" onchange="handleBahanFiles(this.files)">
+      <div class="file-list" id="bahan-file-list"></div>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary btn-sm" onclick="submitBahan()">➕ Tambahkan</button>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('bahan')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: Tambah Prompt -->
+<div class="modal-overlay" id="modal-prompt">
+  <div class="modal">
+    <h3>📝 Tambah Prompt</h3>
+    <div class="field-group">
+      <label class="field-label">Nama Prompt</label>
+      <input type="text" id="new-prompt-name" placeholder="contoh: aesthetic_video">
+    </div>
+    <div class="field-group">
+      <label class="field-label">Isi Prompt</label>
+      <textarea id="new-prompt-text" rows="5" placeholder="Tulis prompt di sini..."></textarea>
+    </div>
+    <div class="btn-group">
+      <button class="btn btn-primary btn-sm" onclick="submitPrompt()">💾 Simpan</button>
+      <button class="btn btn-secondary btn-sm" onclick="closeModal('prompt')">Batal</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let eventSource = null;
+let bahanFilesArr = [];
+let statsPoller = null;
+
+// ── Init ──
+window.onload = () => { loadBahan(); loadPrompts(); loadStates(); loadSavedConfig(); };
+
+// ── API helpers ──
+async function loadBahan() {
+  try {
+    const r = await fetch('/api/grok/bahan');
+    const d = await r.json();
+    const s = document.getElementById('bahan-select');
+    s.innerHTML = '<option value="">-- Pilih Folder --</option>';
+    (d.folders || []).forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f; s.appendChild(o); });
+  } catch(e) { console.error(e); }
+}
+
+async function loadPrompts() {
+  try {
+    const r = await fetch('/api/grok/prompts');
+    const d = await r.json();
+    const s = document.getElementById('prompt-select');
+    s.innerHTML = '<option value="">-- Pilih Prompt --</option>';
+    (d.files || []).forEach(f => { const o = document.createElement('option'); o.value = f; o.textContent = f.replace('.json',''); s.appendChild(o); });
+  } catch(e) { console.error(e); }
+}
+
+async function loadStates() {
+  try {
+    const r = await fetch('/api/states?platform=grok');
+    const d = await r.json();
+    const s = document.getElementById('state-select');
+    s.innerHTML = '<option value="">-- Pilih State --</option>';
+    d.forEach(st => { const o = document.createElement('option'); o.value = st.filename; o.textContent = `${st.name} (${st.expiry.status})`; s.appendChild(o); });
+  } catch(e) { console.error(e); }
+}
+
+// ── Config persistence ──
+function saveConfig() {
+  const cfg = {
+    bahan: document.getElementById('bahan-select').value,
+    prompt: document.getElementById('prompt-select').value,
+    mode: document.getElementById('cfg-mode').value,
+    resolution: document.getElementById('cfg-resolution').value,
+    duration: document.getElementById('cfg-duration').value,
+    aspect: document.getElementById('cfg-aspect').value,
+    state: document.getElementById('state-select').value,
+    total: document.getElementById('cfg-total').value,
+    headless: document.getElementById('cfg-headless').checked,
+    merge: document.getElementById('cfg-merge').value,
+    audioFolder: document.getElementById('audio-select').value,
+  };
+  localStorage.setItem('grok_config', JSON.stringify(cfg));
+  addLog('💾 Konfigurasi disimpan');
+}
+
+async function loadSavedConfig() {
+  try {
+    const cfg = JSON.parse(localStorage.getItem('grok_config') || '{}');
+    if (cfg.bahan) document.getElementById('bahan-select').value = cfg.bahan;
+    if (cfg.prompt) document.getElementById('prompt-select').value = cfg.prompt;
+    if (cfg.mode) document.getElementById('cfg-mode').value = cfg.mode;
+    if (cfg.resolution) document.getElementById('cfg-resolution').value = cfg.resolution;
+    if (cfg.duration) document.getElementById('cfg-duration').value = cfg.duration;
+    if (cfg.aspect) document.getElementById('cfg-aspect').value = cfg.aspect;
+    if (cfg.state) document.getElementById('state-select').value = cfg.state;
+    if (cfg.total) document.getElementById('cfg-total').value = cfg.total;
+    if (cfg.headless !== undefined) document.getElementById('cfg-headless').checked = cfg.headless;
+    if (cfg.merge) {
+      document.getElementById('cfg-merge').value = cfg.merge;
+      await toggleAudioSelect();
+    }
+  } catch {}
+}
+
+function toggleAudioSelect() {
+  const mergeVal = document.getElementById('cfg-merge').value;
+  const group = document.getElementById('audio-folder-group');
+  if (mergeVal === 'ya') {
+    group.style.display = 'block';
+    return loadAudioFolders();
+  } else {
+    group.style.display = 'none';
+    return Promise.resolve();
+  }
+}
+
+async function loadAudioFolders() {
+  try {
+    const r = await fetch('/api/grok/audio-folders');
+    const d = await r.json();
+    const s = document.getElementById('audio-select');
+    s.innerHTML = '<option value="">-- Pilih Audio --</option>';
+    (d.folders || []).forEach(f => {
+      const o = document.createElement('option');
+      o.value = f;
+      o.textContent = f;
+      s.appendChild(o);
+    });
+    // Restore saved config audio folder value if it exists
+    const cfg = JSON.parse(localStorage.getItem('grok_config') || '{}');
+    if (cfg.audioFolder) {
+      s.value = cfg.audioFolder;
+    }
+  } catch(e) { console.error(e); }
+}
+
+// ── Generate ──
+async function startGenerate() {
+  const state = document.getElementById('state-select').value;
+  const prompt = document.getElementById('prompt-select').value;
+  const merge = document.getElementById('cfg-merge').value;
+  const audioFolder = document.getElementById('audio-select').value;
+  const totalVideos = parseInt(document.getElementById('cfg-total').value) || 1;
+
+  if (!state) return alert('Pilih Grok State dulu!');
+  if (!prompt) return alert('Pilih Prompt dulu!');
+
+  if (merge === 'ya') {
+    if (totalVideos % 2 !== 0) {
+      return alert('Jumlah video harus genap jika memilih merge ya!');
+    }
+    if (!audioFolder) {
+      return alert('Pilih Folder Audio terlebih dahulu!');
+    }
+  }
+
+  addLog('🚀 Mengirim perintah generate...');
+  document.getElementById('btn-generate').style.display = 'none';
+  document.getElementById('btn-stop').style.display = 'inline-flex';
+  document.getElementById('gen-status').style.display = 'block';
+
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource('/api/grok/logs');
+  eventSource.onmessage = (e) => addLog(e.data);
+  eventSource.onerror = () => { addLog('⚠ Log stream terputus'); };
+
+  // Poll stats
+  statsPoller = setInterval(pollStats, 3000);
+
+  try {
+    const res = await fetch('/api/grok/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        stateFile: state,
+        bahanFolder: document.getElementById('bahan-select').value,
+        promptFile: prompt,
+        mode: document.getElementById('cfg-mode').value,
+        resolution: document.getElementById('cfg-resolution').value,
+        duration: document.getElementById('cfg-duration').value,
+        aspectRatio: document.getElementById('cfg-aspect').value,
+        totalVideos: totalVideos,
+        headless: document.getElementById('cfg-headless').checked,
+        merge: merge,
+        audioFolder: audioFolder,
+      })
+    });
+    const data = await res.json();
+    if (!data.success) addLog('❌ ' + (data.error || 'Gagal'));
+  } catch(e) { addLog('❌ ' + e.message); }
+}
+
+async function stopGenerate() {
+  addLog('⛔ Menghentikan generate...');
+  await fetch('/api/grok/stop', { method: 'POST' });
+  document.getElementById('btn-generate').style.display = 'inline-flex';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('gen-status').style.display = 'none';
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  if (statsPoller) { clearInterval(statsPoller); statsPoller = null; }
+}
+
+async function pollStats() {
+  try {
+    const r = await fetch('/api/grok/stats');
+    const d = await r.json();
+    document.getElementById('stat-success').textContent = d.success || 0;
+    document.getElementById('stat-failed').textContent = d.failed || 0;
+    document.getElementById('stat-saved').textContent = d.saved || 0;
+
+    if (d.browsers && d.browsers.length > 0) {
+      const container = document.getElementById('browser-progress');
+      container.innerHTML = d.browsers.map(b => {
+        let fillClass = 'bar-fill-running';
+        if (b.status === 'done') fillClass = 'bar-fill-done';
+        if (b.status === 'error') fillClass = 'bar-fill-error';
+        return `<div class="browser-bar">
+          <div class="bar-header">
+            <span class="bar-label">Browser ${b.id + 1} (${b.current}/${b.total})</span>
+            <span class="bar-msg">${b.message} — ${Math.round(b.progress)}%</span>
+          </div>
+          <div class="bar-track">
+            <div class="bar-fill ${fillClass}" style="width:${b.progress}%"></div>
+          </div>
+        </div>`;
+      }).join('');
+    }
+    if (!d.running) {
+      document.getElementById('btn-generate').style.display = 'inline-flex';
+      document.getElementById('btn-stop').style.display = 'none';
+      document.getElementById('gen-status').style.display = 'none';
+      if (statsPoller) { clearInterval(statsPoller); statsPoller = null; }
+    }
+  } catch {}
+}
+
+// ── Log ──
+function addLog(msg) {
+  const el = document.getElementById('live-log');
+  const d = document.createElement('div');
+  const t = new Date().toLocaleTimeString('id-ID');
+  let c = 'log-info';
+  if (msg.includes('❌') || msg.includes('Error')) c = 'log-error';
+  else if (msg.includes('✅') || msg.includes('✓') || msg.includes('🎉')) c = 'log-success';
+  else if (msg.includes('⚠') || msg.includes('🚫')) c = 'log-warn';
+  d.className = c;
+  d.textContent = `[${t}] ${msg}`;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog() { document.getElementById('live-log').innerHTML = ''; }
+
+// ── Video Preview ──
+async function loadVideos() {
+  const state = document.getElementById('state-select').value;
+  if (!state) { document.getElementById('video-preview').innerHTML = '<p style="color:#64748b;font-size:.85rem">Pilih state dulu</p>'; return; }
+  try {
+    const r = await fetch('/api/grok/videos?state=' + encodeURIComponent(state));
+    const d = await r.json();
+    const container = document.getElementById('video-preview');
+    if (!d.videos || d.videos.length === 0) { container.innerHTML = '<p style="color:#64748b;font-size:.85rem">Belum ada video tersimpan</p>'; return; }
+    // Update downloaded count
+    const dlCount = d.videos.filter(v => v.downloaded).length;
+    document.getElementById('stat-downloaded').textContent = dlCount;
+    container.innerHTML = d.videos.map(v => {
+      const isVideo = v.filename.endsWith('.mp4') || v.filename.endsWith('.webm') || v.filename.endsWith('.mov');
+      const url = `/api/grok/video-file/${d.stateName}/${v.filename}`;
+      const sizeMB = (v.size / 1024 / 1024).toFixed(1);
+      const date = new Date(v.created).toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+      const badge = v.downloaded ? '<span class="dl-badge">✓ Downloaded</span>' : '';
+      const clickHandler = isVideo ? `onclick="openPreview('${url}','${v.filename}')"` : '';
+      const media = isVideo ? `<video class="thumb" src="${url}" muted preload="metadata" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0" ${clickHandler}></video>` : `<img class="thumb" src="${url}" alt="${v.filename}" ${clickHandler}>`;
+      return `<div class="video-card">${badge}${media}<div class="info"><div class="fname">${v.filename}</div><div class="meta">${sizeMB} MB · ${date}</div><div class="actions"><a href="${url}" download="${v.filename}" class="btn btn-primary btn-sm" style="text-decoration:none;text-align:center" onclick="markDownloaded('${v.filename}')">📥</a><button class="btn btn-delete btn-sm" onclick="deleteVideo('${v.filename}')">🗑️</button>${!v.downloaded ? `<button class="btn btn-secondary btn-sm" onclick="markDownloaded('${v.filename}')">✓</button>` : ''}</div></div></div>`;
+    }).join('');
+  } catch(e) { console.error(e); }
+}
+
+async function markDownloaded(filename) {
+  const state = document.getElementById('state-select').value;
+  if (!state) return;
+  await fetch('/api/grok/mark-downloaded', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ stateFile: state, filename }) });
+  addLog('✓ Ditandai sudah didownload: ' + filename);
+  loadVideos();
+}
+
+async function deleteVideo(filename) {
+  if (!confirm('Hapus ' + filename + '?')) return;
+  const state = document.getElementById('state-select').value;
+  if (!state) return;
+  const r = await fetch('/api/grok/delete-video', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ stateFile: state, filename }) });
+  const d = await r.json();
+  if (d.success) { addLog('🗑️ Video dihapus: ' + filename); loadVideos(); }
+  else addLog('❌ Gagal hapus: ' + (d.error || ''));
+}
+
+function openPreview(url, name) {
+  const overlay = document.getElementById('preview-modal');
+  const video = document.getElementById('preview-video');
+  const label = document.getElementById('preview-name');
+  video.src = url;
+  label.textContent = name;
+  overlay.classList.add('active');
+  video.play();
+}
+function closePreview() {
+  const overlay = document.getElementById('preview-modal');
+  const video = document.getElementById('preview-video');
+  video.pause();
+  video.src = '';
+  overlay.classList.remove('active');
+}
+
+// Auto-load videos when state changes
+document.getElementById('state-select').addEventListener('change', loadVideos);
+
+// ── Modals ──
+function openModal(type) { document.getElementById('modal-'+type).classList.add('active'); }
+function closeModal(type) { document.getElementById('modal-'+type).classList.remove('active'); }
+document.querySelectorAll('.modal-overlay').forEach(m => { m.addEventListener('click', e => { if (e.target === m) m.classList.remove('active'); }); });
+
+// ── Bahan upload ──
+function handleBahanFiles(files) {
+  bahanFilesArr = Array.from(files);
+  document.getElementById('bahan-file-list').textContent = bahanFilesArr.map(f=>f.name).join(', ');
+}
+const dropZone = document.getElementById('bahan-drop');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('dragover'); handleBahanFiles(e.dataTransfer.files); });
+
+async function submitBahan() {
+  const name = document.getElementById('new-bahan-name').value.trim();
+  if (!name) return alert('Masukkan nama folder!');
+  if (bahanFilesArr.length === 0) return alert('Pilih gambar dulu!');
+  const fd = new FormData();
+  fd.append('folderName', name);
+  bahanFilesArr.forEach(f => fd.append('images', f));
+  try {
+    const r = await fetch('/api/grok/bahan/upload', { method: 'POST', body: fd });
+    const d = await r.json();
+    if (d.success) { addLog('✅ Folder bahan "'+name+'" ditambahkan ('+bahanFilesArr.length+' gambar)'); closeModal('bahan'); loadBahan(); bahanFilesArr=[]; document.getElementById('bahan-file-list').textContent=''; document.getElementById('new-bahan-name').value=''; }
+    else addLog('❌ '+d.error);
+  } catch(e) { addLog('❌ '+e.message); }
+}
+
+async function submitPrompt() {
+  const name = document.getElementById('new-prompt-name').value.trim();
+  const text = document.getElementById('new-prompt-text').value.trim();
+  if (!name) return alert('Masukkan nama prompt!');
+  if (!text) return alert('Masukkan isi prompt!');
+  try {
+    const r = await fetch('/api/grok/prompts/save', { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name,prompt:text}) });
+    const d = await r.json();
+    if (d.success) { addLog('✅ Prompt "'+name+'" disimpan'); closeModal('prompt'); loadPrompts(); document.getElementById('new-prompt-name').value=''; document.getElementById('new-prompt-text').value=''; }
+    else addLog('❌ '+d.error);
+  } catch(e) { addLog('❌ '+e.message); }
+}
+</script>
+
+<!-- Video Preview Modal -->
+<div class="preview-overlay" id="preview-modal" onclick="if(event.target===this)closePreview()">
+  <button class="close-preview" onclick="closePreview()">&times;</button>
+  <video id="preview-video" controls autoplay style="max-width:90vw;max-height:80vh"></video>
+  <div class="preview-name" id="preview-name"></div>
+</div>
+
+</body>
+</html>

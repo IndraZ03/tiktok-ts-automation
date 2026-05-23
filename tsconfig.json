@@ -1,0 +1,12 @@
+{
+  "ts-node": {
+    "esm": true
+  },
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0"
+  },
+  "exclude": ["playwright.config.ts"]
+}

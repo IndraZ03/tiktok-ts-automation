@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>YT to TikTok Bot</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    #live-log { font-family: 'Cascadia Code', 'Fira Code', monospace; font-size: 13px; }
+    #live-log div { padding: 2px 0; }
+    .log-error { color: #ef4444; }
+    .log-success { color: #22c55e; }
+    .log-warn { color: #f59e0b; }
+    .log-info { color: #94a3b8; }
+
+    .multiselect-dropdown { position: relative; }
+    .multiselect-menu {
+      position: absolute; z-index: 50; top: 100%; left: 0; right: 0;
+      max-height: 260px; overflow-y: auto;
+      background: #1f2937; border: 1px solid #374151; border-radius: 12px;
+      margin-top: 4px; padding: 6px;
+      display: none;
+    }
+    .multiselect-menu.open { display: block; }
+    .multiselect-item {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 12px; border-radius: 8px; cursor: pointer;
+      transition: background 0.15s;
+    }
+    .multiselect-item:hover { background: rgba(236, 72, 153, 0.1); }
+    .multiselect-item input { accent-color: #ec4899; width: 16px; height: 16px; }
+
+    .state-card {
+      border: 1px solid #1f2937;
+      background: linear-gradient(135deg, rgba(17,24,39,0.95), rgba(31,41,55,0.95));
+      transition: all 0.3s ease;
+    }
+    .state-card:hover { border-color: #374151; }
+    .yt-link-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 10px; border-radius: 8px;
+      background: rgba(31, 41, 55, 0.7);
+      transition: background 0.15s;
+    }
+    .yt-link-item:hover { background: rgba(55, 65, 81, 0.9); }
+    .queue-row { transition: all 0.2s ease; }
+    .queue-row:hover { background: rgba(236, 72, 153, 0.05); }
+
+    @keyframes pulse-run {
+      0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(34,197,94,0.4); }
+      50% { opacity: 0.8; box-shadow: 0 0 0 6px rgba(34,197,94,0); }
+    }
+    .running-pulse { animation: pulse-run 1.5s ease-in-out infinite; }
+    .gradient-btn {
+      background: linear-gradient(135deg, #ec4899, #8b5cf6);
+      transition: all 0.2s;
+    }
+    .gradient-btn:hover {
+      background: linear-gradient(135deg, #f472b6, #a78bfa);
+      transform: translateY(-1px);
+    }
+    .gradient-btn:active { transform: scale(0.98); }
+    @keyframes shimmer {
+      0% { background-position: 0 0; }
+      100% { background-position: 1rem 0; }
+    }
+  </style>
+</head>
+<body class="bg-gray-950 text-gray-100 min-h-screen">
+  <div class="max-w-7xl mx-auto p-6">
+    <!-- Header -->
+    <div class="flex items-center justify-between mb-6">
+      <h1 class="text-3xl font-bold bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 bg-clip-text text-transparent">
+        🤖 YT to TikTok Bot
+      </h1>
+      <div class="flex items-center gap-3">
+        <span id="status-badge" class="text-xs px-3 py-1.5 rounded-full bg-gray-800 text-gray-400">⏸ Idle</span>
+        <a href="/tiktok" class="text-sm text-gray-400 hover:text-white transition">TikTok Uploader →</a>
+        <a href="/" class="text-sm text-gray-400 hover:text-white transition">← State Manager</a>
+      </div>
+    </div>
+
+    <!-- State Selector -->
+    <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-6">
+      <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">🔑 Pilih TikTok State</h2>
+      <div class="multiselect-dropdown" id="state-dropdown">
+        <button onclick="toggleDropdown()" type="button"
+                class="w-full bg-gray-800 border border-gray-700 rounded-xl px-4 py-3 text-sm text-left flex items-center justify-between focus:outline-none focus:border-pink-500 transition">
+          <span id="dropdown-label" class="text-gray-400 truncate">-- Pilih State (bisa pilih banyak) --</span>
+          <span class="text-gray-500 flex-shrink-0 ml-2">▾</span>
+        </button>
+        <div class="multiselect-menu" id="dropdown-menu"></div>
+      </div>
+    </div>
+
+    <!-- Real-time Connected Progress Tracker -->
+    <div id="overall-progress-card" class="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-6 hidden">
+      <h2 class="text-lg font-semibold mb-4 flex items-center justify-between">
+        <span class="flex items-center gap-2">🔄 Progress Status Real-Time <span id="progress-state-badge" class="text-xs px-2.5 py-1 rounded bg-pink-500/20 text-pink-400 font-medium"></span></span>
+        <span class="text-xs text-gray-400" id="progress-active-task">Idle</span>
+      </h2>
+      
+      <!-- Contiguous 3-Segment Progress Bar -->
+      <div class="bg-gray-950 rounded-xl p-1 border border-gray-850">
+        <div class="h-12 w-full flex overflow-hidden rounded-lg bg-gray-900 shadow-inner">
+          <!-- Segment 1: YT Download (33.33%) -->
+          <div class="w-1/3 h-full bg-gray-950/20 relative border-r border-gray-800 flex items-center">
+            <div id="prog-download" class="h-full bg-gradient-to-r from-red-600 via-rose-600 to-rose-500 transition-all duration-300 relative shadow-inner" style="width: 0%;">
+              <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[shimmer_1.5s_linear_infinite] opacity-30"></div>
+            </div>
+            <span id="txt-download" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.9)]">📥 YT Download: 0%</span>
+          </div>
+          
+          <!-- Segment 2: Video Split (33.33%) -->
+          <div class="w-1/3 h-full bg-gray-950/20 relative border-r border-gray-800 flex items-center">
+            <div id="prog-split" class="h-full bg-gradient-to-r from-violet-600 via-purple-600 to-indigo-500 transition-all duration-300 relative shadow-inner" style="width: 0%;">
+              <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[shimmer_1.5s_linear_infinite] opacity-30"></div>
+            </div>
+            <span id="txt-split" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.9)]">✂ Splitting: 0%</span>
+          </div>
+
+          <!-- Segment 3: TikTok Upload (33.33%) -->
+          <div class="w-1/3 h-full bg-gray-950/20 relative flex items-center">
+            <div id="prog-upload" class="h-full bg-gradient-to-r from-pink-600 via-pink-500 to-fuchsia-500 transition-all duration-300 relative shadow-inner" style="width: 0%;">
+              <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] bg-[length:1rem_1rem] animate-[shimmer_1.5s_linear_infinite] opacity-30"></div>
+            </div>
+            <span id="txt-upload" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1.5px_1.5px_rgba(0,0,0,0.9)]">🚀 TikTok Upload: 0%</span>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Details Grid -->
+      <div class="grid grid-cols-3 gap-4 mt-4 text-center">
+        <div class="p-3 rounded-xl bg-gray-950/50 border border-gray-800 flex flex-col justify-center">
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Langkah 1</div>
+          <div class="text-xs font-bold text-rose-400">📥 YT Download</div>
+          <div class="text-xs text-gray-400 mt-1" id="lbl-download">Persiapan</div>
+        </div>
+        <div class="p-3 rounded-xl bg-gray-950/50 border border-gray-800 flex flex-col justify-center">
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Langkah 2</div>
+          <div class="text-xs font-bold text-violet-400">✂ Video Splitting</div>
+          <div class="text-xs text-gray-400 mt-1" id="lbl-split">Menunggu</div>
+        </div>
+        <div class="p-3 rounded-xl bg-gray-950/50 border border-gray-800 flex flex-col justify-center">
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider mb-0.5">Langkah 3</div>
+          <div class="text-xs font-bold text-pink-400">🚀 TikTok Upload</div>
+          <div class="text-xs text-gray-400 mt-1" id="lbl-upload">Menunggu</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <!-- LEFT: State Config Cards -->
+      <div class="xl:col-span-2 space-y-4" id="state-cards-container">
+        <div class="text-center py-12 text-gray-500">
+          <p class="text-lg mb-1">Pilih state di atas untuk memulai konfigurasi</p>
+          <p class="text-sm">Setiap state akan memiliki card konfigurasi sendiri</p>
+        </div>
+      </div>
+
+      <!-- RIGHT: Queue + Log -->
+      <div class="space-y-4">
+        <!-- Controls -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800">
+          <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">⚡ Kontrol</h2>
+          <div class="space-y-2">
+            <button id="btn-full-auto" onclick="startFullAuto()"
+                    class="w-full gradient-btn text-white py-3.5 rounded-xl text-base font-bold shadow-lg shadow-pink-500/20">
+              🚀 Full Auto (Semua State)
+            </button>
+            <button id="btn-stop" onclick="stopBot()" disabled
+                    class="w-full bg-gray-700 hover:bg-red-600 disabled:opacity-30 text-white py-3 rounded-xl text-sm font-bold transition-all">
+              ⛔ Stop
+            </button>
+          </div>
+        </div>
+
+        <!-- Queue -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800">
+          <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">📋 Antrian Jadwal</h2>
+          <div id="queue-container" class="space-y-1 max-h-64 overflow-y-auto">
+            <div class="text-sm text-gray-500 text-center py-4">Belum ada antrian</div>
+          </div>
+        </div>
+
+        <!-- Live Log -->
+        <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 flex flex-col" style="min-height:350px;">
+          <div class="flex items-center justify-between mb-3">
+            <h2 class="text-lg font-semibold flex items-center gap-2">📋 Live Log</h2>
+            <button onclick="clearLog()" class="text-xs text-gray-500 hover:text-white transition">Clear</button>
+          </div>
+          <div id="live-log" class="flex-1 overflow-y-auto bg-gray-950 rounded-xl p-4 space-y-0.5"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ═══════════════════════════════════════
+    //  GLOBAL STATE
+    // ═══════════════════════════════════════
+    let allStates = [];           // [{name, filename, expiry}]
+    let selectedStates = [];      // [filename, ...]
+    let stateConfigs = {};        // { filename: { ytLinks, description, hashtags, scheduleDate, scheduleTime, intervalMinutes } }
+    let stateVideos = {};         // { filename: [{ name, uploaded }] }
+    let eventSource = null;
+    let dropdownOpen = false;
+
+    // ═══════════════════════════════════════
+    //  INIT
+    // ═══════════════════════════════════════
+    window.onload = async () => {
+      await loadStates();
+      await loadConfigs();
+      pollStatus();
+      setInterval(pollStatus, 5000);
+    };
+
+    // ═══════════════════════════════════════
+    //  LOAD TIKTOK STATES
+    // ═══════════════════════════════════════
+    async function loadStates() {
+      try {
+        const res = await fetch('/api/states');
+        allStates = await res.json();
+        renderDropdown();
+      } catch (e) { addLog('❌ Gagal load states: ' + e.message); }
+    }
+
+    // ═══════════════════════════════════════
+    //  LOAD SAVED CONFIGS
+    // ═══════════════════════════════════════
+    async function loadConfigs() {
+      try {
+        const res = await fetch('/api/ytbot/config');
+        const data = await res.json();
+        stateConfigs = data.states || {};
+      } catch (e) { addLog('❌ Gagal load config: ' + e.message); }
+    }
+
+    // ═══════════════════════════════════════
+    //  DROPDOWN
+    // ═══════════════════════════════════════
+    function toggleDropdown() {
+      dropdownOpen = !dropdownOpen;
+      document.getElementById('dropdown-menu').classList.toggle('open', dropdownOpen);
+    }
+
+    document.addEventListener('click', (e) => {
+      if (!document.getElementById('state-dropdown').contains(e.target)) {
+        dropdownOpen = false;
+        document.getElementById('dropdown-menu').classList.remove('open');
+      }
+    });
+
+    function renderDropdown() {
+      const menu = document.getElementById('dropdown-menu');
+      menu.innerHTML = allStates.map(s => {
+        const checked = selectedStates.includes(s.filename) ? 'checked' : '';
+        const statusIcon = s.expiry.status === 'safe' ? '🟢' : s.expiry.status === 'warning' ? '🟡' : s.expiry.status === 'expired' ? '🔴' : '⏳';
+        return `<label class="multiselect-item">
+          <input type="checkbox" ${checked} onchange="toggleState('${s.filename}')">
+          <span class="text-sm flex-1">${statusIcon} ${s.name}</span>
+          <span class="text-xs text-gray-500">${s.expiry.daysLeft != null ? s.expiry.daysLeft + 'd' : ''}</span>
+        </label>`;
+      }).join('');
+      updateDropdownLabel();
+    }
+
+    function toggleState(filename) {
+      const idx = selectedStates.indexOf(filename);
+      if (idx >= 0) {
+        selectedStates.splice(idx, 1);
+      } else {
+        selectedStates.push(filename);
+      }
+      renderDropdown();
+      renderAllCards();
+    }
+
+    function updateDropdownLabel() {
+      const label = document.getElementById('dropdown-label');
+      if (selectedStates.length === 0) {
+        label.textContent = '-- Pilih State (bisa pilih banyak) --';
+        label.className = 'text-gray-400 truncate';
+      } else {
+        const names = selectedStates.map(f => {
+          const s = allStates.find(a => a.filename === f);
+          return s ? s.name : f;
+        });
+        label.textContent = names.join(', ');
+        label.className = 'text-pink-300 truncate';
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  RENDER STATE CARDS
+    // ═══════════════════════════════════════
+    async function renderAllCards() {
+      const container = document.getElementById('state-cards-container');
+      if (selectedStates.length === 0) {
+        container.innerHTML = `<div class="text-center py-12 text-gray-500">
+          <p class="text-lg mb-1">Pilih state di atas untuk memulai konfigurasi</p>
+          <p class="text-sm">Setiap state akan memiliki card konfigurasi sendiri</p>
+        </div>`;
+        return;
+      }
+
+      // Load videos for each state
+      for (const fn of selectedStates) {
+        if (!stateVideos[fn]) await loadStateVideos(fn);
+      }
+
+      container.innerHTML = selectedStates.map(fn => {
+        const state = allStates.find(s => s.filename === fn);
+        const name = state ? state.name : fn;
+        const cfg = stateConfigs[fn] || { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60 };
+        const videos = stateVideos[fn] || [];
+        const uploadedCount = videos.filter(v => v.uploaded).length;
+        const pendingCount = videos.length - uploadedCount;
+
+        const linksHtml = (cfg.ytLinks || []).map((link, i) =>
+          `<div class="yt-link-item">
+            <span class="text-red-400 flex-shrink-0">▶</span>
+            <a href="${escHtml(link)}" target="_blank" class="text-sm text-blue-400 hover:text-blue-300 truncate flex-1" title="${escHtml(link)}">${escHtml(link)}</a>
+            <button onclick="removeLink('${fn}', ${i})" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-1.5 py-0.5 rounded transition flex-shrink-0">✕</button>
+          </div>`
+        ).join('');
+
+        const today = new Date().toISOString().split('T')[0];
+        const nowTime = new Date().toTimeString().slice(0, 5);
+
+        return `<div class="state-card rounded-2xl p-5" data-state="${fn}">
+          <div class="flex items-center justify-between mb-4">
+            <h3 class="text-lg font-semibold flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span>
+              ${escHtml(name)}
+            </h3>
+            <div class="flex items-center gap-2">
+              <span class="text-xs bg-gray-800 px-2.5 py-1 rounded-lg">
+                <span class="text-green-400">${uploadedCount}✓</span> · <span class="text-gray-300">${pendingCount} pending</span>
+              </span>
+              <button onclick="scheduleState('${fn}')" class="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition">
+                ▶ Jadwalkan
+              </button>
+            </div>
+          </div>
+
+          <!-- YT Links Stock -->
+          <div class="mb-4">
+            <label class="text-sm text-gray-400 block mb-1.5">📺 Stok Link YouTube (${(cfg.ytLinks || []).length})</label>
+            <div class="flex gap-2 mb-2">
+              <input id="yt-input-${fn}" type="url" placeholder="https://www.youtube.com/watch?v=..."
+                     class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
+              <button onclick="addLink('${fn}')"
+                      class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition flex-shrink-0">
+                + Tambah
+              </button>
+            </div>
+            <div class="space-y-1 max-h-32 overflow-y-auto">${linksHtml || '<div class="text-xs text-gray-500 text-center py-2">Belum ada link</div>'}</div>
+          </div>
+
+          <!-- Description & Hashtag -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">📝 Deskripsi</label>
+              <textarea id="desc-${fn}" rows="2" placeholder="Deskripsi video TikTok..."
+                        class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 resize-none transition">${escHtml(cfg.description || '')}</textarea>
+            </div>
+            <div>
+              <label class="text-sm text-gray-400 block mb-1"># Hashtag</label>
+              <input id="tags-${fn}" type="text" placeholder="fyp,viral,trending" value="${escHtml(cfg.hashtags || '')}"
+                     class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
+            </div>
+          </div>
+
+          <!-- Schedule & Interval -->
+          <div class="grid grid-cols-3 gap-3 mb-4">
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">📅 Schedule Date</label>
+              <input id="sdate-${fn}" type="date" value="${cfg.scheduleDate || today}"
+                     class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
+            </div>
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">⏰ Schedule Time</label>
+              <input id="stime-${fn}" type="time" value="${cfg.scheduleTime || nowTime}"
+                     class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
+            </div>
+            <div>
+              <label class="text-sm text-gray-400 block mb-1">⏱ Interval (menit)</label>
+              <input id="interval-${fn}" type="number" min="1" value="${cfg.intervalMinutes || 60}"
+                     class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
+            </div>
+          </div>
+
+          <button onclick="saveConfig('${fn}')"
+                  class="w-full bg-gray-700 hover:bg-gray-600 text-white py-2.5 rounded-xl text-sm font-medium transition">
+            💾 Simpan Konfigurasi
+          </button>
+        </div>`;
+      }).join('');
+    }
+
+    // ═══════════════════════════════════════
+    //  LOAD VIDEOS FOR A STATE
+    // ═══════════════════════════════════════
+    async function loadStateVideos(stateFilename) {
+      try {
+        const res = await fetch('/api/ytbot/videos?state=' + encodeURIComponent(stateFilename));
+        const data = await res.json();
+        stateVideos[stateFilename] = data.videos || [];
+      } catch { stateVideos[stateFilename] = []; }
+    }
+
+    // ═══════════════════════════════════════
+    //  SAVE CONFIG
+    // ═══════════════════════════════════════
+    async function saveConfig(fn) {
+      const cfg = {
+        description: document.getElementById('desc-' + fn)?.value || '',
+        hashtags: document.getElementById('tags-' + fn)?.value || '',
+        scheduleDate: document.getElementById('sdate-' + fn)?.value || '',
+        scheduleTime: document.getElementById('stime-' + fn)?.value || '',
+        intervalMinutes: parseInt(document.getElementById('interval-' + fn)?.value) || 60,
+      };
+      try {
+        const res = await fetch('/api/ytbot/config/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn, ...cfg })
+        });
+        const data = await res.json();
+        if (data.success) {
+          stateConfigs[fn] = { ...stateConfigs[fn], ...cfg };
+          addLog(`💾 Config disimpan untuk ${getStateName(fn)}`);
+        } else {
+          addLog('❌ Gagal simpan: ' + (data.error || ''));
+        }
+      } catch (e) { addLog('❌ Error: ' + e.message); }
+    }
+
+    // ═══════════════════════════════════════
+    //  ADD / REMOVE YT LINKS
+    // ═══════════════════════════════════════
+    async function addLink(fn) {
+      const input = document.getElementById('yt-input-' + fn);
+      const link = input?.value?.trim();
+      if (!link) return;
+      if (!link.includes('youtube.com/') && !link.includes('youtu.be/')) {
+        return alert('Masukkan link YouTube yang valid');
+      }
+      try {
+        const res = await fetch('/api/ytbot/links/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn, link })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (!stateConfigs[fn]) stateConfigs[fn] = { ytLinks: [] };
+          if (!stateConfigs[fn].ytLinks) stateConfigs[fn].ytLinks = [];
+          stateConfigs[fn].ytLinks.push(link);
+          input.value = '';
+          renderAllCards();
+          addLog(`✓ Link ditambahkan ke ${getStateName(fn)}`);
+        }
+      } catch (e) { addLog('❌ Error: ' + e.message); }
+    }
+
+    async function removeLink(fn, index) {
+      const cfg = stateConfigs[fn];
+      if (!cfg?.ytLinks?.[index]) return;
+      const link = cfg.ytLinks[index];
+      try {
+        const res = await fetch('/api/ytbot/links/remove', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn, link })
+        });
+        const data = await res.json();
+        if (data.success) {
+          cfg.ytLinks.splice(index, 1);
+          renderAllCards();
+          addLog(`🗑️ Link dihapus dari ${getStateName(fn)}`);
+        }
+      } catch (e) { addLog('❌ Error: ' + e.message); }
+    }
+
+    // ═══════════════════════════════════════
+    //  SCHEDULE / FULL AUTO
+    // ═══════════════════════════════════════
+    async function scheduleState(fn) {
+      // Save config first
+      await saveConfig(fn);
+      addLog(`▶ Jadwalkan ${getStateName(fn)}...`);
+      connectSSE();
+      setBusy(true);
+
+      try {
+        const res = await fetch('/api/ytbot/schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ ' + (data.error || 'Gagal'));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function startFullAuto() {
+      if (selectedStates.length === 0) return alert('Pilih state terlebih dahulu!');
+
+      // Save all configs first
+      for (const fn of selectedStates) {
+        await saveConfig(fn);
+      }
+
+      addLog('🚀 Full Auto dimulai untuk ' + selectedStates.length + ' state...');
+      connectSSE();
+      setBusy(true);
+
+      try {
+        const res = await fetch('/api/ytbot/full-auto', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFiles: selectedStates })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ ' + (data.error || 'Gagal'));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function stopBot() {
+      addLog('⛔ Menghentikan bot...');
+      await fetch('/api/ytbot/stop', { method: 'POST' });
+      setBusy(false);
+    }
+
+    function setBusy(busy) {
+      document.getElementById('btn-full-auto').disabled = busy;
+      document.getElementById('btn-stop').disabled = !busy;
+      const badge = document.getElementById('status-badge');
+      if (busy) {
+        badge.textContent = '🟢 Running';
+        badge.className = 'text-xs px-3 py-1.5 rounded-full bg-green-900/50 text-green-400 running-pulse';
+      } else {
+        badge.textContent = '⏸ Idle';
+        badge.className = 'text-xs px-3 py-1.5 rounded-full bg-gray-800 text-gray-400';
+        document.getElementById('overall-progress-card').classList.add('hidden');
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  SSE LOGS
+    // ═══════════════════════════════════════
+    function connectSSE() {
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/api/ytbot/logs');
+      eventSource.onmessage = (e) => {
+        addLog(e.data);
+        if (e.data.includes('YTBOT FINISHED') || e.data.includes('YTBOT STOPPED')) {
+          setBusy(false);
+          loadConfigs().then(() => renderAllCards());
+        }
+        if (e.data.startsWith('[QUEUE_UPDATE]:')) {
+          try {
+            const queue = JSON.parse(e.data.substring('[QUEUE_UPDATE]:'.length));
+            renderQueue(queue);
+          } catch {}
+        }
+        if (e.data.startsWith('[PROGRESS_UPDATE]:')) {
+          try {
+            const prog = JSON.parse(e.data.substring('[PROGRESS_UPDATE]:'.length));
+            updateProgressUI(prog);
+          } catch {}
+        }
+      };
+      eventSource.onerror = () => { };
+    }
+
+    // ═══════════════════════════════════════
+    //  POLL STATUS
+    // ═══════════════════════════════════════
+    async function pollStatus() {
+      try {
+        const res = await fetch('/api/ytbot/status');
+        const data = await res.json();
+        if (data.running) {
+          setBusy(true);
+          connectSSE();
+        }
+        if (data.queue) renderQueue(data.queue);
+        if (data.progress) updateProgressUI(data.progress);
+      } catch {}
+    }
+
+    // ═══════════════════════════════════════
+    //  RENDER QUEUE
+    // ═══════════════════════════════════════
+    function renderQueue(queue) {
+      const container = document.getElementById('queue-container');
+      if (!queue || queue.length === 0) {
+        container.innerHTML = '<div class="text-sm text-gray-500 text-center py-4">Belum ada antrian</div>';
+        return;
+      }
+      container.innerHTML = queue.map(q => `
+        <div class="queue-row flex items-center justify-between px-3 py-2 rounded-lg">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full ${q.active ? 'bg-green-500 running-pulse' : 'bg-gray-600'}"></span>
+            <span class="text-sm font-medium">${escHtml(q.stateName)}</span>
+          </div>
+          <div class="text-xs text-gray-400">
+            ${q.videoCount} video · ${q.scheduleStart || '?'} → ${q.scheduleEnd || '?'}
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ═══════════════════════════════════════
+    //  LOGGING
+    // ═══════════════════════════════════════
+    function addLog(msg) {
+      const el = document.getElementById('live-log');
+      const div = document.createElement('div');
+      const time = new Date().toLocaleTimeString('id-ID');
+
+      let cls = 'log-info';
+      if (msg.includes('❌')) cls = 'log-error';
+      else if (msg.includes('✓') || msg.includes('✅') || msg.includes('🎉')) cls = 'log-success';
+      else if (msg.includes('⚠')) cls = 'log-warn';
+
+      div.className = cls;
+      div.textContent = `[${time}] ${msg}`;
+      el.appendChild(div);
+      el.scrollTop = el.scrollHeight;
+    }
+
+    function clearLog() { document.getElementById('live-log').innerHTML = ''; }
+
+    // ═══════════════════════════════════════
+    //  UPDATE PROGRESS UI
+    // ═══════════════════════════════════════
+    function updateProgressUI(prog) {
+      const card = document.getElementById('overall-progress-card');
+      if (!prog || !prog.currentState) {
+        card.classList.add('hidden');
+        return;
+      }
+      card.classList.remove('hidden');
+      
+      const stateClean = prog.currentState.replace('tiktok-state-', '').replace('.json', '');
+      document.getElementById('progress-state-badge').textContent = stateClean;
+      
+      const dl = prog.download || 0;
+      const sp = prog.split || 0;
+      const up = prog.upload || 0;
+      
+      // Update bars width
+      document.getElementById('prog-download').style.width = dl + '%';
+      document.getElementById('txt-download').textContent = `📥 YT Download: ${dl}%`;
+      
+      document.getElementById('prog-split').style.width = sp + '%';
+      document.getElementById('txt-split').textContent = `✂ Splitting: ${sp}%`;
+      
+      document.getElementById('prog-upload').style.width = up + '%';
+      document.getElementById('txt-upload').textContent = `🚀 TikTok Upload: ${up}%`;
+      
+      // Update labels with beautiful badges and icons
+      const lblDl = document.getElementById('lbl-download');
+      if (dl === 0) {
+        lblDl.textContent = 'Menunggu';
+        lblDl.className = 'text-xs mt-1 text-gray-500';
+      } else if (dl < 100) {
+        lblDl.textContent = `Mengunduh (${dl}%)`;
+        lblDl.className = 'text-xs mt-1 text-rose-400 font-semibold animate-pulse';
+      } else {
+        lblDl.textContent = 'Selesai ✓';
+        lblDl.className = 'text-xs mt-1 text-green-400 font-bold';
+      }
+      
+      const lblSp = document.getElementById('lbl-split');
+      if (sp === 0) {
+        lblSp.textContent = dl < 100 ? 'Menunggu' : 'Persiapan';
+        lblSp.className = 'text-xs mt-1 text-gray-500';
+      } else if (sp < 100) {
+        lblSp.textContent = `Memotong (${sp}%)`;
+        lblSp.className = 'text-xs mt-1 text-violet-400 font-semibold animate-pulse';
+      } else {
+        lblSp.textContent = 'Selesai ✓';
+        lblSp.className = 'text-xs mt-1 text-green-400 font-bold';
+      }
+      
+      const lblUp = document.getElementById('lbl-upload');
+      if (up === 0) {
+        lblUp.textContent = sp < 100 ? 'Menunggu' : 'Persiapan';
+        lblUp.className = 'text-xs mt-1 text-gray-500';
+      } else if (up < 100) {
+        lblUp.textContent = `Mengupload (${up}%)`;
+        lblUp.className = 'text-xs mt-1 text-pink-400 font-semibold animate-pulse';
+      } else {
+        lblUp.textContent = 'Selesai ✓';
+        lblUp.className = 'text-xs mt-1 text-green-400 font-bold';
+      }
+      
+      // Set active task description
+      let activeTask = 'Idle';
+      if (dl < 100) {
+        activeTask = `Mengunduh video dari YouTube... (${dl}%)`;
+      } else if (sp < 100) {
+        activeTask = `Memotong video menjadi segmen 3 menit... (${sp}%)`;
+      } else if (up < 100) {
+        activeTask = `Mengupload segmen ke TikTok... (${up}%)`;
+      } else {
+        activeTask = 'Semua proses selesai!';
+      }
+      document.getElementById('progress-active-task').textContent = activeTask;
+    }
+
+    // ═══════════════════════════════════════
+    //  HELPERS
+    // ═══════════════════════════════════════
+    function getStateName(fn) {
+      const s = allStates.find(a => a.filename === fn);
+      return s ? s.name : fn;
+    }
+    function escHtml(str) {
+      return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+    }
+  </script>
+</body>
+</html>
