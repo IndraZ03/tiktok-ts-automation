@@ -13,7 +13,7 @@
     .log-warn { color: #f59e0b; }
     .log-info { color: #94a3b8; }
 
-    .multiselect-dropdown { position: relative; }
+    .multiselect-dropdown { position: relative; z-index: 10; }
     .multiselect-menu {
       position: absolute; z-index: 50; top: 100%; left: 0; right: 0;
       max-height: 260px; overflow-y: auto;
@@ -81,7 +81,7 @@
     </div>
 
     <!-- State Selector -->
-    <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-6">
+    <div class="bg-gray-900 rounded-2xl p-5 border border-gray-800 mb-6 relative z-20">
       <h2 class="text-lg font-semibold mb-3 flex items-center gap-2">🔑 Pilih TikTok State</h2>
       <div class="multiselect-dropdown" id="state-dropdown">
         <button onclick="toggleDropdown()" type="button"

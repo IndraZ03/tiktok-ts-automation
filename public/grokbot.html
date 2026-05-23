@@ -22,7 +22,7 @@
     .log-warn { color: #fbbf24; background: rgba(245, 158, 11, 0.05); }
     .log-info { color: #9ca3af; }
 
-    .multiselect-dropdown { position: relative; }
+    .multiselect-dropdown { position: relative; z-index: 10; }
     .multiselect-menu {
       position: absolute; z-index: 50; top: 100%; left: 0; right: 0;
       max-height: 280px; overflow-y: auto;
@@ -148,7 +148,7 @@
     </div>
 
     <!-- State Selector -->
-    <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 mb-8 shadow-xl">
+    <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 mb-8 shadow-xl relative z-20">
       <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-purple-300">
         <span>🔑</span> Pilih TikTok State (Login Session)
       </h2>
