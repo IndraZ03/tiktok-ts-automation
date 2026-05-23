@@ -317,136 +317,127 @@ async function uploadSingleVideo(
       }
       await waitAndLog(page, log, 3000, 'hasil pencarian');
 
-      // Select radio button — try multiple methods, verify each one actually works
+      // Select radio button — use the proven Python approach:
+      // Find radio by name attribute (= product name), then click its parent wrapper
       try {
-        const firstRadio = page.locator('input[type="radio"]').first();
-        await firstRadio.waitFor({ state: 'attached', timeout: 8000 });
-        log('✓ Radio produk ditemukan, mencoba memilih...');
+        log('🔍 Mencari radio produk berdasarkan nama...');
         
-        // Helper: verify radio is actually checked
-        const isRadioChecked = async () => {
-          try {
-            return await firstRadio.isChecked();
-          } catch {
-            return await firstRadio.evaluate((el: HTMLInputElement) => el.checked);
-          }
-        };
-
         let checked = false;
 
-        // Method 1: Click the parent/label container (most natural for React UI)
-        if (!checked) {
-          try {
-            // TikTok often wraps radio in a clickable label/div — clicking that triggers React onChange
-            const label = firstRadio.locator('xpath=ancestor::label');
-            if (await label.count() > 0) {
-              await label.first().click({ force: true, timeout: 3000 });
-              await page.waitForTimeout(500);
-              checked = await isRadioChecked();
-              if (checked) log('✓ Radio produk diklik (Metode 1: ancestor label click)');
+        // Method 1 (Primary): Find radio by name attribute matching product name, click parent wrapper
+        // This is exactly how the Python script does it and it works
+        try {
+          const radioByName = page.locator(`input[type="radio"][name="${config.productNameRadio}"]`);
+          const count = await radioByName.count();
+          log(`  Radio dengan name match: ${count} ditemukan`);
+          
+          if (count > 0) {
+            // Click the parent div (TUXRadioStandalone) — same as Python: radio.find_element(By.XPATH, "./..")
+            const wrapper = radioByName.first().locator('..');
+            
+            // Scroll wrapper into view within the dialog (not the page)
+            await wrapper.evaluate((el: HTMLElement) => {
+              el.scrollIntoView({ block: 'center' });
+            });
+            await page.waitForTimeout(1000);
+            
+            // Try clicking the wrapper (standard click)
+            try {
+              await wrapper.click({ timeout: 3000 });
+              log('  Klik wrapper produk (standar)');
+            } catch {
+              // Fallback: JS click on wrapper
+              await wrapper.evaluate((el: HTMLElement) => el.click());
+              log('  Klik wrapper produk (JS)');
             }
-          } catch (err: any) {
-            log(`ℹ Metode 1 gagal: ${err.message}`);
+            await page.waitForTimeout(1000);
+            
+            checked = await radioByName.first().isChecked().catch(() => false);
+            if (checked) {
+              log('✓ Radio produk dipilih (Metode 1: name attribute + parent click)');
+            } else {
+              log('ℹ Metode 1: wrapper diklik tapi radio belum tercentang, mencoba metode lain...');
+            }
           }
+        } catch (err: any) {
+          log(`ℹ Metode 1 gagal: ${err.message}`);
         }
 
-        // Method 2: Click parent div with force
+        // Method 2: Click the TUXRadioStandalone div directly
         if (!checked) {
           try {
-            await firstRadio.locator('..').click({ force: true, timeout: 3000 });
-            await page.waitForTimeout(500);
-            checked = await isRadioChecked();
-            if (checked) log('✓ Radio produk diklik (Metode 2: parent click)');
+            const tuxRadio = page.locator('.TUXRadioStandalone').first();
+            if (await tuxRadio.count() > 0) {
+              await tuxRadio.evaluate((el: HTMLElement) => {
+                el.scrollIntoView({ block: 'center' });
+              });
+              await page.waitForTimeout(500);
+              await tuxRadio.click({ force: true, timeout: 3000 });
+              await page.waitForTimeout(500);
+              
+              const firstRadio = page.locator('input[type="radio"]').first();
+              checked = await firstRadio.isChecked().catch(() => false);
+              if (checked) log('✓ Radio produk dipilih (Metode 2: TUXRadioStandalone click)');
+            }
           } catch (err: any) {
             log(`ℹ Metode 2 gagal: ${err.message}`);
           }
         }
 
-        // Method 3: Click grandparent div with force
+        // Method 3: Click the product-tb-row (table row containing the radio)
         if (!checked) {
           try {
-            await firstRadio.locator('xpath=../..').click({ force: true, timeout: 3000 });
-            await page.waitForTimeout(500);
-            checked = await isRadioChecked();
-            if (checked) log('✓ Radio produk diklik (Metode 3: grandparent click)');
+            const productRow = page.locator('tr.product-tb-row').first();
+            if (await productRow.count() > 0) {
+              await productRow.evaluate((el: HTMLElement) => {
+                el.scrollIntoView({ block: 'center' });
+              });
+              await page.waitForTimeout(500);
+              await productRow.click({ force: true, timeout: 3000 });
+              await page.waitForTimeout(500);
+              
+              const firstRadio = page.locator('input[type="radio"]').first();
+              checked = await firstRadio.isChecked().catch(() => false);
+              if (checked) log('✓ Radio produk dipilih (Metode 3: product-tb-row click)');
+            }
           } catch (err: any) {
             log(`ℹ Metode 3 gagal: ${err.message}`);
           }
         }
 
-        // Method 4: Playwright check() with force
+        // Method 4: Click the label associated with the radio (via for attribute)
         if (!checked) {
           try {
-            await firstRadio.check({ force: true, timeout: 3000 });
-            await page.waitForTimeout(500);
-            checked = await isRadioChecked();
-            if (checked) log('✓ Radio produk dicentang (Metode 4: check force)');
+            const firstRadio = page.locator('input[type="radio"]').first();
+            const radioId = await firstRadio.getAttribute('id');
+            if (radioId) {
+              const label = page.locator(`label[for="${radioId}"]`);
+              if (await label.count() > 0) {
+                await label.click({ force: true, timeout: 3000 });
+                await page.waitForTimeout(500);
+                checked = await firstRadio.isChecked().catch(() => false);
+                if (checked) log('✓ Radio produk dipilih (Metode 4: label for click)');
+              }
+            }
           } catch (err: any) {
             log(`ℹ Metode 4 gagal: ${err.message}`);
           }
         }
 
-        // Method 5: Playwright click() directly on radio with force
+        // Method 5: JS click directly on the radio input + dispatchEvent
         if (!checked) {
           try {
-            await firstRadio.click({ force: true, timeout: 3000 });
-            await page.waitForTimeout(500);
-            checked = await isRadioChecked();
-            if (checked) log('✓ Radio produk diklik (Metode 5: direct click force)');
-          } catch (err: any) {
-            log(`ℹ Metode 5 gagal: ${err.message}`);
-          }
-        }
-
-        // Method 6: React-compatible JS — use native setter to trigger React's onChange
-        if (!checked) {
-          try {
+            const firstRadio = page.locator('input[type="radio"]').first();
             await firstRadio.evaluate((el: HTMLInputElement) => {
-              const nativeSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 'checked'
-              )?.set;
-              if (nativeSetter) {
-                nativeSetter.call(el, true);
-              } else {
-                el.checked = true;
-              }
-              el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
-              el.dispatchEvent(new Event('input', { bubbles: true }));
-              el.dispatchEvent(new Event('change', { bubbles: true }));
+              el.scrollIntoView({ block: 'center' });
             });
             await page.waitForTimeout(500);
-            checked = await isRadioChecked();
-            if (checked) log('✓ Radio produk diklik (Metode 6: React native setter)');
-          } catch (err: any) {
-            log(`ℹ Metode 6 gagal: ${err.message}`);
-          }
-        }
-
-        // Method 7: Find the product row/card containing the radio and click the whole row
-        if (!checked) {
-          try {
-            const productRow = page.locator('[class*="product"], [class*="item"], [class*="row"]')
-              .filter({ has: page.locator('input[type="radio"]') }).first();
-            await productRow.click({ force: true, timeout: 3000 });
+            await firstRadio.dispatchEvent('click');
             await page.waitForTimeout(500);
-            checked = await isRadioChecked();
-            if (checked) log('✓ Radio produk diklik (Metode 7: product row click)');
+            checked = await firstRadio.isChecked().catch(() => false);
+            if (checked) log('✓ Radio produk dipilih (Metode 5: dispatchEvent click)');
           } catch (err: any) {
-            log(`ℹ Metode 7 gagal: ${err.message}`);
-          }
-        }
-
-        // Method 8: Click the product name text next to radio
-        if (!checked) {
-          try {
-            // Find text near the radio that contains the product name
-            const radioParent = firstRadio.locator('xpath=ancestor::*[position()<=5 and .//span or .//p or .//div[string-length(text()) > 3]]').last();
-            await radioParent.click({ force: true, timeout: 3000 });
-            await page.waitForTimeout(500);
-            checked = await isRadioChecked();
-            if (checked) log('✓ Radio produk diklik (Metode 8: ancestor container click)');
-          } catch (err: any) {
-            log(`ℹ Metode 8 gagal: ${err.message}`);
+            log(`ℹ Metode 5 gagal: ${err.message}`);
           }
         }
 
