@@ -450,7 +450,8 @@
           grokState: '', promptFile: '', bahanFolder: '', mode: 'Video',
           resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
-          scheduleTime: '', intervalMinutes: 60
+          scheduleTime: '', intervalMinutes: 60,
+          addProduct: false, productNameRadio: '', productTitle: '', productDescription: ''
         };
 
         // Preload stock badges
@@ -592,6 +593,23 @@
                            class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-pink-500 transition-all font-semibold">
                   </div>
 
+                  <!-- Product Settings -->
+                  <div class="bg-gray-900/60 p-3.5 rounded-xl border border-gray-800/60 space-y-2 mt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="chk-product-${fn}" type="checkbox" class="w-4 h-4 accent-pink-500" 
+                             ${cfg.addProduct ? 'checked' : ''} onchange="toggleProductGrokbot('${fn}')">
+                      <span class="text-xs text-gray-200 font-bold">🛒 Tambahkan Product</span>
+                    </label>
+                    <div id="product-fields-${fn}" class="space-y-2" style="display: ${cfg.addProduct ? 'block' : 'none'}">
+                      <input id="productNameRadio-${fn}" type="text" placeholder="Nama Produk (Radio)" value="${escHtml(cfg.productNameRadio || '')}"
+                             class="w-full bg-gray-950 border border-gray-850/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500 font-semibold text-gray-200">
+                      <input id="productTitle-${fn}" type="text" placeholder="Judul Produk" value="${escHtml(cfg.productTitle || '')}"
+                             class="w-full bg-gray-950 border border-gray-850/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500 font-semibold text-gray-200">
+                      <textarea id="productDescription-${fn}" placeholder="Deskripsi Produk" rows="2"
+                                class="w-full bg-gray-950 border border-gray-855/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500 resize-none font-semibold text-gray-200">${escHtml(cfg.productDescription || '')}</textarea>
+                    </div>
+                  </div>
+
                   <div class="grid grid-cols-3 gap-2">
                     <div class="col-span-1">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Sched Date</label>
@@ -621,17 +639,25 @@
           </div>
 
           <!-- Bottom Actions inside card config -->
-          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
             <button onclick="generateUtama('${fn}')"
                     class="gradient-btn-blue text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
-              📥 Generate Utama (max 30)
+              📥 Generate Utama
             </button>
             <button onclick="generateCadangan('${fn}')"
                     class="gradient-btn-green text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
-              🟢 Generate Cadangan (30 merged)
+              🟢 Generate Cadangan
+            </button>
+            <button onclick="mergeOnly('${fn}')"
+                    class="bg-gray-800 hover:bg-fuchsia-900/40 border border-fuchsia-800/30 hover:border-fuchsia-500/50 text-fuchsia-300 py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 transition-all">
+              ✂ Merge Saja
+            </button>
+            <button onclick="scheduleOnly('${fn}')"
+                    class="bg-gray-800 hover:bg-amber-900/40 border border-amber-800/30 hover:border-amber-500/50 text-amber-300 py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 transition-all">
+              📤 Jadwalkan Saja
             </button>
             <button onclick="scheduleState('${fn}')"
-                    class="gradient-btn text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
+                    class="gradient-btn text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 col-span-2 sm:col-span-1">
               🚀 Jadwalkan & Upload
             </button>
           </div>
@@ -648,6 +674,14 @@
     function toggleAudioGroup(fn) {
       const val = document.getElementById(`merge-${fn}`).value;
       document.getElementById(`audio-group-${fn}`).style.display = val === 'true' ? 'block' : 'none';
+    }
+
+    function toggleProductGrokbot(fn) {
+      const chk = document.getElementById(`chk-product-${fn}`);
+      const fields = document.getElementById(`product-fields-${fn}`);
+      if (chk && fields) {
+        fields.style.display = chk.checked ? 'block' : 'none';
+      }
     }
 
     // ═══════════════════════════════════════
@@ -692,6 +726,10 @@
         scheduleDate: document.getElementById(`scheduleDate-${fn}`)?.value || '',
         scheduleTime: document.getElementById(`scheduleTime-${fn}`)?.value || '',
         intervalMinutes: parseInt(document.getElementById(`intervalMinutes-${fn}`)?.value) || 60,
+        addProduct: document.getElementById(`chk-product-${fn}`)?.checked || false,
+        productNameRadio: document.getElementById(`productNameRadio-${fn}`)?.value || '',
+        productTitle: document.getElementById(`productTitle-${fn}`)?.value || '',
+        productDescription: document.getElementById(`productDescription-${fn}`)?.value || '',
       };
 
       try {
@@ -770,6 +808,52 @@
 
       try {
         const res = await fetch('/api/grokbot/schedule', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ Gagal: ' + (data.error || ''));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function scheduleOnly(fn) {
+      await saveConfig(fn);
+      addLog(`📤 Menjadwalkan Upload TANPA generate untuk state: ${getStateName(fn)}...`);
+      setBusy(true);
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/grokbot/schedule-only', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ Gagal: ' + (data.error || ''));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
+    async function mergeOnly(fn) {
+      await saveConfig(fn);
+      addLog(`✂ Memulai Merge Raw TANPA generate untuk state: ${getStateName(fn)}...`);
+      setBusy(true);
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/grokbot/merge-only', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })

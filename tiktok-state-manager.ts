@@ -1612,6 +1612,10 @@ interface GrokbotStateConfig {
   scheduleDate: string;
   scheduleTime: string;
   intervalMinutes: number;
+  addProduct?: boolean;
+  productNameRadio?: string;
+  productTitle?: string;
+  productDescription?: string;
 }
 
 interface GrokbotData {
@@ -1666,7 +1670,7 @@ app.get('/api/grokbot/config', (req, res) => {
 });
 
 app.post('/api/grokbot/config/save', (req, res) => {
-  const { stateFile, grokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes } = req.body;
+  const { stateFile, grokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, addProduct, productNameRadio, productTitle, productDescription } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
   const data = loadGrokbotData();
   if (!data.states[stateFile]) {
@@ -1674,7 +1678,8 @@ app.post('/api/grokbot/config/save', (req, res) => {
       grokState: '', promptFile: '', bahanFolder: '', mode: 'Video',
       resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
       audioFolder: '', description: '', hashtags: '', scheduleDate: '',
-      scheduleTime: '', intervalMinutes: 60
+      scheduleTime: '', intervalMinutes: 60,
+      addProduct: false, productNameRadio: '', productTitle: '', productDescription: ''
     };
   }
   const s = data.states[stateFile];
@@ -1692,6 +1697,10 @@ app.post('/api/grokbot/config/save', (req, res) => {
   if (scheduleDate !== undefined) s.scheduleDate = scheduleDate;
   if (scheduleTime !== undefined) s.scheduleTime = scheduleTime;
   if (intervalMinutes !== undefined) s.intervalMinutes = intervalMinutes;
+  if (addProduct !== undefined) s.addProduct = !!addProduct;
+  if (productNameRadio !== undefined) s.productNameRadio = productNameRadio;
+  if (productTitle !== undefined) s.productTitle = productTitle;
+  if (productDescription !== undefined) s.productDescription = productDescription;
   saveGrokbotData(data);
   res.json({ success: true });
 });
@@ -1918,6 +1927,214 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
   });
 });
 
+// ── JADWALKAN SAJA: Skip generation, use existing utama stock ──
+app.post('/api/grokbot/schedule-only', async (req, res) => {
+  if (grokbotRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
+  const { stateFile } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
+
+  const data = loadGrokbotData();
+  const cfg = data.states[stateFile];
+  if (!cfg) return res.status(400).json({ error: 'Config state belum disimpan!' });
+
+  const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+  const stateDownloadDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+  if (!fs.existsSync(stateDownloadDir)) return res.status(400).json({ error: 'Folder download belum ada untuk state ini.' });
+
+  const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+  const marksFile = path.join(stateDownloadDir, '.uploaded.json');
+  let marks: Record<string, boolean> = {};
+  try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+
+  const allUtamaVideos = fs.readdirSync(stateDownloadDir)
+    .filter(f => exts.includes(path.extname(f).toLowerCase()))
+    .sort();
+  const pendingUtamaVideos = allUtamaVideos.filter(v => !marks[v]);
+
+  if (pendingUtamaVideos.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada video utama yang bisa dijadwalkan. Stok utama kosong.' });
+  }
+
+  grokbotRunning = true;
+  grokbotQueue = [];
+
+  const schedDate = cfg.scheduleDate || new Date().toISOString().split('T')[0];
+  const schedTime = cfg.scheduleTime || new Date().toTimeString().slice(0, 5);
+  const intervalMin = cfg.intervalMinutes || 60;
+  const batch = pendingUtamaVideos.slice(0, 30);
+  const startFrom = batch[0];
+
+  const batchStartMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
+  const batchEndMs = batchStartMs + (batch.length - 1) * intervalMin * 60000;
+  const endDate = new Date(batchEndMs);
+  const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')} ${String(endDate.getHours()).padStart(2,'0')}:${String(endDate.getMinutes()).padStart(2,'0')}`;
+
+  grokbotQueue.push({ stateName: tiktokStateName, stateFile, videoCount: batch.length, scheduleStart: `${schedDate} ${schedTime}`, scheduleEnd: endStr, active: true });
+  grokbotBroadcastQueue();
+
+  grokbotProgress = { generate: 100, merge: 100, upload: 0, currentState: tiktokStateName };
+  grokbotBroadcastProgress();
+
+  res.json({ success: true, message: `Jadwalkan ${batch.length} video utama tanpa generate` });
+
+  grokbotLog(`📤 [Jadwalkan Saja] Mulai Upload ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
+
+    const uploadConfig = {
+      videoFolder: stateDownloadDir,
+      startFromVideo: startFrom,
+      description: cfg.description || '',
+      hashtags: cfg.hashtags || '',
+      addProduct: !!cfg.addProduct,
+      productNameRadio: cfg.productNameRadio || '',
+      productTitle: cfg.productTitle || '',
+      productDescription: cfg.productDescription || '',
+      skipSwitches: false,
+      headless: true,
+      scheduleDate: schedDate,
+      scheduleTime: schedTime,
+      intervalMinutes: intervalMin,
+      stateFile: stateFile,
+      statesDir: STATES_DIR,
+    };
+
+  let uploadedCount = 0;
+  const onVideoUploaded = (videoFilename: string) => {
+    let m: Record<string, boolean> = {};
+    try { m = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+    m[videoFilename] = true;
+    fs.writeFileSync(marksFile, JSON.stringify(m, null, 2));
+    grokbotLog(`✅ [${tiktokStateName}] ${videoFilename} terupload`);
+    uploadedCount++;
+    grokbotProgress.upload = Math.round((uploadedCount / batch.length) * 100);
+    grokbotBroadcastProgress();
+  };
+
+  try {
+    await runUpload(uploadConfig, grokbotLog, onVideoUploaded);
+  } catch (err: any) {
+    grokbotLog(`❌ Upload error: ${err.message}`);
+  } finally {
+    grokbotRunning = false;
+    grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: '' };
+    grokbotBroadcastProgress();
+    grokbotQueue = [];
+    grokbotBroadcastQueue();
+    grokbotLog('===== JADWALKAN SAJA FINISHED =====');
+  }
+});
+
+// ── MERGE SAJA: Merge raw videos without generating new ones ──
+app.post('/api/grokbot/merge-only', async (req, res) => {
+  if (grokbotRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
+  const { stateFile } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
+
+  const data = loadGrokbotData();
+  const cfg = data.states[stateFile];
+  if (!cfg) return res.status(400).json({ error: 'Config state belum disimpan!' });
+
+  const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+  const stateDownloadDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+  const rawDir = path.join(stateDownloadDir, 'raw');
+
+  if (!fs.existsSync(rawDir)) {
+    return res.status(400).json({ error: `Folder raw tidak ada: grok-downloads/${tiktokStateName}/raw/` });
+  }
+
+  const rawFiles = fs.readdirSync(rawDir)
+    .filter(f => f.endsWith('.mp4'))
+    .sort();
+
+  if (rawFiles.length < 2) {
+    return res.status(400).json({ error: `Minimal 2 raw video dibutuhkan untuk merge. Saat ini: ${rawFiles.length}` });
+  }
+
+  const pairsCount = Math.floor(rawFiles.length / 2);
+
+  grokbotRunning = true;
+  grokbotQueue = [{ stateName: tiktokStateName, stateFile, videoCount: pairsCount, scheduleStart: 'Merge Only', scheduleEnd: 'Merge Only', active: true }];
+  grokbotBroadcastQueue();
+  grokbotProgress = { generate: 100, merge: 0, upload: 0, currentState: tiktokStateName };
+  grokbotBroadcastProgress();
+
+  res.json({ success: true, message: `Memulai merge ${pairsCount} pasang raw video dari grok-downloads/${tiktokStateName}/raw/` });
+
+  grokbotLog(`✂ [Merge Saja] Memulai merge ${pairsCount} pasang raw video untuk ${tiktokStateName}`);
+  grokbotLog(`📂 Raw dir: grok-downloads/${tiktokStateName}/raw/ (${rawFiles.length} file)`);
+
+  try {
+    if (!fs.existsSync(stateDownloadDir)) fs.mkdirSync(stateDownloadDir, { recursive: true });
+
+    // Read and sort raw files by modification time
+    let files = fs.readdirSync(rawDir)
+      .filter(f => f.endsWith('.mp4'))
+      .map(f => {
+        const p = path.join(rawDir, f);
+        return { name: f, path: p, mtime: fs.statSync(p).mtimeMs };
+      })
+      .sort((a, b) => a.mtime - b.mtime);
+
+    let mergedCount = 0;
+    while (files.length >= 2 && grokbotRunning) {
+      const pair = files.splice(0, 2);
+      const [v1, v2] = pair;
+
+      grokbotLog(`[MERGER] Menggabungkan: ${v1.name} + ${v2.name}`);
+
+      // Pick random audio
+      let pickedAudioPath: string | undefined = undefined;
+      const audioFolder = cfg.audioFolder || '';
+      if (audioFolder) {
+        const audioDir = path.join(__dirname, 'audio', audioFolder);
+        if (fs.existsSync(audioDir)) {
+          const audioExts = ['.mp3', '.wav'];
+          const audioFiles = fs.readdirSync(audioDir)
+            .filter(f => audioExts.includes(path.extname(f).toLowerCase()));
+          if (audioFiles.length > 0) {
+            const pick = audioFiles[Math.floor(Math.random() * audioFiles.length)];
+            pickedAudioPath = path.join(audioDir, pick);
+            grokbotLog(`[MERGER] Audio terpilih: ${pick}`);
+          }
+        }
+      }
+
+      const mergedFname = `grok_merged_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
+      const finalOutputPath = path.join(stateDownloadDir, mergedFname);
+
+      try {
+        await mergeVideosCopyWithOptionalAudio(
+          [v1.path, v2.path],
+          finalOutputPath,
+          pickedAudioPath,
+          { tempDir: path.join(__dirname, '_tmp_uploads') }
+        );
+        mergedCount++;
+        grokbotLog(`[MERGER] ✅ Berhasil: ${mergedFname}`);
+
+        // Delete raw source files
+        try { fs.unlinkSync(v1.path); } catch {}
+        try { fs.unlinkSync(v2.path); } catch {}
+
+        grokbotProgress.merge = Math.round((mergedCount / pairsCount) * 100);
+        grokbotBroadcastProgress();
+      } catch (err: any) {
+        grokbotLog(`[MERGER] ❌ Gagal merge: ${err.message}`);
+      }
+    }
+
+    grokbotLog(`✅ [Merge Saja] Selesai. ${mergedCount} video merged ke grok-downloads/${tiktokStateName}/`);
+  } catch (e: any) {
+    grokbotLog(`❌ Fatal Merge Only: ${e.message}`);
+  } finally {
+    grokbotRunning = false;
+    grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: '' };
+    grokbotBroadcastProgress();
+    grokbotQueue = [];
+    grokbotBroadcastQueue();
+    grokbotLog('===== MERGE SAJA FINISHED =====');
+  }
+});
+
 // ── GROKBOT ORCHESTRATION LOOP ──
 async function grokbotRunState(stateFile: string): Promise<void> {
   if (!grokbotRunning) return;
@@ -2113,10 +2330,10 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       startFromVideo: startFrom,
       description: cfg.description || '',
       hashtags: cfg.hashtags || '',
-      addProduct: false,
-      productNameRadio: '',
-      productTitle: '',
-      productDescription: '',
+      addProduct: !!cfg.addProduct,
+      productNameRadio: cfg.productNameRadio || '',
+      productTitle: cfg.productTitle || '',
+      productDescription: cfg.productDescription || '',
       skipSwitches: false, // jangan centang skip switches
       headless: true, // headless mode selalu true
       scheduleDate: schedDate,
