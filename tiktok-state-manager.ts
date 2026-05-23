@@ -964,7 +964,6 @@ app.post('/api/grok/stop', async (req: Request, res: Response) => {
   res.json({ success: true, message: 'Generate dihentikan' });
 });
 
-// List generated videos for a state
 app.get('/api/grok/videos', (req: Request, res: Response) => {
   const stateFile = req.query.state as string;
   if (!stateFile) return res.json({ videos: [] });
@@ -978,62 +977,150 @@ app.get('/api/grok/videos', (req: Request, res: Response) => {
   try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch { }
 
   const exts = ['.mp4', '.webm', '.mov', '.png', '.jpg', '.jpeg', '.webp'];
-  const videos = fs.readdirSync(stateDir)
-    .filter(f => exts.includes(path.extname(f).toLowerCase()))
-    .sort()
-    .reverse() // newest first
-    .map(f => {
-      const stat = fs.statSync(path.join(stateDir, f));
-      return {
-        filename: f,
-        size: stat.size,
-        created: stat.birthtime.toISOString(),
-        downloaded: !!marks[f],
-      };
-    });
-  res.json({ videos, stateName });
+  
+  // List top-level files
+  let files: any[] = [];
+  try {
+    files = fs.readdirSync(stateDir)
+      .filter(f => exts.includes(path.extname(f).toLowerCase()))
+      .map(f => {
+        const stat = fs.statSync(path.join(stateDir, f));
+        return {
+          filename: f,
+          size: stat.size,
+          created: stat.birthtime.toISOString(),
+          downloaded: !!marks[f],
+          isRaw: !f.startsWith('grok_merged_'),
+          isMerged: f.startsWith('grok_merged_')
+        };
+      });
+  } catch (e) { }
+
+  // Check if raw folder exists
+  const rawDir = path.join(stateDir, 'raw');
+  if (fs.existsSync(rawDir)) {
+    try {
+      const rawFiles = fs.readdirSync(rawDir)
+        .filter(f => exts.includes(path.extname(f).toLowerCase()))
+        .map(f => {
+          const stat = fs.statSync(path.join(rawDir, f));
+          const relativeFilename = `raw/${f}`;
+          return {
+            filename: relativeFilename,
+            size: stat.size,
+            created: stat.birthtime.toISOString(),
+            downloaded: !!marks[relativeFilename],
+            isRaw: true,
+            isMerged: false
+          };
+        });
+      files = files.concat(rawFiles);
+    } catch (e) { }
+  }
+
+  // Sort newest first
+  files.sort((a, b) => new Date(b.created).getTime() - new Date(a.created).getTime());
+
+  res.json({ videos: files, stateName });
 });
 
 // Serve video file
 app.get('/api/grok/video-file/:state/:filename', (req, res) => {
   const { state, filename } = req.params;
+  if (filename.includes('..') || state.includes('..')) {
+    return res.status(400).send('Invalid path');
+  }
   const filepath = path.join(GROK_DOWNLOAD_DIR, state, filename);
+  if (!fs.existsSync(filepath)) return res.status(404).send('Not found');
+  res.sendFile(filepath);
+});
+
+// Serve raw video file
+app.get('/api/grok/video-file/:state/raw/:filename', (req, res) => {
+  const { state, filename } = req.params;
+  if (filename.includes('..') || state.includes('..')) {
+    return res.status(400).send('Invalid path');
+  }
+  const filepath = path.join(GROK_DOWNLOAD_DIR, state, 'raw', filename);
   if (!fs.existsSync(filepath)) return res.status(404).send('Not found');
   res.sendFile(filepath);
 });
 
 // Mark video as downloaded by user
 app.post('/api/grok/mark-downloaded', (req, res) => {
-  const { stateFile, filename } = req.body;
-  if (!stateFile || !filename) return res.status(400).json({ error: 'Missing params' });
+  const { stateFile, filename, filenames } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'Missing stateFile' });
+
+  const list = Array.isArray(filenames) ? filenames : (filename ? [filename] : []);
+  if (list.length === 0) return res.status(400).json({ error: 'Missing filename or filenames' });
+
+  for (const f of list) {
+    if (typeof f !== 'string' || f.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+  }
+
   const stateName = stateFile.replace('grok-state-', '').replace('.json', '');
   const stateDir = path.join(GROK_DOWNLOAD_DIR, stateName);
   const marksFile = path.join(stateDir, '.downloaded.json');
   let marks: Record<string, boolean> = {};
   try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch { }
-  marks[filename] = true;
+  
+  list.forEach((f) => {
+    marks[f] = true;
+  });
+  
   fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
   res.json({ success: true });
 });
 
 // Delete a video file
 app.post('/api/grok/delete-video', (req, res) => {
-  const { stateFile, filename } = req.body;
-  if (!stateFile || !filename) return res.status(400).json({ error: 'Missing params' });
+  const { stateFile, filename, filenames } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'Missing stateFile' });
+
+  const list = Array.isArray(filenames) ? filenames : (filename ? [filename] : []);
+  if (list.length === 0) return res.status(400).json({ error: 'Missing filename or filenames' });
+
+  for (const f of list) {
+    if (typeof f !== 'string' || f.includes('..')) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
+  }
+
   const stateName = stateFile.replace('grok-state-', '').replace('.json', '');
-  const filepath = path.join(GROK_DOWNLOAD_DIR, stateName, filename);
-  if (!fs.existsSync(filepath)) return res.status(404).json({ error: 'File not found' });
-  fs.unlinkSync(filepath);
-  // Also remove from marks
   const marksFile = path.join(GROK_DOWNLOAD_DIR, stateName, '.downloaded.json');
+  let marks: Record<string, boolean> = {};
+  try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch { }
+
+  let deletedCount = 0;
+  let errors = [];
+
+  list.forEach((f) => {
+    const filepath = path.join(GROK_DOWNLOAD_DIR, stateName, f);
+    if (fs.existsSync(filepath)) {
+      try {
+        fs.unlinkSync(filepath);
+        delete marks[f];
+        deletedCount++;
+      } catch (err) {
+        errors.push(`Gagal menghapus ${f}: ${err.message}`);
+      }
+    } else {
+      errors.push(`File tidak ditemukan: ${f}`);
+    }
+  });
+
   try {
-    const marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8'));
-    delete marks[filename];
     fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
   } catch { }
-  res.json({ success: true });
-});
 
+  if (errors.length > 0 && deletedCount === 0) {
+    return res.status(500).json({ success: false, error: errors.join(', ') });
+  }
+
+  res.json({ success: true, deletedCount, errors: errors.length > 0 ? errors : undefined });
+});
 
 // ═══════════════════════════════════════════════════════════
 //  YTBOT API ROUTES

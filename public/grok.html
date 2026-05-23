@@ -210,11 +210,47 @@
     </div>
 
     <!-- Video Preview -->
-    <div class="card" style="margin-top:20px">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+    <div class="card" style="margin-top:20px;grid-column: span 2">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:12px">
         <h2 style="margin-bottom:0">🎬 Video Tersimpan</h2>
         <button class="btn btn-secondary btn-sm" onclick="loadVideos()">🔄 Refresh</button>
       </div>
+
+      <!-- Filter Controls -->
+      <div style="display:flex;gap:12px;margin-bottom:14px;flex-wrap:wrap;background:rgba(255,255,255,0.02);padding:12px;border-radius:12px;border:1px solid rgba(99,102,241,0.08)">
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:0.8rem;color:#94a3b8">Tipe Video:</span>
+          <select id="filter-type" style="width:auto;padding:6px 12px;border-radius:8px;font-size:0.8rem" onchange="filterAndRenderVideos()">
+            <option value="all">Semua Video</option>
+            <option value="merge">Video Merge</option>
+            <option value="raw">Video Raw (Tidak Merge)</option>
+          </select>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="font-size:0.8rem;color:#94a3b8">Status Download:</span>
+          <select id="filter-download" style="width:auto;padding:6px 12px;border-radius:8px;font-size:0.8rem" onchange="filterAndRenderVideos()">
+            <option value="all">Semua Status</option>
+            <option value="downloaded">Downloaded</option>
+            <option value="not_downloaded">Belum Downloaded</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Bulk Action Bar -->
+      <div id="bulk-action-bar" style="display:none;align-items:center;justify-content:space-between;margin-bottom:14px;padding:12px;background:rgba(99,102,241,0.06);border:1px solid rgba(99,102,241,0.15);border-radius:12px;flex-wrap:wrap;gap:10px">
+        <div style="display:flex;align-items:center;gap:12px">
+          <label style="display:inline-flex;align-items:center;gap:6px;font-size:0.85rem;color:#e2e8f0;cursor:pointer;user-select:none">
+            <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll(this.checked)" style="width:16px;height:16px;accent-color:#818cf8;cursor:pointer">
+            Pilih Semua
+          </label>
+          <span id="selected-count" style="font-size:0.8rem;color:#94a3b8">0 terpilih</span>
+        </div>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary btn-sm" onclick="bulkMarkDownloaded()">✓ Tandai Download</button>
+          <button class="btn btn-danger btn-sm" onclick="bulkDelete()">🗑️ Hapus Terpilih</button>
+        </div>
+      </div>
+
       <div id="video-preview" class="video-grid"><p style="color:#64748b;font-size:.85rem">Pilih state lalu klik Refresh</p></div>
     </div>
   </div>
@@ -488,28 +524,114 @@ function addLog(msg) {
 function clearLog() { document.getElementById('live-log').innerHTML = ''; }
 
 // ── Video Preview ──
+let allVideos = [];
+
 async function loadVideos() {
   const state = document.getElementById('state-select').value;
-  if (!state) { document.getElementById('video-preview').innerHTML = '<p style="color:#64748b;font-size:.85rem">Pilih state dulu</p>'; return; }
+  if (!state) { 
+    document.getElementById('video-preview').innerHTML = '<p style="color:#64748b;font-size:.85rem">Pilih state dulu</p>'; 
+    document.getElementById('bulk-action-bar').style.display = 'none';
+    return; 
+  }
   try {
     const r = await fetch('/api/grok/videos?state=' + encodeURIComponent(state));
     const d = await r.json();
-    const container = document.getElementById('video-preview');
-    if (!d.videos || d.videos.length === 0) { container.innerHTML = '<p style="color:#64748b;font-size:.85rem">Belum ada video tersimpan</p>'; return; }
-    // Update downloaded count
-    const dlCount = d.videos.filter(v => v.downloaded).length;
-    document.getElementById('stat-downloaded').textContent = dlCount;
-    container.innerHTML = d.videos.map(v => {
-      const isVideo = v.filename.endsWith('.mp4') || v.filename.endsWith('.webm') || v.filename.endsWith('.mov');
-      const url = `/api/grok/video-file/${d.stateName}/${v.filename}`;
-      const sizeMB = (v.size / 1024 / 1024).toFixed(1);
-      const date = new Date(v.created).toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
-      const badge = v.downloaded ? '<span class="dl-badge">✓ Downloaded</span>' : '';
-      const clickHandler = isVideo ? `onclick="openPreview('${url}','${v.filename}')"` : '';
-      const media = isVideo ? `<video class="thumb" src="${url}" muted preload="metadata" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0" ${clickHandler}></video>` : `<img class="thumb" src="${url}" alt="${v.filename}" ${clickHandler}>`;
-      return `<div class="video-card">${badge}${media}<div class="info"><div class="fname">${v.filename}</div><div class="meta">${sizeMB} MB · ${date}</div><div class="actions"><a href="${url}" download="${v.filename}" class="btn btn-primary btn-sm" style="text-decoration:none;text-align:center" onclick="markDownloaded('${v.filename}')">📥</a><button class="btn btn-delete btn-sm" onclick="deleteVideo('${v.filename}')">🗑️</button>${!v.downloaded ? `<button class="btn btn-secondary btn-sm" onclick="markDownloaded('${v.filename}')">✓</button>` : ''}</div></div></div>`;
-    }).join('');
-  } catch(e) { console.error(e); }
+    allVideos = d.videos || [];
+    
+    // Reset select all checkbox
+    document.getElementById('select-all-checkbox').checked = false;
+    
+    filterAndRenderVideos();
+  } catch(e) { 
+    console.error(e); 
+    document.getElementById('video-preview').innerHTML = '<p style="color:#f87171;font-size:.85rem">Gagal memuat video</p>';
+  }
+}
+
+function filterAndRenderVideos() {
+  const typeFilter = document.getElementById('filter-type').value;
+  const downloadFilter = document.getElementById('filter-download').value;
+  const state = document.getElementById('state-select').value;
+  const stateName = state.replace('grok-state-', '').replace('.json', '');
+
+  let filtered = allVideos;
+
+  // Filter by type
+  if (typeFilter === 'merge') {
+    filtered = filtered.filter(v => v.isMerged);
+  } else if (typeFilter === 'raw') {
+    filtered = filtered.filter(v => v.isRaw);
+  }
+
+  // Filter by download status
+  if (downloadFilter === 'downloaded') {
+    filtered = filtered.filter(v => v.downloaded);
+  } else if (downloadFilter === 'not_downloaded') {
+    filtered = filtered.filter(v => !v.downloaded);
+  }
+
+  // Update stat counts
+  const dlCount = allVideos.filter(v => v.downloaded).length;
+  document.getElementById('stat-downloaded').textContent = dlCount;
+
+  const container = document.getElementById('video-preview');
+  const bulkBar = document.getElementById('bulk-action-bar');
+
+  if (filtered.length === 0) {
+    container.innerHTML = '<p style="color:#64748b;font-size:.85rem">Tidak ada video yang cocok dengan filter</p>';
+    bulkBar.style.display = 'none';
+    return;
+  }
+
+  bulkBar.style.display = 'flex';
+  
+  container.innerHTML = filtered.map(v => {
+    const isVideo = v.filename.endsWith('.mp4') || v.filename.endsWith('.webm') || v.filename.endsWith('.mov');
+    const url = v.filename.startsWith('raw/') ? `/api/grok/video-file/${stateName}/raw/${v.filename.replace('raw/', '')}` : `/api/grok/video-file/${stateName}/${v.filename}`;
+    const sizeMB = (v.size / 1024 / 1024).toFixed(1);
+    const date = new Date(v.created).toLocaleString('id-ID', {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'});
+    const badge = v.downloaded ? '<span class="dl-badge">✓ Downloaded</span>' : '';
+    const clickHandler = isVideo ? `onclick="openPreview('${url}','${v.filename}')"` : '';
+    const media = isVideo ? `<video class="thumb" src="${url}" muted preload="metadata" onmouseenter="this.play()" onmouseleave="this.pause();this.currentTime=0" ${clickHandler}></video>` : `<img class="thumb" src="${url}" alt="${v.filename}" ${clickHandler}>`;
+    
+    return `
+      <div class="video-card">
+        <label style="position:absolute;top:8px;left:8px;z-index:5;background:rgba(15,15,25,0.85);padding:4px;border-radius:6px;border:1px solid rgba(99,102,241,0.25);cursor:pointer;display:inline-flex;align-items:center;justify-content:center">
+          <input type="checkbox" class="video-select-checkbox" data-filename="${v.filename}" onchange="updateSelectedCount()" style="width:16px;height:16px;accent-color:#818cf8;cursor:pointer">
+        </label>
+        ${badge}
+        ${media}
+        <div class="info">
+          <div class="fname" title="${v.filename}">${v.filename}</div>
+          <div class="meta">${sizeMB} MB · ${date}</div>
+          <div class="actions">
+            <a href="${url}" download="${v.filename.replace('raw/', '')}" class="btn btn-primary btn-sm" style="text-decoration:none;text-align:center" onclick="markDownloaded('${v.filename}')">📥</a>
+            <button class="btn btn-delete btn-sm" onclick="deleteVideo('${v.filename}')">🗑️</button>
+            ${!v.downloaded ? `<button class="btn btn-secondary btn-sm" onclick="markDownloaded('${v.filename}')">✓</button>` : ''}
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  updateSelectedCount();
+}
+
+function toggleSelectAll(checked) {
+  const checkboxes = document.querySelectorAll('.video-select-checkbox');
+  checkboxes.forEach(cb => cb.checked = checked);
+  updateSelectedCount();
+}
+
+function updateSelectedCount() {
+  const checkboxes = document.querySelectorAll('.video-select-checkbox');
+  const checked = document.querySelectorAll('.video-select-checkbox:checked');
+  document.getElementById('selected-count').textContent = `${checked.length} terpilih`;
+  
+  const selectAll = document.getElementById('select-all-checkbox');
+  if (checkboxes.length > 0) {
+    selectAll.checked = checkboxes.length === checked.length;
+  }
 }
 
 async function markDownloaded(filename) {
@@ -520,6 +642,35 @@ async function markDownloaded(filename) {
   loadVideos();
 }
 
+async function bulkMarkDownloaded() {
+  const checked = document.querySelectorAll('.video-select-checkbox:checked');
+  if (checked.length === 0) return alert('Pilih video terlebih dahulu!');
+  
+  const state = document.getElementById('state-select').value;
+  if (!state) return;
+
+  const filenames = Array.from(checked).map(cb => cb.getAttribute('data-filename'));
+  
+  if (!confirm(`Tandai ${filenames.length} video sebagai downloaded?`)) return;
+
+  try {
+    const res = await fetch('/api/grok/mark-downloaded', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stateFile: state, filenames })
+    });
+    const data = await res.json();
+    if (data.success) {
+      addLog(`✓ ${filenames.length} video ditandai sudah didownload`);
+      loadVideos();
+    } else {
+      addLog(`❌ Gagal menandai: ${data.error || ''}`);
+    }
+  } catch (e) {
+    addLog(`❌ Error: ${e.message}`);
+  }
+}
+
 async function deleteVideo(filename) {
   if (!confirm('Hapus ' + filename + '?')) return;
   const state = document.getElementById('state-select').value;
@@ -528,6 +679,35 @@ async function deleteVideo(filename) {
   const d = await r.json();
   if (d.success) { addLog('🗑️ Video dihapus: ' + filename); loadVideos(); }
   else addLog('❌ Gagal hapus: ' + (d.error || ''));
+}
+
+async function bulkDelete() {
+  const checked = document.querySelectorAll('.video-select-checkbox:checked');
+  if (checked.length === 0) return alert('Pilih video terlebih dahulu!');
+  
+  const state = document.getElementById('state-select').value;
+  if (!state) return;
+
+  const filenames = Array.from(checked).map(cb => cb.getAttribute('data-filename'));
+  
+  if (!confirm(`Hapus ${filenames.length} video terpilih secara permanen? Tindakan ini tidak bisa dibatalkan!`)) return;
+
+  try {
+    const res = await fetch('/api/grok/delete-video', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stateFile: state, filenames })
+    });
+    const data = await res.json();
+    if (data.success) {
+      addLog(`🗑️ ${filenames.length} video terpilih telah dihapus`);
+      loadVideos();
+    } else {
+      addLog(`❌ Gagal menghapus: ${data.error || ''}`);
+    }
+  } catch (e) {
+    addLog(`❌ Error: ${e.message}`);
+  }
 }
 
 function openPreview(url, name) {
