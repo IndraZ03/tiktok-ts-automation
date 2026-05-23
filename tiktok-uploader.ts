@@ -266,25 +266,38 @@ async function uploadSingleVideo(
       log('✓ Tombol Add diklik');
       await waitAndLog(page, log, 2000, 'dialog produk');
 
-      // Scope all product interactions to the dialog to avoid scrolling behind the popup
-      let dialog = page.getByRole('dialog', { name: /Add link|Tambah tautan/i });
-      // Fallback: try any visible dialog/modal
-      if (!await dialog.isVisible({ timeout: 3000 }).catch(() => false)) {
-        dialog = page.getByRole('dialog').first();
+      // Wait for the dialog/modal to be visible
+      // TikTok may render dialog content in a portal outside role="dialog", so we use page-level locators
+      // but confirm the overlay/dialog is open first
+      let dialogVisible = false;
+      try {
+        const dialog = page.getByRole('dialog', { name: /Add link|Tambah tautan/i });
+        await dialog.waitFor({ state: 'visible', timeout: 5000 });
+        dialogVisible = true;
+      } catch {
+        // Fallback: check for any dialog
+        try {
+          await page.getByRole('dialog').first().waitFor({ state: 'visible', timeout: 5000 });
+          dialogVisible = true;
+        } catch {
+          // Check for modal overlay
+          const overlay = page.locator('[class*="modal"], [class*="dialog"], [class*="overlay"], [class*="popup"]').first();
+          dialogVisible = await overlay.isVisible({ timeout: 3000 }).catch(() => false);
+        }
       }
-      await dialog.waitFor({ state: 'visible', timeout: 10000 });
-      log('✓ Dialog produk terbuka');
+      log(dialogVisible ? '✓ Dialog produk terbuka' : '⚠ Dialog mungkin tidak terdeteksi, melanjutkan...');
 
-      // All interactions are scoped to the dialog element
-      await dialog.getByRole('button', { name: /Next|Berikutnya/i }).click();
+      // Use page-level locators with force:true to prevent scrolling behind popup
+      const nextBtnStep1 = page.getByRole('button', { name: /Next|Berikutnya/i });
+      await nextBtnStep1.click({ force: true, timeout: 10000 });
       log('✓ Klik Next');
       await waitAndLog(page, log, 2000, 'tab produk');
 
       try {
-        const myShopTab = dialog.locator('button').filter({ hasText: 'My shop' });
+        const myShopTab = page.locator('button').filter({ hasText: 'My shop' });
         if (await myShopTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-          const showcaseTab = dialog.locator('button').filter({ hasText: 'Showcase products' });
-          await showcaseTab.click();
+          const showcaseTab = page.locator('button').filter({ hasText: 'Showcase products' });
+          await showcaseTab.click({ force: true });
           log('✓ Tab "Showcase products" diklik');
           await page.waitForTimeout(2000);
         }
@@ -292,89 +305,90 @@ async function uploadSingleVideo(
         log('ℹ Tab My shop tidak terdeteksi');
       }
 
-      // Search within the dialog
-      const searchInput = dialog.getByPlaceholder(/Search products|Cari produk/i);
+      // Search product using page-level locator
+      const searchInput = page.getByPlaceholder(/Search products|Cari produk/i);
       await searchInput.fill(config.productNameRadio);
       log(`✓ Mencari produk: ${config.productNameRadio}`);
 
       try {
-        await dialog.locator('.product-search-icon, [class*="product-search-icon"]').click({ timeout: 5000 });
+        await page.locator('.product-search-icon, [class*="product-search-icon"]').click({ force: true, timeout: 5000 });
       } catch {
         await searchInput.press('Enter');
       }
       await waitAndLog(page, log, 3000, 'hasil pencarian');
 
-      // Find radio buttons WITHIN the dialog only
+      // Select radio button — use force:true to prevent scrolling behind popup
       try {
-        const firstRadio = dialog.locator('input[type="radio"]').first();
+        const firstRadio = page.locator('input[type="radio"]').first();
         await firstRadio.waitFor({ state: 'attached', timeout: 8000 });
         
         let checked = false;
         
-        // Try Method 1: Playwright check() with force
+        // Try Method 1: JS evaluate — most reliable, no scroll issues
         try {
-          await firstRadio.check({ force: true, timeout: 2000 });
-          log('✓ Radio produk dicentang (Metode 1: check)');
+          await firstRadio.evaluate((el: HTMLInputElement) => {
+            el.click();
+            el.checked = true;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+          });
+          log('✓ Radio produk dicentang (Metode 1: JS evaluate)');
           checked = true;
         } catch (err: any) {
           log(`ℹ Metode 1 gagal: ${err.message}`);
         }
 
-        // Try Method 2: Playwright click() with force
+        // Try Method 2: Playwright check() with force (no auto-scroll)
         if (!checked) {
           try {
-            await firstRadio.click({ force: true, timeout: 2000 });
-            log('✓ Radio produk diklik (Metode 2: click)');
+            await firstRadio.check({ force: true, timeout: 3000 });
+            log('✓ Radio produk dicentang (Metode 2: check force)');
             checked = true;
           } catch (err: any) {
             log(`ℹ Metode 2 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 3: Click parent element (label or container)
+        // Try Method 3: Playwright click() with force
         if (!checked) {
           try {
-            await firstRadio.locator('..').click({ timeout: 2000 });
-            log('✓ Radio produk diklik (Metode 3: parent click)');
+            await firstRadio.click({ force: true, timeout: 3000 });
+            log('✓ Radio produk diklik (Metode 3: click force)');
             checked = true;
           } catch (err: any) {
             log(`ℹ Metode 3 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 4: Click grandparent element
+        // Try Method 4: Click parent label/container with force
         if (!checked) {
           try {
-            await firstRadio.locator('xpath=../..').click({ timeout: 2000 });
-            log('✓ Radio produk diklik (Metode 4: grandparent click)');
+            await firstRadio.locator('..').click({ force: true, timeout: 3000 });
+            log('✓ Radio produk diklik (Metode 4: parent click)');
             checked = true;
           } catch (err: any) {
             log(`ℹ Metode 4 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 5: Scroll into view within dialog first, then click via JavaScript
+        // Try Method 5: Click grandparent with force
         if (!checked) {
           try {
-            await firstRadio.scrollIntoViewIfNeeded();
-            await firstRadio.evaluate((el: HTMLInputElement) => {
-              el.click();
-              el.checked = true;
-              el.dispatchEvent(new Event('change', { bubbles: true }));
-            });
-            log('✓ Radio produk diklik (Metode 5: JS evaluate)');
+            await firstRadio.locator('xpath=../..').click({ force: true, timeout: 3000 });
+            log('✓ Radio produk diklik (Metode 5: grandparent click)');
             checked = true;
           } catch (err: any) {
             log(`ℹ Metode 5 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 6: Find product row/card and click it directly
+        // Try Method 6: Find any product container with a radio and click it
         if (!checked) {
           try {
-            const productItem = dialog.locator('[class*="product"], [class*="item"], [class*="card"]').filter({ has: page.locator('input[type="radio"]') }).first();
-            await productItem.click({ timeout: 3000 });
-            log('✓ Radio produk diklik (Metode 6: product container click)');
+            const productRow = page.locator('[class*="product"], [class*="item"], [class*="row"]')
+              .filter({ has: page.locator('input[type="radio"]') }).first();
+            await productRow.click({ force: true, timeout: 3000 });
+            log('✓ Radio produk diklik (Metode 6: product row click)');
             checked = true;
           } catch (err: any) {
             log(`ℹ Metode 6 gagal: ${err.message}`);
@@ -388,17 +402,18 @@ async function uploadSingleVideo(
         log('⚠ Gagal memilih radio produk: ' + e.message);
       }
 
-      await dialog.getByRole('button', { name: /Next|Berikutnya/i }).click();
+      const nextBtnStep2 = page.getByRole('button', { name: /Next|Berikutnya/i });
+      await nextBtnStep2.click({ force: true, timeout: 10000 });
       log('✓ Klik Next (step 2)');
       await waitAndLog(page, log, 2000, 'form produk');
 
       if (config.productTitle) {
-        const titleInput = dialog.getByRole('textbox', { name: /Product name|Nama produk/i });
+        const titleInput = page.getByRole('textbox', { name: /Product name|Nama produk/i });
         await titleInput.fill(config.productTitle);
         log(`✓ Judul produk: ${config.productTitle}`);
       }
 
-      await dialog.getByRole('button', { name: /^Add$|^Tambah$/i }).click();
+      await page.getByRole('button', { name: /^Add$|^Tambah$/i }).click({ force: true });
       log('✓ Produk ditambahkan');
       await waitAndLog(page, log, 2000, 'produk disimpan');
     } catch (e: any) {
