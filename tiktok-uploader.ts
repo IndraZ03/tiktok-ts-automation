@@ -317,86 +317,141 @@ async function uploadSingleVideo(
       }
       await waitAndLog(page, log, 3000, 'hasil pencarian');
 
-      // Select radio button — use force:true to prevent scrolling behind popup
+      // Select radio button — try multiple methods, verify each one actually works
       try {
         const firstRadio = page.locator('input[type="radio"]').first();
         await firstRadio.waitFor({ state: 'attached', timeout: 8000 });
+        log('✓ Radio produk ditemukan, mencoba memilih...');
         
-        let checked = false;
-        
-        // Try Method 1: JS evaluate — most reliable, no scroll issues
-        try {
-          await firstRadio.evaluate((el: HTMLInputElement) => {
-            el.click();
-            el.checked = true;
-            el.dispatchEvent(new Event('change', { bubbles: true }));
-            el.dispatchEvent(new Event('input', { bubbles: true }));
-          });
-          log('✓ Radio produk dicentang (Metode 1: JS evaluate)');
-          checked = true;
-        } catch (err: any) {
-          log(`ℹ Metode 1 gagal: ${err.message}`);
-        }
+        // Helper: verify radio is actually checked
+        const isRadioChecked = async () => {
+          try {
+            return await firstRadio.isChecked();
+          } catch {
+            return await firstRadio.evaluate((el: HTMLInputElement) => el.checked);
+          }
+        };
 
-        // Try Method 2: Playwright check() with force (no auto-scroll)
+        let checked = false;
+
+        // Method 1: Click the parent/label container (most natural for React UI)
         if (!checked) {
           try {
-            await firstRadio.check({ force: true, timeout: 3000 });
-            log('✓ Radio produk dicentang (Metode 2: check force)');
-            checked = true;
+            // TikTok often wraps radio in a clickable label/div — clicking that triggers React onChange
+            const label = firstRadio.locator('xpath=ancestor::label');
+            if (await label.count() > 0) {
+              await label.first().click({ force: true, timeout: 3000 });
+              await page.waitForTimeout(500);
+              checked = await isRadioChecked();
+              if (checked) log('✓ Radio produk diklik (Metode 1: ancestor label click)');
+            }
+          } catch (err: any) {
+            log(`ℹ Metode 1 gagal: ${err.message}`);
+          }
+        }
+
+        // Method 2: Click parent div with force
+        if (!checked) {
+          try {
+            await firstRadio.locator('..').click({ force: true, timeout: 3000 });
+            await page.waitForTimeout(500);
+            checked = await isRadioChecked();
+            if (checked) log('✓ Radio produk diklik (Metode 2: parent click)');
           } catch (err: any) {
             log(`ℹ Metode 2 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 3: Playwright click() with force
+        // Method 3: Click grandparent div with force
         if (!checked) {
           try {
-            await firstRadio.click({ force: true, timeout: 3000 });
-            log('✓ Radio produk diklik (Metode 3: click force)');
-            checked = true;
+            await firstRadio.locator('xpath=../..').click({ force: true, timeout: 3000 });
+            await page.waitForTimeout(500);
+            checked = await isRadioChecked();
+            if (checked) log('✓ Radio produk diklik (Metode 3: grandparent click)');
           } catch (err: any) {
             log(`ℹ Metode 3 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 4: Click parent label/container with force
+        // Method 4: Playwright check() with force
         if (!checked) {
           try {
-            await firstRadio.locator('..').click({ force: true, timeout: 3000 });
-            log('✓ Radio produk diklik (Metode 4: parent click)');
-            checked = true;
+            await firstRadio.check({ force: true, timeout: 3000 });
+            await page.waitForTimeout(500);
+            checked = await isRadioChecked();
+            if (checked) log('✓ Radio produk dicentang (Metode 4: check force)');
           } catch (err: any) {
             log(`ℹ Metode 4 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 5: Click grandparent with force
+        // Method 5: Playwright click() directly on radio with force
         if (!checked) {
           try {
-            await firstRadio.locator('xpath=../..').click({ force: true, timeout: 3000 });
-            log('✓ Radio produk diklik (Metode 5: grandparent click)');
-            checked = true;
+            await firstRadio.click({ force: true, timeout: 3000 });
+            await page.waitForTimeout(500);
+            checked = await isRadioChecked();
+            if (checked) log('✓ Radio produk diklik (Metode 5: direct click force)');
           } catch (err: any) {
             log(`ℹ Metode 5 gagal: ${err.message}`);
           }
         }
 
-        // Try Method 6: Find any product container with a radio and click it
+        // Method 6: React-compatible JS — use native setter to trigger React's onChange
         if (!checked) {
           try {
-            const productRow = page.locator('[class*="product"], [class*="item"], [class*="row"]')
-              .filter({ has: page.locator('input[type="radio"]') }).first();
-            await productRow.click({ force: true, timeout: 3000 });
-            log('✓ Radio produk diklik (Metode 6: product row click)');
-            checked = true;
+            await firstRadio.evaluate((el: HTMLInputElement) => {
+              const nativeSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 'checked'
+              )?.set;
+              if (nativeSetter) {
+                nativeSetter.call(el, true);
+              } else {
+                el.checked = true;
+              }
+              el.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+              el.dispatchEvent(new Event('input', { bubbles: true }));
+              el.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            await page.waitForTimeout(500);
+            checked = await isRadioChecked();
+            if (checked) log('✓ Radio produk diklik (Metode 6: React native setter)');
           } catch (err: any) {
             log(`ℹ Metode 6 gagal: ${err.message}`);
           }
         }
 
+        // Method 7: Find the product row/card containing the radio and click the whole row
         if (!checked) {
-          throw new Error('Semua metode pemilihan produk gagal.');
+          try {
+            const productRow = page.locator('[class*="product"], [class*="item"], [class*="row"]')
+              .filter({ has: page.locator('input[type="radio"]') }).first();
+            await productRow.click({ force: true, timeout: 3000 });
+            await page.waitForTimeout(500);
+            checked = await isRadioChecked();
+            if (checked) log('✓ Radio produk diklik (Metode 7: product row click)');
+          } catch (err: any) {
+            log(`ℹ Metode 7 gagal: ${err.message}`);
+          }
+        }
+
+        // Method 8: Click the product name text next to radio
+        if (!checked) {
+          try {
+            // Find text near the radio that contains the product name
+            const radioParent = firstRadio.locator('xpath=ancestor::*[position()<=5 and .//span or .//p or .//div[string-length(text()) > 3]]').last();
+            await radioParent.click({ force: true, timeout: 3000 });
+            await page.waitForTimeout(500);
+            checked = await isRadioChecked();
+            if (checked) log('✓ Radio produk diklik (Metode 8: ancestor container click)');
+          } catch (err: any) {
+            log(`ℹ Metode 8 gagal: ${err.message}`);
+          }
+        }
+
+        if (!checked) {
+          throw new Error('Semua metode pemilihan produk gagal — radio tidak tercentang.');
         }
       } catch (e: any) {
         log('⚠ Gagal memilih radio produk: ' + e.message);
