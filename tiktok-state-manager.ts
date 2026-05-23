@@ -531,16 +531,126 @@ app.post('/api/tiktok/stop', async (req, res) => {
   res.json({ success: true, message: 'Upload dihentikan' });
 });
 
+async function extractTokopediaProductName(url: string): Promise<string> {
+  const browser = await chromium.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+  try {
+    const context = await browser.newContext({
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      viewport: { width: 375, height: 812 },
+      isMobile: true,
+      hasTouch: true
+    });
+    const page = await context.newPage();
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
+
+    // Wait for redirect to happen (if we are on vt.tokopedia.com)
+    try {
+      await page.waitForURL(u => !u.toString().includes('vt.tokopedia.com'), { timeout: 10000 });
+    } catch (err) {}
+
+    // Wait 2 seconds for hydration
+    await page.waitForTimeout(2000);
+
+    const currentUrl = page.url();
+    let productName = '';
+
+    // 1. Try extracting from URL og_info parameter
+    try {
+      const urlObj = new URL(currentUrl);
+      const ogInfoParam = urlObj.searchParams.get('og_info');
+      if (ogInfoParam) {
+        const ogInfo = JSON.parse(decodeURIComponent(ogInfoParam));
+        if (ogInfo && ogInfo.title) {
+          productName = ogInfo.title;
+        }
+      }
+    } catch (err) {
+      console.error('[NAMAPRODUK] Gagal parse og_info dari URL:', err);
+    }
+
+    // 2. Try DOM selectors if not found in URL (e.g. if it redirected to a standard desktop page)
+    if (!productName) {
+      try {
+        await page.waitForSelector('[data-fmp="true"]', { timeout: 5000 });
+        productName = await page.locator('[data-fmp="true"]').first().innerText();
+      } catch (e) {
+        const fallbacks = [
+          'h1[data-testid="lblPDPProductName"]',
+          '[data-testid="pdpProductName"]',
+          'h1'
+        ];
+        for (const selector of fallbacks) {
+          try {
+            const loc = page.locator(selector).first();
+            if (await loc.isVisible()) {
+              productName = await loc.innerText();
+              if (productName.trim()) break;
+          }
+          } catch {}
+        }
+      }
+    }
+
+    return productName.trim();
+  } finally {
+    await browser.close();
+  }
+}
+
+app.post('/api/namaproduk', async (req: Request, res: Response) => {
+  const url = req.body?.url || req.query?.url;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ success: false, error: 'url wajib diisi.' });
+  }
+
+  try {
+    const name = await extractTokopediaProductName(url);
+    if (name) {
+      res.json({ success: true, name });
+    } else {
+      res.status(404).json({ success: false, error: 'Gagal mengambil nama produk. Elemen tidak ditemukan.' });
+    }
+  } catch (error: any) {
+    console.error('[NAMAPRODUK] Error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Terjadi kesalahan saat memproses link.' });
+  }
+});
+
+app.get('/api/namaproduk', async (req: Request, res: Response) => {
+  const url = req.query.url;
+  if (!url || typeof url !== 'string') {
+    return res.status(400).json({ success: false, error: 'url wajib diisi.' });
+  }
+
+  try {
+    const name = await extractTokopediaProductName(url);
+    if (name) {
+      res.json({ success: true, name });
+    } else {
+      res.status(404).json({ success: false, error: 'Gagal mengambil nama produk. Elemen tidak ditemukan.' });
+    }
+  } catch (error: any) {
+    console.error('[NAMAPRODUK] Error:', error);
+    res.status(500).json({ success: false, error: error.message || 'Terjadi kesalahan saat memproses link.' });
+  }
+});
+
 app.get('/tiktok', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'tiktok.html'));
 });
-
 app.get('/grok', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'grok.html'));
 });
 
 app.get('/merge', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'merge.html'));
+});
+
+app.get('/namaproduk', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'namaproduk.html'));
 });
 
 app.get('/splitter', (req, res) => {
@@ -1094,7 +1204,7 @@ app.post('/api/grok/delete-video', (req, res) => {
   try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch { }
 
   let deletedCount = 0;
-  let errors = [];
+  let errors: string[] = [];
 
   list.forEach((f) => {
     const filepath = path.join(GROK_DOWNLOAD_DIR, stateName, f);
@@ -1103,7 +1213,7 @@ app.post('/api/grok/delete-video', (req, res) => {
         fs.unlinkSync(filepath);
         delete marks[f];
         deletedCount++;
-      } catch (err) {
+      } catch (err: any) {
         errors.push(`Gagal menghapus ${f}: ${err.message}`);
       }
     } else {
@@ -1587,8 +1697,8 @@ app.post('/api/grokbot/config/save', (req, res) => {
 });
 
 app.get('/api/grokbot/stock', (req, res) => {
-  const { stateFile } = req.query;
-  if (!stateFile || typeof stateFile !== 'string') return res.status(400).json({ error: 'stateFile diperlukan' });
+  const stateFile = req.query.stateFile || req.query.state;
+  if (!stateFile || typeof stateFile !== 'string') return res.status(400).json({ error: 'stateFile atau state diperlukan' });
   const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
   const stateDownloadDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
   
