@@ -9,7 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { runUpload, stopUploader, getIsRunning } from './tiktok-uploader.js';
-import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress } from './grok-uploader.js';
+import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress } from './grok-uploader.js';
 import multer from 'multer';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
@@ -945,6 +945,162 @@ app.get('/api/merge/download', (req, res) => {
   res.download(resolved, path.basename(resolved));
 });
 
+// ─── Permutation Merge APIs ──────────────────────────────
+const VIDEO_EXTS = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+
+app.get('/api/merge/scan-folder', (req, res) => {
+  const folder = req.query.folder as string;
+  if (!folder || typeof folder !== 'string') {
+    return res.status(400).json({ success: false, error: 'Parameter folder wajib diisi.' });
+  }
+  if (!fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) {
+    return res.status(400).json({ success: false, error: 'Folder tidak ditemukan atau bukan directory.' });
+  }
+
+  const videos = fs.readdirSync(folder)
+    .filter(f => {
+      const ext = path.extname(f).toLowerCase();
+      if (!VIDEO_EXTS.includes(ext)) return false;
+      // Exclude previously merged permutation outputs
+      if (f.startsWith('perm_')) return false;
+      return fs.statSync(path.join(folder, f)).isFile();
+    })
+    .sort();
+
+  if (videos.length < 1) {
+    return res.json({ success: false, error: 'Tidak ada file video di folder ini.' });
+  }
+
+  // Generate P(n,2) + n combinations = n²
+  const combinations: { video1: string; video2: string }[] = [];
+  // Permutations (ordered pairs where video1 ≠ video2)
+  for (let i = 0; i < videos.length; i++) {
+    for (let j = 0; j < videos.length; j++) {
+      if (i !== j) {
+        combinations.push({ video1: videos[i], video2: videos[j] });
+      }
+    }
+  }
+  // Self-merges (video + itself)
+  for (const v of videos) {
+    combinations.push({ video1: v, video2: v });
+  }
+
+  res.json({
+    success: true,
+    folder,
+    videos,
+    videoCount: videos.length,
+    totalCombinations: combinations.length,
+    combinations,
+  });
+});
+
+app.post('/api/merge/permutation', mergeUpload.fields([
+  { name: 'sound', maxCount: 1 },
+]), async (req: any, res) => {
+  const folder = req.body?.folder as string;
+  const soundFile = ((req.files?.sound || []) as Express.Multer.File[])[0];
+
+  if (!folder || !fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) {
+    if (soundFile) try { fs.unlinkSync(soundFile.path); } catch { }
+    return res.status(400).json({ success: false, error: 'Folder tidak valid.' });
+  }
+
+  if (soundFile && !['.mp3', '.wav'].includes(path.extname(soundFile.originalname).toLowerCase())) {
+    try { fs.unlinkSync(soundFile.path); } catch { }
+    return res.status(400).json({ success: false, error: 'Sound harus berupa file .mp3 atau .wav.' });
+  }
+
+  const videos = fs.readdirSync(folder)
+    .filter(f => {
+      const ext = path.extname(f).toLowerCase();
+      if (!VIDEO_EXTS.includes(ext)) return false;
+      if (f.startsWith('perm_')) return false;
+      return fs.statSync(path.join(folder, f)).isFile();
+    })
+    .sort();
+
+  if (videos.length < 1) {
+    if (soundFile) try { fs.unlinkSync(soundFile.path); } catch { }
+    return res.status(400).json({ success: false, error: 'Tidak ada video di folder.' });
+  }
+
+  // Build combinations: P(n,2) + n = n²
+  const combinations: { video1: string; video2: string }[] = [];
+  for (let i = 0; i < videos.length; i++) {
+    for (let j = 0; j < videos.length; j++) {
+      if (i !== j) combinations.push({ video1: videos[i], video2: videos[j] });
+    }
+  }
+  for (const v of videos) {
+    combinations.push({ video1: v, video2: v });
+  }
+
+  // SSE response
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: unknown) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  let successCount = 0;
+  let failCount = 0;
+  const errors: string[] = [];
+
+  for (let idx = 0; idx < combinations.length; idx++) {
+    const combo = combinations[idx];
+    const v1Path = path.join(folder, combo.video1);
+    const v2Path = path.join(folder, combo.video2);
+    const baseName1 = path.basename(combo.video1, path.extname(combo.video1));
+    const baseName2 = path.basename(combo.video2, path.extname(combo.video2));
+    const outputFilename = `perm_${baseName1}_x_${baseName2}_${Date.now()}.mp4`;
+    const outputPath = path.join(folder, outputFilename);
+
+    sendEvent('progress', {
+      current: idx + 1,
+      total: combinations.length,
+      message: `Merge: ${combo.video1} + ${combo.video2} → ${outputFilename}`,
+      video1: combo.video1,
+      video2: combo.video2,
+    });
+
+    try {
+      await mergeVideosCopyWithOptionalAudio(
+        [v1Path, v2Path],
+        outputPath,
+        soundFile?.path,
+        { tempDir: path.join(__dirname, '_tmp_uploads') }
+      );
+      successCount++;
+    } catch (err: any) {
+      failCount++;
+      const errMsg = `Gagal merge ${combo.video1} + ${combo.video2}: ${err.message}`;
+      errors.push(errMsg);
+      console.error('[MERGE-PERM]', errMsg);
+    }
+  }
+
+  sendEvent('done', {
+    success: true,
+    successCount,
+    failCount,
+    totalCombinations: combinations.length,
+    errors,
+  });
+
+  // Cleanup sound file
+  if (soundFile) {
+    try { fs.unlinkSync(soundFile.path); } catch { }
+  }
+
+  res.end();
+});
+
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
@@ -1490,6 +1646,17 @@ async function ytbotRunState(stateFile: string): Promise<void> {
       fs.writeFileSync(marksFile, JSON.stringify(m, null, 2));
       ytbotLog(`✅ [${stateName}] ${videoFilename} terupload`);
 
+      // Hapus video setelah sukses terupload
+      const videoPath = path.join(videoDir, videoFilename);
+      if (fs.existsSync(videoPath)) {
+        try {
+          fs.unlinkSync(videoPath);
+          ytbotLog(`🗑️ [${stateName}] Berhasil menghapus file yang selesai diupload: ${videoFilename}`);
+        } catch (e: any) {
+          ytbotLog(`⚠ Gagal menghapus file ${videoFilename}: ${e.message}`);
+        }
+      }
+
       uploadedCount++;
       ytbotProgress.upload = Math.round((uploadedCount / batch.length) * 100);
       ytbotBroadcastProgress();
@@ -1639,11 +1806,26 @@ function saveGrokbotData(data: GrokbotData) {
 const grokbotSseClients: Response[] = [];
 let grokbotRunning = false;
 let grokbotQueue: Array<{ stateName: string; stateFile: string; videoCount: number; scheduleStart: string; scheduleEnd: string; active: boolean }> = [];
-let grokbotProgress = {
+let grokbotProgress: {
+  generate: number;
+  merge: number;
+  upload: number;
+  currentState: string;
+  browsers: BrowserProgress[];
+  uploadedCount: number;
+  uploadTotal: number;
+  mergedCount: number;
+  mergeTotal: number;
+} = {
   generate: 0,
   merge: 0,
   upload: 0,
-  currentState: ''
+  currentState: '',
+  browsers: [],
+  uploadedCount: 0,
+  uploadTotal: 0,
+  mergedCount: 0,
+  mergeTotal: 0,
 };
 
 function grokbotLog(msg: string) {
@@ -1656,7 +1838,18 @@ function grokbotBroadcastQueue() {
 }
 
 function grokbotBroadcastProgress() {
+  // Always attach fresh browser progress from grok-uploader
+  grokbotProgress.browsers = getBrowserProgress();
   grokbotSseClients.forEach(c => c.write(`data: [PROGRESS_UPDATE]:${JSON.stringify(grokbotProgress)}\n\n`));
+}
+
+function resetGrokbotProgress(overrides: Partial<typeof grokbotProgress> = {}) {
+  grokbotProgress = {
+    generate: 0, merge: 0, upload: 0, currentState: '',
+    browsers: [], uploadedCount: 0, uploadTotal: 0,
+    mergedCount: 0, mergeTotal: 0,
+    ...overrides
+  };
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -1783,7 +1976,7 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
   grokbotQueue = [{ stateName: tiktokStateName, stateFile, videoCount: needed, scheduleStart: 'Utama Gen', scheduleEnd: 'Utama Gen', active: true }];
   grokbotBroadcastQueue();
   
-  grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: tiktokStateName };
+  resetGrokbotProgress({ currentState: tiktokStateName, mergeTotal: mergeEnabled ? needed : 0 });
   grokbotBroadcastProgress();
   
   res.json({ success: true, message: `Mulai generate ${needed} video utama` });
@@ -1826,6 +2019,8 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
     if (activeCount > 0) overallGen += Math.round((activeProgSum / activeCount) / totalRawToGenerate);
     grokbotProgress.generate = Math.min(99, overallGen);
     if (mergeEnabled) {
+      grokbotProgress.mergedCount = stats.saved;
+      grokbotProgress.mergeTotal = needed;
       grokbotProgress.merge = Math.min(99, Math.round((stats.saved / needed) * 100));
     } else {
       grokbotProgress.merge = 100;
@@ -1868,7 +2063,7 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
   grokbotQueue = [{ stateName: tiktokStateName, stateFile, videoCount: 30, scheduleStart: 'Cadangan Gen', scheduleEnd: 'Cadangan Gen', active: true }];
   grokbotBroadcastQueue();
   
-  grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: tiktokStateName };
+  resetGrokbotProgress({ currentState: tiktokStateName, mergeTotal: 30 });
   grokbotBroadcastProgress();
   
   res.json({ success: true, message: `Mulai generate 30 video cadangan (merged)` });
@@ -1910,6 +2105,8 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
     });
     if (activeCount > 0) overallGen += Math.round((activeProgSum / activeCount) / 60);
     grokbotProgress.generate = Math.min(99, overallGen);
+    grokbotProgress.mergedCount = stats.saved;
+    grokbotProgress.mergeTotal = 30;
     grokbotProgress.merge = Math.min(99, Math.round((stats.saved / 30) * 100));
     grokbotBroadcastProgress();
   }, 2000);
@@ -1975,7 +2172,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
   grokbotQueue.push({ stateName: tiktokStateName, stateFile, videoCount: batch.length, scheduleStart: `${schedDate} ${schedTime}`, scheduleEnd: endStr, active: true });
   grokbotBroadcastQueue();
 
-  grokbotProgress = { generate: 100, merge: 100, upload: 0, currentState: tiktokStateName };
+  resetGrokbotProgress({ generate: 100, merge: 100, currentState: tiktokStateName, uploadTotal: batch.length });
   grokbotBroadcastProgress();
 
   res.json({ success: true, message: `Jadwalkan ${batch.length} video utama tanpa generate` });
@@ -2007,7 +2204,21 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
     m[videoFilename] = true;
     fs.writeFileSync(marksFile, JSON.stringify(m, null, 2));
     grokbotLog(`✅ [${tiktokStateName}] ${videoFilename} terupload`);
+
+    // Hapus video setelah sukses terupload
+    const videoPath = path.join(stateDownloadDir, videoFilename);
+    if (fs.existsSync(videoPath)) {
+      try {
+        fs.unlinkSync(videoPath);
+        grokbotLog(`🗑️ [${tiktokStateName}] Berhasil menghapus file yang selesai diupload: ${videoFilename}`);
+      } catch (e: any) {
+        grokbotLog(`⚠ Gagal menghapus file ${videoFilename}: ${e.message}`);
+      }
+    }
+
     uploadedCount++;
+    grokbotProgress.uploadedCount = uploadedCount;
+    grokbotProgress.uploadTotal = batch.length;
     grokbotProgress.upload = Math.round((uploadedCount / batch.length) * 100);
     grokbotBroadcastProgress();
   };
@@ -2018,7 +2229,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
     grokbotLog(`❌ Upload error: ${err.message}`);
   } finally {
     grokbotRunning = false;
-    grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: '' };
+    resetGrokbotProgress();
     grokbotBroadcastProgress();
     grokbotQueue = [];
     grokbotBroadcastQueue();
@@ -2057,7 +2268,7 @@ app.post('/api/grokbot/merge-only', async (req, res) => {
   grokbotRunning = true;
   grokbotQueue = [{ stateName: tiktokStateName, stateFile, videoCount: pairsCount, scheduleStart: 'Merge Only', scheduleEnd: 'Merge Only', active: true }];
   grokbotBroadcastQueue();
-  grokbotProgress = { generate: 100, merge: 0, upload: 0, currentState: tiktokStateName };
+  resetGrokbotProgress({ generate: 100, currentState: tiktokStateName, mergeTotal: pairsCount });
   grokbotBroadcastProgress();
 
   res.json({ success: true, message: `Memulai merge ${pairsCount} pasang raw video dari grok-downloads/${tiktokStateName}/raw/` });
@@ -2118,6 +2329,8 @@ app.post('/api/grokbot/merge-only', async (req, res) => {
         try { fs.unlinkSync(v1.path); } catch {}
         try { fs.unlinkSync(v2.path); } catch {}
 
+        grokbotProgress.mergedCount = mergedCount;
+        grokbotProgress.mergeTotal = pairsCount;
         grokbotProgress.merge = Math.round((mergedCount / pairsCount) * 100);
         grokbotBroadcastProgress();
       } catch (err: any) {
@@ -2130,7 +2343,7 @@ app.post('/api/grokbot/merge-only', async (req, res) => {
     grokbotLog(`❌ Fatal Merge Only: ${e.message}`);
   } finally {
     grokbotRunning = false;
-    grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: '' };
+    resetGrokbotProgress();
     grokbotBroadcastProgress();
     grokbotQueue = [];
     grokbotBroadcastQueue();
@@ -2157,7 +2370,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
   if (!fs.existsSync(rawDir)) fs.mkdirSync(rawDir, { recursive: true });
   if (!fs.existsSync(cadanganDir)) fs.mkdirSync(cadanganDir, { recursive: true });
 
-  grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: tiktokStateName };
+  resetGrokbotProgress({ currentState: tiktokStateName });
   grokbotBroadcastProgress();
 
   grokbotLog(`═══════════════════════════════════════`);
@@ -2230,6 +2443,10 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       grokbotProgress.generate = 0;
       grokbotProgress.merge = 0;
       grokbotProgress.upload = 0;
+      grokbotProgress.mergeTotal = mergeEnabled ? needed : 0;
+      grokbotProgress.mergedCount = 0;
+      grokbotProgress.uploadedCount = 0;
+      grokbotProgress.uploadTotal = 0;
       grokbotBroadcastProgress();
 
       const mergeEnabled = cfg.merge !== false;
@@ -2271,6 +2488,8 @@ async function grokbotRunState(stateFile: string): Promise<void> {
         if (activeCount > 0) overallGen += Math.round((activeProgSum / activeCount) / totalRawToGenerate);
         grokbotProgress.generate = Math.min(99, overallGen);
         if (mergeEnabled) {
+          grokbotProgress.mergedCount = stats.saved;
+          grokbotProgress.mergeTotal = needed;
           grokbotProgress.merge = Math.min(99, Math.round((stats.saved / needed) * 100));
         } else {
           grokbotProgress.merge = 100;
@@ -2324,6 +2543,8 @@ async function grokbotRunState(stateFile: string): Promise<void> {
     grokbotProgress.generate = 100;
     grokbotProgress.merge = 100;
     grokbotProgress.upload = 0;
+    grokbotProgress.uploadedCount = 0;
+    grokbotProgress.uploadTotal = batch.length;
     grokbotBroadcastProgress();
 
     grokbotLog(`📤 Mulai Upload batch: ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
@@ -2354,7 +2575,20 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       fs.writeFileSync(marksFile, JSON.stringify(m, null, 2));
       grokbotLog(`✅ [${tiktokStateName}] ${videoFilename} terupload`);
 
+      // Hapus video setelah sukses terupload
+      const videoPath = path.join(stateDownloadDir, videoFilename);
+      if (fs.existsSync(videoPath)) {
+        try {
+          fs.unlinkSync(videoPath);
+          grokbotLog(`🗑️ [${tiktokStateName}] Berhasil menghapus file yang selesai diupload: ${videoFilename}`);
+        } catch (e: any) {
+          grokbotLog(`⚠ Gagal menghapus file ${videoFilename}: ${e.message}`);
+        }
+      }
+
       uploadedCount++;
+      grokbotProgress.uploadedCount = uploadedCount;
+      grokbotProgress.uploadTotal = batch.length;
       grokbotProgress.upload = Math.round((uploadedCount / batch.length) * 100);
       grokbotBroadcastProgress();
     };
@@ -2415,7 +2649,7 @@ app.post('/api/grokbot/schedule', async (req, res) => {
     grokbotLog(`❌ Fatal: ${e.message}`);
   } finally {
     grokbotRunning = false;
-    grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: '' };
+    resetGrokbotProgress();
     grokbotBroadcastProgress();
     grokbotLog('===== GROKBOT FINISHED =====');
   }
@@ -2441,7 +2675,7 @@ app.post('/api/grokbot/full-auto', async (req, res) => {
     grokbotLog(`❌ Fatal: ${e.message}`);
   } finally {
     grokbotRunning = false;
-    grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: '' };
+    resetGrokbotProgress();
     grokbotBroadcastProgress();
     grokbotLog('===== GROKBOT FINISHED =====');
   }
@@ -2453,7 +2687,7 @@ app.get('/api/grokbot/status', (req, res) => {
 
 app.post('/api/grokbot/stop', async (req, res) => {
   grokbotRunning = false;
-  grokbotProgress = { generate: 0, merge: 0, upload: 0, currentState: '' };
+  resetGrokbotProgress();
   grokbotBroadcastProgress();
   await stopGrokGenerator();
   await stopUploader();

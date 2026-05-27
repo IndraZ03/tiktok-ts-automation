@@ -17,6 +17,21 @@
         <a href="/" class="text-sm font-medium text-cyan-300 hover:text-cyan-200">Kembali</a>
       </div>
 
+      <!-- Mode Toggle -->
+      <div class="mb-5 flex rounded border border-zinc-700 overflow-hidden">
+        <button id="btn-mode-manual" type="button" onclick="switchMode('manual')"
+                class="flex-1 py-3 text-sm font-bold transition bg-cyan-500 text-zinc-950">
+          Manual (2 Video)
+        </button>
+        <button id="btn-mode-permutasi" type="button" onclick="switchMode('permutasi')"
+                class="flex-1 py-3 text-sm font-bold transition bg-zinc-800 text-zinc-400 hover:bg-zinc-700">
+          Permutasi (Folder)
+        </button>
+      </div>
+
+      <!-- ═══════════════════════════════════════ -->
+      <!--  MANUAL MODE FORM                      -->
+      <!-- ═══════════════════════════════════════ -->
       <form id="merge-form" class="space-y-5">
         <label class="block">
           <span class="mb-2 block text-sm font-semibold text-zinc-200">Video pertama</span>
@@ -75,11 +90,139 @@
         </button>
       </form>
 
+      <!-- ═══════════════════════════════════════ -->
+      <!--  PERMUTASI MODE FORM                   -->
+      <!-- ═══════════════════════════════════════ -->
+      <div id="permutasi-form" class="space-y-5 hidden">
+
+        <!-- Folder Picker -->
+        <div class="block">
+          <span class="mb-2 block text-sm font-semibold text-zinc-200">Folder sumber video</span>
+          <div class="flex items-center gap-3">
+            <button id="btn-perm-folder" type="button" onclick="pickPermFolder()"
+                    class="shrink-0 bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-cyan-400">
+              📂 Pilih Folder
+            </button>
+            <div id="perm-folder-display" class="min-w-0 flex-1 truncate border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-400">
+              Belum dipilih
+            </div>
+          </div>
+        </div>
+
+        <!-- Sound -->
+        <label class="block">
+          <span class="mb-2 block text-sm font-semibold text-zinc-200">Sound pengganti <span class="text-zinc-500 font-normal">(opsional, berlaku untuk semua)</span></span>
+          <input id="perm-sound" type="file" accept=".mp3,.wav,audio/mpeg,audio/wav"
+                 class="block w-full border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-200 file:mr-4 file:border-0 file:bg-emerald-500 file:px-4 file:py-2 file:text-sm file:font-semibold file:text-zinc-950 hover:file:bg-emerald-400">
+        </label>
+
+        <!-- Preview -->
+        <div id="perm-preview" class="hidden space-y-3">
+          <div class="grid gap-3 border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300 sm:grid-cols-3">
+            <div>
+              <div class="text-zinc-500">Jumlah Video</div>
+              <div id="perm-count" class="text-lg font-bold text-cyan-400">0</div>
+            </div>
+            <div>
+              <div class="text-zinc-500">Total Kombinasi</div>
+              <div id="perm-total" class="text-lg font-bold text-emerald-400">0</div>
+            </div>
+            <div>
+              <div class="text-zinc-500">Output</div>
+              <div class="font-semibold text-zinc-100">Folder yang sama</div>
+            </div>
+          </div>
+
+          <!-- Combination list -->
+          <details class="border border-zinc-800 bg-zinc-950">
+            <summary class="cursor-pointer px-4 py-3 text-sm font-semibold text-zinc-300 hover:text-zinc-100 select-none">
+              Lihat daftar kombinasi ▾
+            </summary>
+            <div id="perm-combinations" class="max-h-64 overflow-y-auto px-4 pb-4 text-xs text-zinc-400 font-mono space-y-1">
+            </div>
+          </details>
+        </div>
+
+        <!-- Info Box -->
+        <div class="grid gap-3 border border-zinc-800 bg-zinc-950 p-4 text-sm text-zinc-300 sm:grid-cols-4">
+          <div>
+            <div class="text-zinc-500">Mode</div>
+            <div class="font-semibold text-zinc-100">Permutasi n²</div>
+          </div>
+          <div>
+            <div class="text-zinc-500">Codec</div>
+            <div class="font-semibold text-zinc-100">-c copy</div>
+          </div>
+          <div>
+            <div class="text-zinc-500">Rumus</div>
+            <div class="font-semibold text-zinc-100">P(n,2) + n</div>
+          </div>
+          <div>
+            <div class="text-zinc-500">Audio</div>
+            <div class="font-semibold text-zinc-100">Sekali pilih</div>
+          </div>
+        </div>
+
+        <!-- Progress bar -->
+        <div id="perm-progress-wrap" class="hidden">
+          <div class="flex items-center justify-between text-xs text-zinc-400 mb-1">
+            <span id="perm-progress-label">0 / 0</span>
+            <span id="perm-progress-pct">0%</span>
+          </div>
+          <div class="w-full h-3 bg-zinc-800 rounded overflow-hidden">
+            <div id="perm-progress-bar" class="h-full bg-cyan-500 transition-all duration-300" style="width:0%"></div>
+          </div>
+        </div>
+
+        <button id="perm-submit-btn" type="button" onclick="startPermutasi()" disabled
+                class="w-full bg-cyan-500 px-5 py-4 text-base font-bold text-zinc-950 transition hover:bg-cyan-400 disabled:cursor-not-allowed disabled:bg-zinc-700 disabled:text-zinc-400">
+          Pilih folder dulu
+        </button>
+      </div>
+
       <div id="status" class="mt-5 hidden border px-4 py-3 text-sm"></div>
+
+      <!-- Permutasi Log -->
+      <div id="perm-log-wrap" class="mt-5 hidden">
+        <div class="text-xs font-semibold text-zinc-400 mb-2">Log Proses</div>
+        <pre id="perm-log" class="max-h-64 overflow-y-auto border border-zinc-800 bg-zinc-950 px-4 py-3 text-xs text-zinc-400 font-mono whitespace-pre-wrap"></pre>
+      </div>
     </section>
   </main>
 
   <script>
+    // ─── State ────────────────────────────────────────
+    let currentMode = 'manual';
+    let permFolder = '';
+    let permVideos = [];
+    let permCombinations = [];
+    let permRunning = false;
+
+    // ─── Mode Toggle ──────────────────────────────────
+    function switchMode(mode) {
+      currentMode = mode;
+      const manualBtn = document.getElementById('btn-mode-manual');
+      const permBtn = document.getElementById('btn-mode-permutasi');
+      const manualForm = document.getElementById('merge-form');
+      const permForm = document.getElementById('permutasi-form');
+      const statusBox = document.getElementById('status');
+
+      if (mode === 'manual') {
+        manualBtn.className = 'flex-1 py-3 text-sm font-bold transition bg-cyan-500 text-zinc-950';
+        permBtn.className = 'flex-1 py-3 text-sm font-bold transition bg-zinc-800 text-zinc-400 hover:bg-zinc-700';
+        manualForm.classList.remove('hidden');
+        permForm.classList.add('hidden');
+      } else {
+        permBtn.className = 'flex-1 py-3 text-sm font-bold transition bg-cyan-500 text-zinc-950';
+        manualBtn.className = 'flex-1 py-3 text-sm font-bold transition bg-zinc-800 text-zinc-400 hover:bg-zinc-700';
+        manualForm.classList.add('hidden');
+        permForm.classList.remove('hidden');
+      }
+      statusBox.classList.add('hidden');
+      document.getElementById('perm-log-wrap').classList.add('hidden');
+    }
+
+    // ─── Browse Folder (shared) ───────────────────────
     async function pickSaveFolder() {
       const btn = document.getElementById('btn-save-folder');
       btn.disabled = true;
@@ -100,6 +243,73 @@
       }
     }
 
+    async function pickPermFolder() {
+      const btn = document.getElementById('btn-perm-folder');
+      btn.disabled = true;
+      btn.textContent = '⏳ Membuka...';
+      try {
+        const res = await fetch('/api/browse-folder');
+        const data = await res.json();
+        if (data.success && data.folder) {
+          permFolder = data.folder;
+          document.getElementById('perm-folder-display').textContent = data.folder;
+          document.getElementById('perm-folder-display').title = data.folder;
+          await scanFolder(data.folder);
+        }
+      } catch (e) {
+        console.error('Browse folder error:', e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📂 Pilih Folder';
+      }
+    }
+
+    // ─── Scan Folder ──────────────────────────────────
+    async function scanFolder(folder) {
+      const preview = document.getElementById('perm-preview');
+      const submitBtn = document.getElementById('perm-submit-btn');
+
+      try {
+        const res = await fetch(`/api/merge/scan-folder?folder=${encodeURIComponent(folder)}`);
+        const data = await res.json();
+
+        if (!data.success) {
+          showStatus('error', data.error || 'Gagal scan folder.');
+          submitBtn.disabled = true;
+          submitBtn.textContent = 'Pilih folder dulu';
+          preview.classList.add('hidden');
+          return;
+        }
+
+        permVideos = data.videos;
+        permCombinations = data.combinations;
+
+        document.getElementById('perm-count').textContent = data.videoCount;
+        document.getElementById('perm-total').textContent = data.totalCombinations;
+
+        // Render combination list
+        const combDiv = document.getElementById('perm-combinations');
+        combDiv.innerHTML = '';
+        data.combinations.forEach((c, i) => {
+          const div = document.createElement('div');
+          div.className = 'py-1 border-b border-zinc-800 flex items-center gap-2';
+          const badge = c.video1 === c.video2
+            ? '<span class="inline-block px-1.5 py-0.5 text-[10px] bg-amber-900 text-amber-300 rounded">SELF</span>'
+            : '<span class="inline-block px-1.5 py-0.5 text-[10px] bg-cyan-900 text-cyan-300 rounded">PAIR</span>';
+          div.innerHTML = `<span class="text-zinc-600">${String(i + 1).padStart(2, '0')}.</span> ${badge} <span class="text-zinc-300">${c.video1}</span> <span class="text-zinc-600">+</span> <span class="text-zinc-300">${c.video2}</span>`;
+          combDiv.appendChild(div);
+        });
+
+        preview.classList.remove('hidden');
+        submitBtn.disabled = false;
+        submitBtn.textContent = `Merge Permutasi (${data.totalCombinations} kombinasi)`;
+
+      } catch (e) {
+        showStatus('error', 'Gagal scan folder: ' + e.message);
+      }
+    }
+
+    // ─── Manual Merge (original) ──────────────────────
     const form = document.getElementById('merge-form');
     const statusBox = document.getElementById('status');
     const submitBtn = document.getElementById('submit-btn');
@@ -169,6 +379,119 @@
         submitBtn.textContent = 'Merge Video';
       }
     });
+
+    // ─── Permutasi Merge (SSE) ────────────────────────
+    async function startPermutasi() {
+      if (permRunning) return;
+      if (!permFolder || permCombinations.length === 0) {
+        showStatus('error', 'Pilih folder dan pastikan ada video.');
+        return;
+      }
+
+      const soundFile = document.getElementById('perm-sound').files[0];
+      if (soundFile && !/\.(mp3|wav)$/i.test(soundFile.name)) {
+        showStatus('error', 'Sound harus berupa file .mp3 atau .wav.');
+        return;
+      }
+
+      permRunning = true;
+      const permSubmitBtn = document.getElementById('perm-submit-btn');
+      permSubmitBtn.disabled = true;
+      permSubmitBtn.textContent = '⏳ Sedang merge permutasi...';
+
+      const progressWrap = document.getElementById('perm-progress-wrap');
+      const progressBar = document.getElementById('perm-progress-bar');
+      const progressLabel = document.getElementById('perm-progress-label');
+      const progressPct = document.getElementById('perm-progress-pct');
+      const logWrap = document.getElementById('perm-log-wrap');
+      const logPre = document.getElementById('perm-log');
+
+      progressWrap.classList.remove('hidden');
+      logWrap.classList.remove('hidden');
+      logPre.textContent = '';
+      progressBar.style.width = '0%';
+      progressLabel.textContent = '0 / ' + permCombinations.length;
+      progressPct.textContent = '0%';
+
+      showStatus('loading', `Memulai merge permutasi ${permCombinations.length} kombinasi...`);
+
+      const formData = new FormData();
+      formData.append('folder', permFolder);
+      if (soundFile) {
+        formData.append('sound', soundFile);
+      }
+
+      try {
+        const response = await fetch('/api/merge/permutation', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok || !response.body) {
+          const errData = await response.json().catch(() => ({}));
+          throw new Error(errData.error || 'Gagal memulai merge permutasi. HTTP ' + response.status);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() || '';
+
+          for (const chunk of chunks) {
+            if (!chunk.trim()) continue;
+            const eventLine = chunk.split('\n').find(l => l.startsWith('event: '));
+            const dataLine = chunk.split('\n').find(l => l.startsWith('data: '));
+            if (!dataLine) continue;
+
+            const eventName = eventLine ? eventLine.slice(7) : 'message';
+            let data;
+            try { data = JSON.parse(dataLine.slice(6)); } catch { continue; }
+
+            if (eventName === 'progress') {
+              const pct = Math.round((data.current / data.total) * 100);
+              progressBar.style.width = pct + '%';
+              progressLabel.textContent = data.current + ' / ' + data.total;
+              progressPct.textContent = pct + '%';
+              logPre.textContent += `[${data.current}/${data.total}] ${data.message}\n`;
+              logPre.scrollTop = logPre.scrollHeight;
+            }
+
+            if (eventName === 'done') {
+              progressBar.style.width = '100%';
+              progressPct.textContent = '100%';
+              const successCount = data.successCount || 0;
+              const failCount = data.failCount || 0;
+              logPre.textContent += `\n✅ Selesai! ${successCount} berhasil, ${failCount} gagal.\n`;
+              if (data.errors && data.errors.length > 0) {
+                logPre.textContent += '\n❌ Errors:\n' + data.errors.join('\n') + '\n';
+              }
+              logPre.scrollTop = logPre.scrollHeight;
+              showStatus('success', `Permutasi selesai! <strong>${successCount}</strong> video berhasil di-merge ke folder sumber.${failCount > 0 ? ` <span class="text-red-300">${failCount} gagal.</span>` : ''}`);
+            }
+
+            if (eventName === 'error') {
+              logPre.textContent += `❌ Error: ${data.error}\n`;
+              logPre.scrollTop = logPre.scrollHeight;
+              showStatus('error', data.error);
+            }
+          }
+        }
+      } catch (error) {
+        showStatus('error', error.message);
+        logPre.textContent += `❌ Fatal: ${error.message}\n`;
+      } finally {
+        permRunning = false;
+        permSubmitBtn.disabled = false;
+        permSubmitBtn.textContent = `Merge Permutasi (${permCombinations.length} kombinasi)`;
+      }
+    }
   </script>
 </body>
 </html>

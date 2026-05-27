@@ -221,6 +221,9 @@
           <div class="text-xs text-gray-400 mt-1" id="lbl-upload">Menunggu</div>
         </div>
       </div>
+
+      <!-- Per-Browser Progress Bars -->
+      <div id="browser-progress-container" class="mt-4 space-y-2 hidden"></div>
     </div>
 
     <!-- Main Workspace Layout -->
@@ -959,6 +962,8 @@
           try {
             const prog = JSON.parse(e.data.substring('[PROGRESS_UPDATE]:'.length));
             updateProgressUI(prog);
+            // Refresh stock counts in real-time when progress changes
+            selectedStates.forEach(fn => loadStateStock(fn));
           } catch {}
         }
       };
@@ -1026,10 +1031,25 @@
       document.getElementById('txt-generate').textContent = `🧠 Grok Generate: ${gen}%`;
       
       document.getElementById('prog-merge').style.width = mrg + '%';
-      document.getElementById('txt-merge').textContent = `✂ Video Merger: ${mrg}%`;
+      const mergedCount = prog.mergedCount || 0;
+      const mergeTotal = prog.mergeTotal || 0;
+      if (mergeTotal > 0) {
+        document.getElementById('txt-merge').textContent = `✂ Merge: ${mergedCount}/${mergeTotal} (${mrg}%)`;
+      } else {
+        document.getElementById('txt-merge').textContent = `✂ Video Merger: ${mrg}%`;
+      }
       
       document.getElementById('prog-upload').style.width = upl + '%';
-      document.getElementById('txt-upload').textContent = `🚀 TikTok Upload: ${upl}%`;
+      const uploadedCount = prog.uploadedCount || 0;
+      const uploadTotal = prog.uploadTotal || 0;
+      if (uploadTotal > 0) {
+        // Use count-based percentage for accuracy
+        const realUplPct = Math.round((uploadedCount / uploadTotal) * 100);
+        document.getElementById('prog-upload').style.width = realUplPct + '%';
+        document.getElementById('txt-upload').textContent = `🚀 Upload: ${uploadedCount}/${uploadTotal} (${realUplPct}%)`;
+      } else {
+        document.getElementById('txt-upload').textContent = `🚀 TikTok Upload: ${upl}%`;
+      }
       
       // Update step label texts & colors
       const lblGen = document.getElementById('lbl-generate');
@@ -1049,7 +1069,7 @@
         lblMrg.textContent = gen < 100 ? 'Menunggu' : 'Persiapan';
         lblMrg.className = 'text-xs mt-1 text-gray-500';
       } else if (mrg < 100) {
-        lblMrg.textContent = `Merging (${mrg}%)`;
+        lblMrg.textContent = mergeTotal > 0 ? `Merging (${mergedCount}/${mergeTotal})` : `Merging (${mrg}%)`;
         lblMrg.className = 'text-xs mt-1 text-fuchsia-400 font-bold animate-pulse';
       } else {
         lblMrg.textContent = 'Selesai ✓';
@@ -1057,9 +1077,15 @@
       }
       
       const lblUpl = document.getElementById('lbl-upload');
-      if (upl === 0) {
+      if (upl === 0 && uploadedCount === 0) {
         lblUpl.textContent = mrg < 100 ? 'Menunggu' : 'Persiapan';
         lblUpl.className = 'text-xs mt-1 text-gray-500';
+      } else if (uploadTotal > 0 && uploadedCount < uploadTotal) {
+        lblUpl.textContent = `Uploading (${uploadedCount}/${uploadTotal})`;
+        lblUpl.className = 'text-xs mt-1 text-rose-400 font-bold animate-pulse';
+      } else if (uploadedCount >= uploadTotal && uploadTotal > 0) {
+        lblUpl.textContent = 'Selesai ✓';
+        lblUpl.className = 'text-xs mt-1 text-green-400 font-bold';
       } else if (upl < 100) {
         lblUpl.textContent = `Uploading (${upl}%)`;
         lblUpl.className = 'text-xs mt-1 text-rose-400 font-bold animate-pulse';
@@ -1073,13 +1099,60 @@
       if (gen < 100) {
         activeTask = `Sedang generate video mentah via Grok... (${gen}%)`;
       } else if (mrg < 100) {
-        activeTask = `Sedang menggabungkan video dan menambahkan audio... (${mrg}%)`;
+        activeTask = mergeTotal > 0
+          ? `Sedang merge video... (${mergedCount}/${mergeTotal})`
+          : `Sedang menggabungkan video dan menambahkan audio... (${mrg}%)`;
+      } else if (uploadTotal > 0 && uploadedCount < uploadTotal) {
+        activeTask = `Sedang mengupload video ke TikTok... (${uploadedCount}/${uploadTotal})`;
       } else if (upl < 100) {
-        activeTask = `Sedang mengupload video hasil merge ke TikTok... (${upl}%)`;
+        activeTask = `Sedang mengupload video ke TikTok... (${upl}%)`;
       } else {
         activeTask = 'Semua proses batch selesai dengan sukses!';
       }
       document.getElementById('progress-active-task').textContent = activeTask;
+
+      // ── Per-Browser Progress Bars ──
+      const browserContainer = document.getElementById('browser-progress-container');
+      const browsers = prog.browsers || [];
+      if (browsers.length > 0 && gen < 100) {
+        browserContainer.classList.remove('hidden');
+        browserContainer.innerHTML = browsers.map(b => {
+          const pct = b.total > 0 ? Math.round(((b.current + (b.progress / 100)) / b.total) * 100) : 0;
+          const barPct = Math.min(100, pct);
+          let statusColor = 'bg-gray-600';
+          let statusText = b.status;
+          let barGradient = 'bg-gradient-to-r from-indigo-600 to-purple-500';
+          if (b.status === 'running') {
+            statusColor = 'bg-green-500 running-pulse';
+            statusText = `${b.current}/${b.total} (gen: ${b.progress}%)`;
+            barGradient = 'bg-gradient-to-r from-indigo-600 to-purple-500';
+          } else if (b.status === 'done') {
+            statusColor = 'bg-blue-500';
+            statusText = `Selesai (${b.total})`;
+            barGradient = 'bg-gradient-to-r from-green-600 to-emerald-500';
+          } else if (b.status === 'error') {
+            statusColor = 'bg-red-500';
+            statusText = b.message || 'Error';
+            barGradient = 'bg-gradient-to-r from-red-600 to-red-500';
+          }
+          return `
+            <div class="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-gray-950/60 border border-gray-900">
+              <div class="flex items-center gap-2 shrink-0 w-28">
+                <span class="w-2 h-2 rounded-full ${statusColor}"></span>
+                <span class="text-xs font-bold text-gray-300">Browser ${b.id + 1}</span>
+              </div>
+              <div class="flex-1 h-3 bg-gray-900 rounded-full overflow-hidden shadow-inner">
+                <div class="h-full ${barGradient} transition-all duration-500 rounded-full relative" style="width:${barPct}%">
+                  <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] animate-shimmer opacity-20"></div>
+                </div>
+              </div>
+              <span class="text-[11px] font-bold text-gray-400 shrink-0 w-24 text-right">${statusText}</span>
+            </div>`;
+        }).join('');
+      } else {
+        browserContainer.classList.add('hidden');
+        browserContainer.innerHTML = '';
+      }
     }
 
     // ═══════════════════════════════════════
