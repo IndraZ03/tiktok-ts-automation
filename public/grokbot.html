@@ -164,6 +164,9 @@
       </div>
     </div>
 
+    <!-- Rate Limit Banner Container -->
+    <div id="grok-rate-limit-container" class="mb-8 hidden"></div>
+
     <!-- Real-time Connected Progress Tracker -->
     <div id="overall-progress-card" class="glass-panel rounded-3xl p-6 border border-gray-800/80 mb-8 shadow-xl hidden">
       <h2 class="text-lg font-bold mb-4 flex items-center justify-between">
@@ -962,6 +965,7 @@
           try {
             const prog = JSON.parse(e.data.substring('[PROGRESS_UPDATE]:'.length));
             updateProgressUI(prog);
+            if (prog.rateLimits) renderRateLimits(prog.rateLimits);
             // Refresh stock counts in real-time when progress changes
             selectedStates.forEach(fn => loadStateStock(fn));
           } catch {}
@@ -983,6 +987,7 @@
         }
         if (data.queue) renderQueue(data.queue);
         if (data.progress) updateProgressUI(data.progress);
+        if (data.rateLimits) renderRateLimits(data.rateLimits);
       } catch {}
     }
 
@@ -1006,6 +1011,59 @@
           </div>
         </div>
       `).join('');
+    }
+
+    // ═══════════════════════════════════════
+    //  RATE LIMIT DISPLAY RENDER
+    // ═══════════════════════════════════════
+    function renderRateLimits(rateLimits) {
+      const container = document.getElementById('grok-rate-limit-container');
+      const keys = Object.keys(rateLimits || {});
+      if (keys.length === 0) {
+        container.innerHTML = '';
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      container.innerHTML = keys.map(fn => {
+        const info = rateLimits[fn];
+        const stateName = fn.replace('grok-state-', '').replace('.json', '');
+        const availableAt = info.availableAt || 'tidak diketahui';
+        return `
+          <div class="bg-red-950/40 border border-red-900/60 rounded-3xl p-5 flex items-start gap-4 shadow-xl backdrop-blur-md animate-pulse mb-3">
+            <div class="p-3 bg-red-900/30 rounded-2xl border border-red-800 text-red-400 shrink-0">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <h3 class="text-base font-bold text-red-200">Grok Rate Limit Terdeteksi</h3>
+              <p class="text-xs text-red-400/80 mt-1">Session <span class="font-bold text-red-300">${escHtml(stateName)}</span> telah mencapai batas limit. Tersedia kembali pukul <span class="font-extrabold text-red-100">${escHtml(availableAt)}</span>.</p>
+            </div>
+            <button onclick="clearRateLimit('${fn}')" class="text-xs px-3 py-1.5 rounded-xl bg-red-900/20 hover:bg-red-900/40 border border-red-900 text-red-400 hover:text-red-300 font-semibold transition shrink-0">
+              Reset Status
+            </button>
+          </div>
+        `;
+      }).join('');
+    }
+
+    async function clearRateLimit(stateFile) {
+      try {
+        const res = await fetch('/api/grok/clear-rate-limit', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLog(`✓ Status rate limit direset untuk state: ${stateFile}`);
+          pollStatus();
+        }
+      } catch (e) {
+        addLog(`❌ Gagal reset status rate limit: ${e.message}`);
+      }
     }
 
     // ═══════════════════════════════════════

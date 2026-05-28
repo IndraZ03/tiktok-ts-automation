@@ -21,6 +21,7 @@
         error: null,           // Error message if any
         downloadReady: false,  // True when video is ready to download
         totalGenerated: 0,     // Running total of generated videos
+        availableAt: null,     // Available again at time for rate limit reset
     };
 
     const STATE = window.__GROK_AUTO;
@@ -634,24 +635,41 @@
     }
 
     function _isRateLimitReached() {
+        let reached = false;
         const toasts = document.querySelectorAll('li[data-sonner-toast][data-type="error"]');
         for (const toast of toasts) {
             const text = (toast.textContent || '').toLowerCase();
             if (text.includes('rate limit') || text.includes('supergrok')) {
-                return true;
+                reached = true;
+                break;
             }
         }
-        const spans = document.querySelectorAll('span.font-medium, span.font-bold, span.font-semibold');
-        for (const s of spans) {
-            const t = (s.textContent || '').toLowerCase();
-            if ((t.includes('rate limit') && t.includes('reached')) ||
-                (t.includes('upgrade') && t.includes('supergrok'))) {
-                if (isVisible(s) || (s.closest('li[data-sonner-toast]'))) {
-                    return true;
+        if (!reached) {
+            const spans = document.querySelectorAll('span.font-medium, span.font-bold, span.font-semibold');
+            for (const s of spans) {
+                const t = (s.textContent || '').toLowerCase();
+                if ((t.includes('rate limit') && t.includes('reached')) ||
+                    (t.includes('upgrade') && t.includes('supergrok'))) {
+                    if (isVisible(s) || (s.closest('li[data-sonner-toast]'))) {
+                        reached = true;
+                        break;
+                    }
                 }
             }
         }
-        return false;
+        if (reached) {
+            // Deteksi "Available again at XX.XX"
+            const allElements = document.querySelectorAll('li[data-sonner-toast] *, span, div');
+            for (const el of allElements) {
+                const txt = (el.textContent || '');
+                const m = txt.match(/available again at\s+([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm))?)/i);
+                if (m) {
+                    STATE.availableAt = m[1].trim();
+                    break;
+                }
+            }
+        }
+        return reached;
     }
 
     function _isDownloadButtonVisible() {

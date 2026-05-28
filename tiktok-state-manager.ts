@@ -9,7 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec } from 'child_process';
 import { runUpload, stopUploader, getIsRunning } from './tiktok-uploader.js';
-import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress } from './grok-uploader.js';
+import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress, getGrokRateLimits, clearGrokRateLimit } from './grok-uploader.js';
 import multer from 'multer';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
@@ -1183,7 +1183,19 @@ app.get('/api/grok/logs', (req: Request, res: Response) => {
 
 // Stats
 app.get('/api/grok/stats', (req: Request, res: Response) => {
-  res.json({ ...getGrokStats(), running: getGrokIsRunning(), browsers: getBrowserProgress() });
+  res.json({ ...getGrokStats(), running: getGrokIsRunning(), browsers: getBrowserProgress(), rateLimits: getGrokRateLimits() });
+});
+
+app.get('/api/grok/rate-limits', (req: Request, res: Response) => {
+  res.json(getGrokRateLimits());
+});
+
+app.post('/api/grok/clear-rate-limit', (req: Request, res: Response) => {
+  const { stateFile } = req.body;
+  if (stateFile) {
+    clearGrokRateLimit(stateFile);
+  }
+  res.json({ success: true });
 });
 
 // Start generate
@@ -1840,7 +1852,11 @@ function grokbotBroadcastQueue() {
 function grokbotBroadcastProgress() {
   // Always attach fresh browser progress from grok-uploader
   grokbotProgress.browsers = getBrowserProgress();
-  grokbotSseClients.forEach(c => c.write(`data: [PROGRESS_UPDATE]:${JSON.stringify(grokbotProgress)}\n\n`));
+  const progressWithRateLimits = {
+    ...grokbotProgress,
+    rateLimits: getGrokRateLimits()
+  };
+  grokbotSseClients.forEach(c => c.write(`data: [PROGRESS_UPDATE]:${JSON.stringify(progressWithRateLimits)}\n\n`));
 }
 
 function resetGrokbotProgress(overrides: Partial<typeof grokbotProgress> = {}) {
@@ -2440,6 +2456,9 @@ async function grokbotRunState(stateFile: string): Promise<void> {
         break;
       }
 
+      const mergeEnabled = cfg.merge !== false;
+      const totalRawToGenerate = mergeEnabled ? (2 * needed) : needed;
+
       grokbotProgress.generate = 0;
       grokbotProgress.merge = 0;
       grokbotProgress.upload = 0;
@@ -2448,9 +2467,6 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       grokbotProgress.uploadedCount = 0;
       grokbotProgress.uploadTotal = 0;
       grokbotBroadcastProgress();
-
-      const mergeEnabled = cfg.merge !== false;
-      const totalRawToGenerate = mergeEnabled ? (2 * needed) : needed;
 
       const grokConfig = {
         stateFile: cfg.grokState,
@@ -2682,7 +2698,7 @@ app.post('/api/grokbot/full-auto', async (req, res) => {
 });
 
 app.get('/api/grokbot/status', (req, res) => {
-  res.json({ running: grokbotRunning, queue: grokbotQueue, progress: grokbotProgress });
+  res.json({ running: grokbotRunning, queue: grokbotQueue, progress: grokbotProgress, rateLimits: getGrokRateLimits() });
 });
 
 app.post('/api/grokbot/stop', async (req, res) => {

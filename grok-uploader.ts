@@ -55,6 +55,10 @@ export function getGrokIsRunning() { return isRunning; }
 export function getGrokStats(): GrokStats { return { ...stats }; }
 export function getBrowserProgress(): BrowserProgress[] { return browserProgress.map(b => ({ ...b })); }
 
+let grokRateLimits: Record<string, { availableAt: string | null; detectedAt: number }> = {};
+export function getGrokRateLimits() { return { ...grokRateLimits }; }
+export function clearGrokRateLimit(stateFile: string) { delete grokRateLimits[stateFile]; }
+
 export async function stopGrokGenerator() {
   isRunning = false;
   for (const b of activeBrowsers) {
@@ -210,6 +214,7 @@ export async function runGrokGenerator(config: GrokConfig, log: LogFn, baseDir: 
   isRunning = true;
   stats = { success: 0, failed: 0, saved: 0 };
   activeBrowsers = [];
+  delete grokRateLimits[config.stateFile];
 
   const stateFilePath = path.join(config.statesDir, config.stateFile);
   if (!fs.existsSync(stateFilePath)) { log('❌ State file tidak ditemukan: ' + stateFilePath); isRunning = false; return; }
@@ -334,6 +339,12 @@ async function runBrowserWorker(
           if (!isRunning) { clearInterval(poll); return; }
           const st = await page.evaluate(() => (window as any).__grokGetState());
           if (st && st.progress >= 0) bp.progress = st.progress;
+          if (st && st.status === 'rate_limited') {
+            grokRateLimits[config.stateFile] = {
+              availableAt: st.availableAt || null,
+              detectedAt: Date.now()
+            };
+          }
         } catch {}
       }, 2500);
 
@@ -482,7 +493,13 @@ async function runBrowserWorker(
           bp.message = `DL fail #${i + 1}`;
         }
       } else if (result?.status === 'rate_limited') {
-        log(`${tag} 🚫 Rate limited! Menghentikan semua proses...`); stats.failed++; bp.message = 'Rate limited!';
+        const resetTime = result?.availableAt || null;
+        grokRateLimits[config.stateFile] = {
+          availableAt: resetTime,
+          detectedAt: Date.now()
+        };
+        log(`${tag} 🚫 Rate limited! Menghentikan semua proses... ${resetTime ? 'Tersedia kembali pukul ' + resetTime : ''}`);
+        stats.failed++; bp.message = 'Rate limited!';
         stopGrokGenerator();
         break;
       } else {
