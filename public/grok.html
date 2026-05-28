@@ -94,6 +94,29 @@
     .bar-fill-running{background:linear-gradient(90deg,#6366f1,#a78bfa)}
     .bar-fill-done{background:#34d399}
     .bar-fill-error{background:#f87171}
+    /* Rate Limit Banner */
+    .rate-limit-banner {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 16px;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    .rate-limit-banner h3 {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #f87171;
+      margin-bottom: 4px;
+    }
+    .rate-limit-banner p {
+      font-size: 0.8rem;
+      color: #fca5a5;
+    }
   </style>
 </head>
 <body>
@@ -103,6 +126,9 @@
     <h1>🧠 Grok Imagine Generator</h1>
     <a href="/">← State Manager</a>
   </div>
+
+  <!-- Rate Limit Banner Container -->
+  <div id="grok-rate-limit-container" style="display:none"></div>
 
   <!-- Stats -->
   <div class="stats" style="grid-template-columns:repeat(4,1fr)">
@@ -304,7 +330,71 @@ let bahanFilesArr = [];
 let statsPoller = null;
 
 // ── Init ──
-window.onload = () => { loadBahan(); loadPrompts(); loadStates(); loadSavedConfig(); };
+window.onload = () => { loadBahan(); loadPrompts(); loadStates(); loadSavedConfig(); checkRateLimits(); };
+
+// Set regular polling for rate limits
+setInterval(checkRateLimits, 15000);
+
+// ── Rate Limits ──
+async function checkRateLimits() {
+  try {
+    const r = await fetch('/api/grok/rate-limits');
+    const rateLimits = await r.json();
+    renderRateLimits(rateLimits);
+  } catch(e) { console.error(e); }
+}
+
+async function clearRateLimit(stateFile) {
+  try {
+    const res = await fetch('/api/grok/clear-rate-limit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ stateFile })
+    });
+    const data = await res.json();
+    if (data.success) {
+      addLog(`✓ Status rate limit ${stateFile.replace('grok-state-', '').replace('.json', '')} di-reset`);
+      checkRateLimits();
+    }
+  } catch (e) {
+    console.error(e);
+  }
+}
+
+function renderRateLimits(rateLimits) {
+  const container = document.getElementById('grok-rate-limit-container');
+  const keys = Object.keys(rateLimits || {});
+  if (keys.length === 0) {
+    container.innerHTML = '';
+    container.style.display = 'none';
+    return;
+  }
+
+  container.style.display = 'block';
+  container.innerHTML = keys.map(fn => {
+    const info = rateLimits[fn];
+    const stateName = fn.replace('grok-state-', '').replace('.json', '');
+    const availableAt = info.availableAt || 'tidak diketahui';
+    return `
+      <div class="rate-limit-banner">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div style="padding:8px;background:rgba(239,68,68,0.2);border-radius:10px;border:1px solid rgba(239,68,68,0.4);color:#f87171;display:flex;align-items:center;justify-content:center">
+            <svg style="width:20px;height:20px" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <div>
+            <h3>Grok Rate Limit Terdeteksi</h3>
+            <p>Session <strong style="color:#fca5a5">${stateName}</strong> telah mencapai batas limit. Tersedia kembali pukul <strong style="color:#fff">${availableAt}</strong>.</p>
+          </div>
+        </div>
+        <button onclick="clearRateLimit('${fn}')" class="btn btn-secondary btn-sm" style="background:rgba(239,68,68,0.15);color:#f87171;border:1px solid rgba(239,68,68,0.3);margin-left:auto">
+          Reset Status
+        </button>
+      </div>
+    `;
+  }).join('');
+}
 
 // ── API helpers ──
 async function loadBahan() {
@@ -480,6 +570,8 @@ async function pollStats() {
     document.getElementById('stat-success').textContent = d.success || 0;
     document.getElementById('stat-failed').textContent = d.failed || 0;
     document.getElementById('stat-saved').textContent = d.saved || 0;
+
+    if (d.rateLimits) renderRateLimits(d.rateLimits);
 
     if (d.browsers && d.browsers.length > 0) {
       const container = document.getElementById('browser-progress');

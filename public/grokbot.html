@@ -252,8 +252,12 @@
                     class="w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-pink-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
               🚀 Full Auto (Semua State Terpilih)
             </button>
+            <button id="btn-infinite-generate" onclick="startInfiniteGenerate()"
+                    class="w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+              ♾️ Infinite Generate (Stok Utama & Cadangan)
+            </button>
             <button id="btn-stop" onclick="stopBot()" disabled
-                    class="w-full bg-gray-900 border border-red-900/30 hover:bg-red-650/20 hover:border-red-500 disabled:opacity-20 text-red-400 disabled:text-gray-500 disabled:pointer-events-none py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2">
+                    class="w-full bg-gray-900 border border-red-900/30 hover:bg-red-655/20 hover:border-red-500 disabled:opacity-20 text-red-400 disabled:text-gray-500 disabled:pointer-events-none py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2">
               <span>⛔</span> Hentikan Bot
             </button>
           </div>
@@ -915,6 +919,35 @@
       }
     }
 
+    async function startInfiniteGenerate() {
+      if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
+
+      // Save all active configurations
+      for (const fn of selectedStates) {
+        await saveConfig(fn);
+      }
+
+      addLog(`♾️ Memulai Orchestrator INFINITE GENERATE untuk ${selectedStates.length} state...`);
+      setBusy(true);
+      connectSSE();
+
+      try {
+        const res = await fetch('/api/grokbot/infinite-generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFiles: selectedStates })
+        });
+        const data = await res.json();
+        if (!data.success) {
+          addLog('❌ Gagal: ' + (data.error || ''));
+          setBusy(false);
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+        setBusy(false);
+      }
+    }
+
     async function stopBot() {
       addLog('⛔ Mengirim perintah stop ke Grokbot...');
       await fetch('/api/grokbot/stop', { method: 'POST' });
@@ -926,6 +959,9 @@
     // ═══════════════════════════════════════
     function setBusy(busy) {
       document.getElementById('btn-full-auto').disabled = busy;
+      if (document.getElementById('btn-infinite-generate')) {
+        document.getElementById('btn-infinite-generate').disabled = busy;
+      }
       document.getElementById('btn-stop').disabled = !busy;
       const badge = document.getElementById('status-badge');
       if (busy) {
