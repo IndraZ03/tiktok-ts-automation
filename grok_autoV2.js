@@ -639,7 +639,8 @@
         const toasts = document.querySelectorAll('li[data-sonner-toast][data-type="error"]');
         for (const toast of toasts) {
             const text = (toast.textContent || '').toLowerCase();
-            if (text.includes('rate limit') || text.includes('supergrok')) {
+            if (text.includes('rate limit') || text.includes('supergrok') ||
+                text.includes('batas permintaan') || text.includes('batas request')) {
                 reached = true;
                 break;
             }
@@ -649,7 +650,9 @@
             for (const s of spans) {
                 const t = (s.textContent || '').toLowerCase();
                 if ((t.includes('rate limit') && t.includes('reached')) ||
-                    (t.includes('upgrade') && t.includes('supergrok'))) {
+                    (t.includes('upgrade') && t.includes('supergrok')) ||
+                    (t.includes('batas permintaan') && t.includes('tercapai')) ||
+                    (t.includes('batas request') && t.includes('tercapai'))) {
                     if (isVisible(s) || (s.closest('li[data-sonner-toast]'))) {
                         reached = true;
                         break;
@@ -658,13 +661,20 @@
             }
         }
         if (reached) {
-            // Deteksi "Available again at XX.XX"
+            // Deteksi "Available again at XX.XX" (English) or "Tersedia kembali pada XX.XX" (Indonesian)
             const allElements = document.querySelectorAll('li[data-sonner-toast] *, span, div');
             for (const el of allElements) {
                 const txt = (el.textContent || '');
-                const m = txt.match(/available again at\s+([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm))?)/i);
-                if (m) {
-                    STATE.availableAt = m[1].trim();
+                // English: "Available again at 10:29" / "available again at 10.29 AM"
+                const mEn = txt.match(/available again at\s+([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm))?)/i);
+                if (mEn) {
+                    STATE.availableAt = mEn[1].trim();
+                    break;
+                }
+                // Indonesian: "Tersedia kembali pada 10.29" / "Tersedia kembali pada 10:29"
+                const mId = txt.match(/tersedia kembali\s+(?:pada|pukul)?\s*([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm|WIB|WITA|WIT))?)/i);
+                if (mId) {
+                    STATE.availableAt = mId[1].trim();
                     break;
                 }
             }

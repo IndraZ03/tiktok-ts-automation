@@ -195,16 +195,13 @@ function imageToBase64(filepath: string): string {
   return buf.toString('base64');
 }
 
-// ── Read the grok_autoV2.js script once ──
-let grokScript: string | null = null;
+// ── Read the grok_autoV2.js script (always fresh, no cache) ──
 function getGrokScript(baseDir: string): string {
-  if (grokScript) return grokScript;
   const scriptPath = path.join(baseDir, 'grok_autoV2.js');
   if (!fs.existsSync(scriptPath)) {
     throw new Error('grok_autoV2.js not found at: ' + scriptPath);
   }
-  grokScript = fs.readFileSync(scriptPath, 'utf-8');
-  return grokScript;
+  return fs.readFileSync(scriptPath, 'utf-8');
 }
 
 // ════════════════════════════════════════════════════════════
