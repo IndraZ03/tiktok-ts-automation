@@ -470,7 +470,7 @@ async function uploadSingleVideo(
   if (!isRunning) { log('⛔ Dibatalkan'); return false; }
 
   // ── STEP 7: Switches (skip branded content etc) ──
-  if (config.skipSwitches) {
+  if (!config.skipSwitches) {
     log('🔀 STEP 6: Toggle switches...');
     try {
       const advSettings = page.locator('[data-e2e="advanced_settings_container"]');

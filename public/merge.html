@@ -109,6 +109,21 @@
           </div>
         </div>
 
+        <!-- Folder Save Video -->
+        <div class="block">
+          <span class="mb-2 block text-sm font-semibold text-zinc-200">Save ke folder <span class="text-zinc-500 font-normal">(opsional, default: folder sumber)</span></span>
+          <div class="flex items-center gap-3">
+            <button id="btn-perm-save-folder" type="button" onclick="pickPermSaveFolder()"
+                    class="shrink-0 bg-cyan-500 px-4 py-3 text-sm font-bold text-zinc-950 transition hover:bg-cyan-400">
+              📂 Open Folder
+            </button>
+            <div id="perm-save-folder-display" class="min-w-0 flex-1 truncate border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm text-zinc-400">
+              Default: folder sumber
+            </div>
+            <input type="hidden" id="perm-save-folder" name="saveFolder" value="">
+          </div>
+        </div>
+
         <!-- Sound -->
         <label class="block">
           <span class="mb-2 block text-sm font-semibold text-zinc-200">Sound pengganti <span class="text-zinc-500 font-normal">(opsional, berlaku untuk semua)</span></span>
@@ -129,7 +144,7 @@
             </div>
             <div>
               <div class="text-zinc-500">Output</div>
-              <div class="font-semibold text-zinc-100">Folder yang sama</div>
+              <div id="perm-output-display" class="font-semibold text-zinc-100 max-w-[200px] truncate">Folder sumber</div>
             </div>
           </div>
 
@@ -254,6 +269,13 @@
           permFolder = data.folder;
           document.getElementById('perm-folder-display').textContent = data.folder;
           document.getElementById('perm-folder-display').title = data.folder;
+          
+          // update the output preview display if no custom save folder is set
+          const outputDisplay = document.getElementById('perm-output-display');
+          if (outputDisplay && !document.getElementById('perm-save-folder').value) {
+            outputDisplay.textContent = data.folder;
+            outputDisplay.title = data.folder;
+          }
           await scanFolder(data.folder);
         }
       } catch (e) {
@@ -261,6 +283,32 @@
       } finally {
         btn.disabled = false;
         btn.textContent = '📂 Pilih Folder';
+      }
+    }
+
+    async function pickPermSaveFolder() {
+      const btn = document.getElementById('btn-perm-save-folder');
+      btn.disabled = true;
+      btn.textContent = '⏳ Membuka...';
+      try {
+        const res = await fetch('/api/browse-folder');
+        const data = await res.json();
+        if (data.success && data.folder) {
+          document.getElementById('perm-save-folder').value = data.folder;
+          document.getElementById('perm-save-folder-display').textContent = data.folder;
+          document.getElementById('perm-save-folder-display').title = data.folder;
+          
+          const outputDisplay = document.getElementById('perm-output-display');
+          if (outputDisplay) {
+            outputDisplay.textContent = data.folder;
+            outputDisplay.title = data.folder;
+          }
+        }
+      } catch (e) {
+        console.error('Browse folder error:', e);
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '📂 Open Folder';
       }
     }
 
@@ -420,6 +468,10 @@
       if (soundFile) {
         formData.append('sound', soundFile);
       }
+      const saveFolder = document.getElementById('perm-save-folder').value;
+      if (saveFolder) {
+        formData.append('saveFolder', saveFolder);
+      }
 
       try {
         const response = await fetch('/api/merge/permutation', {
@@ -473,7 +525,8 @@
                 logPre.textContent += '\n❌ Errors:\n' + data.errors.join('\n') + '\n';
               }
               logPre.scrollTop = logPre.scrollHeight;
-              showStatus('success', `Permutasi selesai! <strong>${successCount}</strong> video berhasil di-merge ke folder sumber.${failCount > 0 ? ` <span class="text-red-300">${failCount} gagal.</span>` : ''}`);
+              const targetFolderText = saveFolder ? 'folder tujuan' : 'folder sumber';
+              showStatus('success', `Permutasi selesai! <strong>${successCount}</strong> video berhasil di-merge ke ${targetFolderText}.${failCount > 0 ? ` <span class="text-red-300">${failCount} gagal.</span>` : ''}`);
             }
 
             if (eventName === 'error') {

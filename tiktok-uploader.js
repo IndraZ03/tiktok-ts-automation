@@ -364,7 +364,7 @@ export async function runUpload(config, log) {
             return;
         }
         // ── STEP 7: Switches (skip branded content etc) ──
-        if (config.skipSwitches) {
+        if (!config.skipSwitches) {
             log('🔀 STEP 6: Toggle switches...');
             try {
                 // Show more / Advanced settings

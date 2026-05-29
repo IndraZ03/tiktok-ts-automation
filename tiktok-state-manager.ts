@@ -1000,6 +1000,7 @@ app.post('/api/merge/permutation', mergeUpload.fields([
   { name: 'sound', maxCount: 1 },
 ]), async (req: any, res) => {
   const folder = req.body?.folder as string;
+  const saveFolder = req.body?.saveFolder as string | undefined;
   const soundFile = ((req.files?.sound || []) as Express.Multer.File[])[0];
 
   if (!folder || !fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) {
@@ -1010,6 +1011,11 @@ app.post('/api/merge/permutation', mergeUpload.fields([
   if (soundFile && !['.mp3', '.wav'].includes(path.extname(soundFile.originalname).toLowerCase())) {
     try { fs.unlinkSync(soundFile.path); } catch { }
     return res.status(400).json({ success: false, error: 'Sound harus berupa file .mp3 atau .wav.' });
+  }
+
+  const outputDir = (saveFolder && saveFolder.trim()) ? saveFolder.trim() : folder;
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
   }
 
   const videos = fs.readdirSync(folder)
@@ -1059,7 +1065,7 @@ app.post('/api/merge/permutation', mergeUpload.fields([
     const baseName1 = path.basename(combo.video1, path.extname(combo.video1));
     const baseName2 = path.basename(combo.video2, path.extname(combo.video2));
     const outputFilename = `perm_${baseName1}_x_${baseName2}_${Date.now()}.mp4`;
-    const outputPath = path.join(folder, outputFilename);
+    const outputPath = path.join(outputDir, outputFilename);
 
     sendEvent('progress', {
       current: idx + 1,
@@ -2744,16 +2750,189 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
 
   const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
 
+  interface StateStockInfo {
+    stateFile: string;
+    stateName: string;
+    grokState: string;
+    cfg: any;
+    pendingUtama: string[];
+    pendingCadangan: string[];
+    neededUtama: number;
+    neededCadangan: number;
+    totalStock: number;
+    needsStock: boolean;
+    isRateLimited: boolean;
+    rateLimitDelayMs: number;
+    rateLimitAvailableAt: string;
+  }
+
+  // Nested helpers for generating Utama/Cadangan for a chosen targetState
+  const runUtamaGen = async (targetState: StateStockInfo) => {
+    const { cfg, grokState, neededUtama, pendingUtama, stateName } = targetState;
+    const tiktokStateName = stateName;
+    const stateDownloadDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+    const mergeEnabled = cfg.merge !== false;
+
+    const totalRawToGenerate = mergeEnabled ? (2 * neededUtama) : neededUtama;
+    grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Utama: dibutuhkan ${neededUtama} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingUtama.length})`);
+    
+    resetGrokbotProgress({
+      currentState: tiktokStateName,
+      mergeTotal: mergeEnabled ? neededUtama : 0,
+      generate: 0,
+      merge: 0,
+    });
+    grokbotBroadcastProgress();
+
+    const grokConfig = {
+      stateFile: grokState,
+      statesDir: GROK_STATES_DIR,
+      bahanFolder: cfg.bahanFolder || '',
+      bahanDir: BAHAN_DIR,
+      promptFile: cfg.promptFile,
+      promptDir: PROMPT_DIR,
+      mode: cfg.mode || 'Video',
+      resolution: cfg.resolution || '720p',
+      duration: cfg.duration || '10s',
+      aspectRatio: cfg.aspectRatio || '9:16',
+      headless: cfg.headless !== false,
+      downloadDir: GROK_DOWNLOAD_DIR,
+      customDownloadDir: stateDownloadDir,
+      totalVideos: totalRawToGenerate,
+      merge: mergeEnabled,
+      audioFolder: cfg.audioFolder || '',
+    };
+
+    const poll = setInterval(() => {
+      if (!grokbotRunning) { clearInterval(poll); return; }
+      const stats = getGrokStats();
+      const progressList = getBrowserProgress();
+      const doneCount = stats.success + stats.failed;
+      let overallGen = Math.round((doneCount / totalRawToGenerate) * 100);
+      let activeCount = 0;
+      let activeProgSum = 0;
+      progressList.forEach(bp => {
+        if (bp.status === 'running') {
+          activeCount++;
+          activeProgSum += bp.progress;
+        }
+      });
+      if (activeCount > 0) overallGen += Math.round((activeProgSum / activeCount) / totalRawToGenerate);
+      grokbotProgress.generate = Math.min(99, overallGen);
+      if (mergeEnabled) {
+        grokbotProgress.mergedCount = stats.saved;
+        grokbotProgress.mergeTotal = neededUtama;
+        grokbotProgress.merge = Math.min(99, Math.round((stats.saved / neededUtama) * 100));
+      } else {
+        grokbotProgress.merge = 100;
+      }
+      grokbotBroadcastProgress();
+    }, 2000);
+
+    try {
+      await runGrokGenerator(grokConfig as any, grokbotLog, __dirname);
+      clearInterval(poll);
+      grokbotProgress.generate = 100;
+      grokbotProgress.merge = 100;
+      grokbotBroadcastProgress();
+      grokbotLog(`✓ Stok Utama untuk ${tiktokStateName} berhasil ditambahkan!`);
+    } catch (err: any) {
+      clearInterval(poll);
+      grokbotLog(`❌ Gagal generate Utama untuk ${tiktokStateName}: ${err.message}`);
+    }
+  };
+
+  const runCadanganGen = async (targetState: StateStockInfo) => {
+    const { cfg, grokState, neededCadangan, pendingCadangan, stateName } = targetState;
+    const tiktokStateName = stateName;
+    const stateDownloadDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+    const cadanganDir = path.join(stateDownloadDir, 'cadangan');
+    const mergeEnabled = cfg.merge !== false;
+
+    const totalRawToGenerate = mergeEnabled ? (2 * neededCadangan) : neededCadangan;
+    grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Cadangan: dibutuhkan ${neededCadangan} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingCadangan.length})`);
+    
+    resetGrokbotProgress({
+      currentState: tiktokStateName,
+      mergeTotal: mergeEnabled ? neededCadangan : 0,
+      generate: 0,
+      merge: 0,
+    });
+    grokbotBroadcastProgress();
+
+    const grokConfig = {
+      stateFile: grokState,
+      statesDir: GROK_STATES_DIR,
+      bahanFolder: cfg.bahanFolder || '',
+      bahanDir: BAHAN_DIR,
+      promptFile: cfg.promptFile,
+      promptDir: PROMPT_DIR,
+      mode: cfg.mode || 'Video',
+      resolution: cfg.resolution || '720p',
+      duration: cfg.duration || '10s',
+      aspectRatio: cfg.aspectRatio || '9:16',
+      headless: cfg.headless !== false,
+      downloadDir: GROK_DOWNLOAD_DIR,
+      customDownloadDir: cadanganDir,
+      totalVideos: totalRawToGenerate,
+      merge: mergeEnabled,
+      audioFolder: cfg.audioFolder || '',
+    };
+
+    const poll = setInterval(() => {
+      if (!grokbotRunning) { clearInterval(poll); return; }
+      const stats = getGrokStats();
+      const progressList = getBrowserProgress();
+      const doneCount = stats.success + stats.failed;
+      let overallGen = Math.round((doneCount / totalRawToGenerate) * 100);
+      let activeCount = 0;
+      let activeProgSum = 0;
+      progressList.forEach(bp => {
+        if (bp.status === 'running') {
+          activeCount++;
+          activeProgSum += bp.progress;
+        }
+      });
+      if (activeCount > 0) overallGen += Math.round((activeProgSum / activeCount) / totalRawToGenerate);
+      grokbotProgress.generate = Math.min(99, overallGen);
+      if (mergeEnabled) {
+        grokbotProgress.mergedCount = stats.saved;
+        grokbotProgress.mergeTotal = neededCadangan;
+        grokbotProgress.merge = Math.min(99, Math.round((stats.saved / neededCadangan) * 100));
+      } else {
+        grokbotProgress.merge = 100;
+      }
+      grokbotBroadcastProgress();
+    }, 2000);
+
+    try {
+      await runGrokGenerator(grokConfig as any, grokbotLog, __dirname);
+      clearInterval(poll);
+      grokbotProgress.generate = 100;
+      grokbotProgress.merge = 100;
+      grokbotBroadcastProgress();
+      grokbotLog(`✓ Stok Cadangan untuk ${tiktokStateName} berhasil ditambahkan!`);
+    } catch (err: any) {
+      clearInterval(poll);
+      grokbotLog(`❌ Gagal generate Cadangan untuk ${tiktokStateName}: ${err.message}`);
+    }
+  };
+
   while (grokbotRunning) {
-    let allStatesFullyStocked = true;
+    const statesInfo: StateStockInfo[] = [];
 
+    // 1. Gather info for all states freshly
     for (const sf of stateFiles) {
-      if (!grokbotRunning) break;
-
       const data = loadGrokbotData();
       const cfg = data.states[sf];
       if (!cfg) {
         grokbotLog(`❌ Config tidak ditemukan untuk state: ${sf}`);
+        continue;
+      }
+
+      const grokState = cfg.grokState;
+      if (!grokState) {
+        grokbotLog(`❌ Gagal: Grok State belum diatur untuk TikTok state ${sf}`);
         continue;
       }
 
@@ -2766,57 +2945,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       if (!fs.existsSync(rawDir)) fs.mkdirSync(rawDir, { recursive: true });
       if (!fs.existsSync(cadanganDir)) fs.mkdirSync(cadanganDir, { recursive: true });
 
-      // Highlight this state as active in queue
-      grokbotQueue = grokbotQueue.map(q => ({
-        ...q,
-        active: q.stateFile === sf
-      }));
-      grokbotBroadcastQueue();
-
-      resetGrokbotProgress({ currentState: tiktokStateName });
-      grokbotBroadcastProgress();
-
-      // Check rate limit for this state first
-      const grokState = cfg.grokState;
-      if (!grokState) {
-        grokbotLog(`❌ Gagal: Grok State belum diatur untuk TikTok state ${tiktokStateName}`);
-        continue;
-      }
-
-      let rateLimits = getGrokRateLimits();
-      if (rateLimits[grokState]) {
-        const info = rateLimits[grokState];
-        const avAt = info.availableAt || 'tidak diketahui';
-        grokbotLog(`🚫 [${tiktokStateName}] Grok Rate Limit aktif! Tersedia kembali pukul: ${avAt}`);
-        
-        const delayMs = parseAvailableAt(avAt);
-        const resumeTime = new Date(Date.now() + delayMs).toLocaleTimeString('id-ID');
-        grokbotLog(`⏳ [${tiktokStateName}] Memulai jeda (sleep) selama ${Math.round(delayMs / 60000)} menit. Bot akan otomatis melanjutkan pukul: ${resumeTime}`);
-
-        // Graceful interruptible sleep
-        const interval = 2000;
-        let elapsed = 0;
-        while (elapsed < delayMs && grokbotRunning) {
-          await new Promise(r => setTimeout(r, Math.min(interval, delayMs - elapsed)));
-          elapsed += interval;
-          // Refresh rate limit object in case it was cleared by user manually
-          if (!getGrokRateLimits()[grokState]) {
-            grokbotLog(`⚡ [${tiktokStateName}] Rate limit di-reset manual oleh user! Melanjutkan proses...`);
-            break;
-          }
-        }
-
-        if (!grokbotRunning) break;
-
-        // Clear rate limit when time elapsed
-        clearGrokRateLimit(grokState);
-        grokbotLog(`⚡ Waktu tunggu selesai. Melanjutkan generator untuk ${tiktokStateName}...`);
-      }
-
-      // Check if grokbot is still running after potential rate-limit sleep
-      if (!grokbotRunning) break;
-
-      // Read stock files counts freshly (so it's fully up-to-date, especially after sleeping)
+      // Read stock files counts freshly
       const marksFile = path.join(stateDownloadDir, '.uploaded.json');
       let marks: Record<string, boolean> = {};
       try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
@@ -2825,193 +2954,68 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       let cadanganMarks: Record<string, boolean> = {};
       try { cadanganMarks = JSON.parse(fs.readFileSync(cadanganMarksFile, 'utf-8')); } catch {}
 
-      let allUtama = fs.readdirSync(stateDownloadDir).filter(f => exts.includes(path.extname(f).toLowerCase()));
-      let pendingUtama = allUtama.filter(v => !marks[v]);
+      const allUtama = fs.readdirSync(stateDownloadDir).filter(f => exts.includes(path.extname(f).toLowerCase()));
+      const pendingUtama = allUtama.filter(v => !marks[v]);
 
-      let allCadangan = fs.readdirSync(cadanganDir).filter(f => exts.includes(path.extname(f).toLowerCase()));
-      let pendingCadangan = allCadangan.filter(v => !cadanganMarks[v]);
+      const allCadangan = fs.readdirSync(cadanganDir).filter(f => exts.includes(path.extname(f).toLowerCase()));
+      const pendingCadangan = allCadangan.filter(v => !cadanganMarks[v]);
 
-      let neededUtama = 30 - pendingUtama.length;
-      let neededCadangan = 30 - pendingCadangan.length;
+      const neededUtama = Math.max(0, 30 - pendingUtama.length);
+      const neededCadangan = Math.max(0, 30 - pendingCadangan.length);
+      const totalStock = pendingUtama.length + pendingCadangan.length;
+      const needsStock = neededUtama > 0 || neededCadangan > 0;
 
-      // Check if state needs stock
-      if (neededUtama <= 0 && neededCadangan <= 0) {
-        grokbotLog(`✨ [${tiktokStateName}] Stok Utama dan Cadangan sudah penuh (Utama: ${pendingUtama.length}, Cadangan: ${pendingCadangan.length})`);
-        continue;
+      // Rate limit check
+      let isRateLimited = false;
+      let rateLimitDelayMs = 0;
+      let rateLimitAvailableAt = '';
+      const rateLimits = getGrokRateLimits();
+      if (rateLimits[grokState]) {
+        isRateLimited = true;
+        rateLimitAvailableAt = rateLimits[grokState].availableAt || 'tidak diketahui';
+        rateLimitDelayMs = parseAvailableAt(rateLimitAvailableAt);
       }
 
-      allStatesFullyStocked = false;
-
-      const mergeEnabled = cfg.merge !== false;
-
-      const runUtamaGen = async () => {
-        if (neededUtama <= 0) return;
-        const totalRawToGenerate = mergeEnabled ? (2 * neededUtama) : neededUtama;
-        grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Utama: dibutuhkan ${neededUtama} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingUtama.length})`);
-        
-        resetGrokbotProgress({
-          currentState: tiktokStateName,
-          mergeTotal: mergeEnabled ? neededUtama : 0,
-          generate: 0,
-          merge: 0,
-        });
-        grokbotBroadcastProgress();
-
-        const grokConfig = {
-          stateFile: grokState,
-          statesDir: GROK_STATES_DIR,
-          bahanFolder: cfg.bahanFolder || '',
-          bahanDir: BAHAN_DIR,
-          promptFile: cfg.promptFile,
-          promptDir: PROMPT_DIR,
-          mode: cfg.mode || 'Video',
-          resolution: cfg.resolution || '720p',
-          duration: cfg.duration || '10s',
-          aspectRatio: cfg.aspectRatio || '9:16',
-          headless: cfg.headless !== false,
-          downloadDir: GROK_DOWNLOAD_DIR,
-          customDownloadDir: stateDownloadDir,
-          totalVideos: totalRawToGenerate,
-          merge: mergeEnabled,
-          audioFolder: cfg.audioFolder || '',
-        };
-
-        const poll = setInterval(() => {
-          if (!grokbotRunning) { clearInterval(poll); return; }
-          const stats = getGrokStats();
-          const progressList = getBrowserProgress();
-          const doneCount = stats.success + stats.failed;
-          let overallGen = Math.round((doneCount / totalRawToGenerate) * 100);
-          let activeCount = 0;
-          let activeProgSum = 0;
-          progressList.forEach(bp => {
-            if (bp.status === 'running') {
-              activeCount++;
-              activeProgSum += bp.progress;
-            }
-          });
-          if (activeCount > 0) overallGen += Math.round((activeProgSum / activeCount) / totalRawToGenerate);
-          grokbotProgress.generate = Math.min(99, overallGen);
-          if (mergeEnabled) {
-            grokbotProgress.mergedCount = stats.saved;
-            grokbotProgress.mergeTotal = neededUtama;
-            grokbotProgress.merge = Math.min(99, Math.round((stats.saved / neededUtama) * 100));
-          } else {
-            grokbotProgress.merge = 100;
-          }
-          grokbotBroadcastProgress();
-        }, 2000);
-
-        try {
-          await runGrokGenerator(grokConfig as any, grokbotLog, __dirname);
-          clearInterval(poll);
-          grokbotProgress.generate = 100;
-          grokbotProgress.merge = 100;
-          grokbotBroadcastProgress();
-          grokbotLog(`✓ Stok Utama untuk ${tiktokStateName} berhasil ditambahkan!`);
-        } catch (err: any) {
-          clearInterval(poll);
-          grokbotLog(`❌ Gagal generate Utama untuk ${tiktokStateName}: ${err.message}`);
-        }
-      };
-
-      const runCadanganGen = async () => {
-        if (neededCadangan <= 0) return;
-        const totalRawToGenerate = mergeEnabled ? (2 * neededCadangan) : neededCadangan;
-        grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Cadangan: dibutuhkan ${neededCadangan} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingCadangan.length})`);
-        
-        resetGrokbotProgress({
-          currentState: tiktokStateName,
-          mergeTotal: mergeEnabled ? neededCadangan : 0,
-          generate: 0,
-          merge: 0,
-        });
-        grokbotBroadcastProgress();
-
-        const grokConfig = {
-          stateFile: grokState,
-          statesDir: GROK_STATES_DIR,
-          bahanFolder: cfg.bahanFolder || '',
-          bahanDir: BAHAN_DIR,
-          promptFile: cfg.promptFile,
-          promptDir: PROMPT_DIR,
-          mode: cfg.mode || 'Video',
-          resolution: cfg.resolution || '720p',
-          duration: cfg.duration || '10s',
-          aspectRatio: cfg.aspectRatio || '9:16',
-          headless: cfg.headless !== false,
-          downloadDir: GROK_DOWNLOAD_DIR,
-          customDownloadDir: cadanganDir,
-          totalVideos: totalRawToGenerate,
-          merge: mergeEnabled,
-          audioFolder: cfg.audioFolder || '',
-        };
-
-        const poll = setInterval(() => {
-          if (!grokbotRunning) { clearInterval(poll); return; }
-          const stats = getGrokStats();
-          const progressList = getBrowserProgress();
-          const doneCount = stats.success + stats.failed;
-          let overallGen = Math.round((doneCount / totalRawToGenerate) * 100);
-          let activeCount = 0;
-          let activeProgSum = 0;
-          progressList.forEach(bp => {
-            if (bp.status === 'running') {
-              activeCount++;
-              activeProgSum += bp.progress;
-            }
-          });
-          if (activeCount > 0) overallGen += Math.round((activeProgSum / activeCount) / totalRawToGenerate);
-          grokbotProgress.generate = Math.min(99, overallGen);
-          if (mergeEnabled) {
-            grokbotProgress.mergedCount = stats.saved;
-            grokbotProgress.mergeTotal = neededCadangan;
-            grokbotProgress.merge = Math.min(99, Math.round((stats.saved / neededCadangan) * 100));
-          } else {
-            grokbotProgress.merge = 100;
-          }
-          grokbotBroadcastProgress();
-        }, 2000);
-
-        try {
-          await runGrokGenerator(grokConfig as any, grokbotLog, __dirname);
-          clearInterval(poll);
-          grokbotProgress.generate = 100;
-          grokbotProgress.merge = 100;
-          grokbotBroadcastProgress();
-          grokbotLog(`✓ Stok Cadangan untuk ${tiktokStateName} berhasil ditambahkan!`);
-        } catch (err: any) {
-          clearInterval(poll);
-          grokbotLog(`❌ Gagal generate Cadangan untuk ${tiktokStateName}: ${err.message}`);
-        }
-      };
-
-      // Order of execution: prioritize the one that currently has fewer items in stock
-      if (pendingUtama.length <= pendingCadangan.length) {
-        // Utama is smaller or equal -> run Utama first
-        await runUtamaGen();
-        if (!grokbotRunning) break;
-        // Re-check rate limit status before running Cadangan
-        if (!getGrokRateLimits()[grokState]) {
-          await runCadanganGen();
-        }
-      } else {
-        // Cadangan is smaller -> run Cadangan first
-        await runCadanganGen();
-        if (!grokbotRunning) break;
-        // Re-check rate limit status before running Utama
-        if (!getGrokRateLimits()[grokState]) {
-          await runUtamaGen();
-        }
-      }
+      statesInfo.push({
+        stateFile: sf,
+        stateName: tiktokStateName,
+        grokState,
+        cfg,
+        pendingUtama,
+        pendingCadangan,
+        neededUtama,
+        neededCadangan,
+        totalStock,
+        needsStock,
+        isRateLimited,
+        rateLimitDelayMs,
+        rateLimitAvailableAt,
+      });
     }
 
     if (!grokbotRunning) break;
 
-    // If all states are already fully stocked, sleep a little before checking again
-    if (allStatesFullyStocked) {
-      grokbotLog(`✨ Semua state terpilih sudah memiliki stok Utama & Cadangan penuh. Tidur selama 30 detik...`);
-      // Update queue to idle
+    // 2. Update queue UI with fresh totalStock
+    grokbotQueue = stateFiles.map(sf => {
+      const name = sf.replace('tiktok-state-', '').replace('.json', '');
+      const info = statesInfo.find(s => s.stateFile === sf);
+      return {
+        stateName: name,
+        stateFile: sf,
+        videoCount: info ? info.totalStock : 0,
+        scheduleStart: 'Infinite Gen',
+        scheduleEnd: 'Infinite Gen',
+        active: false
+      };
+    });
+    grokbotBroadcastQueue();
+
+    // 3. Filter down to states that actually need stock
+    const candidates = statesInfo.filter(s => s.needsStock);
+
+    // 4. If none need stock, sleep 30 seconds
+    if (candidates.length === 0) {
+      grokbotLog(`✨ Semua state terpilih sudah memiliki stok Utama & Cadangan penuh (Utama >= 30, Cadangan >= 30). Tidur selama 30 detik...`);
       grokbotQueue = grokbotQueue.map(q => ({ ...q, active: false }));
       grokbotBroadcastQueue();
 
@@ -3019,6 +3023,90 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       while (slept < 30000 && grokbotRunning) {
         await new Promise(r => setTimeout(r, 2000));
         slept += 2000;
+      }
+      continue;
+    }
+
+    // 5. Categorize and sort by stock ascending (lowest stock first)
+    const nonRateLimited = candidates.filter(c => !c.isRateLimited);
+    const rateLimited = candidates.filter(c => c.isRateLimited);
+
+    nonRateLimited.sort((a, b) => a.totalStock - b.totalStock);
+    rateLimited.sort((a, b) => a.totalStock - b.totalStock);
+
+    // 6. Process the best candidate
+    if (nonRateLimited.length > 0) {
+      const targetState = nonRateLimited[0];
+
+      // Highlight active state in queue UI
+      grokbotQueue = grokbotQueue.map(q => ({
+        ...q,
+        active: q.stateFile === targetState.stateFile
+      }));
+      grokbotBroadcastQueue();
+
+      // Clear any expired rate limit on the selected target state before we run
+      clearGrokRateLimit(targetState.grokState);
+
+      // Order of execution: prioritize the one that currently has fewer items in stock
+      if (targetState.pendingUtama.length <= targetState.pendingCadangan.length) {
+        // Utama is smaller or equal -> run Utama first
+        if (targetState.neededUtama > 0) {
+          await runUtamaGen(targetState);
+        }
+        if (grokbotRunning && !getGrokRateLimits()[targetState.grokState]) {
+          if (targetState.neededCadangan > 0) {
+            await runCadanganGen(targetState);
+          }
+        }
+      } else {
+        // Cadangan is smaller -> run Cadangan first
+        if (targetState.neededCadangan > 0) {
+          await runCadanganGen(targetState);
+        }
+        if (grokbotRunning && !getGrokRateLimits()[targetState.grokState]) {
+          if (targetState.neededUtama > 0) {
+            await runUtamaGen(targetState);
+          }
+        }
+      }
+    } else {
+      // All states that need stock are rate-limited!
+      // Find the one that becomes available earliest
+      const sortedByDelay = [...rateLimited].sort((a, b) => a.rateLimitDelayMs - b.rateLimitDelayMs);
+      const nextAvailable = sortedByDelay[0];
+      const delayMs = nextAvailable.rateLimitDelayMs;
+
+      grokbotLog(`🚫 Semua state yang membutuhkan stok sedang mengalami Grok Rate Limit!`);
+      for (const r of rateLimited) {
+        grokbotLog(` - [${r.stateName}] Rate Limit aktif! Tersedia kembali pukul: ${r.rateLimitAvailableAt}`);
+      }
+
+      const resumeTime = new Date(Date.now() + delayMs).toLocaleTimeString('id-ID');
+      grokbotLog(`⏳ [${nextAvailable.stateName}] Memulai jeda (sleep) selama ${Math.round(delayMs / 60000)} menit (menunggu akun Grok paling cepat tersedia). Bot akan otomatis melanjutkan pukul: ${resumeTime}`);
+
+      // Graceful, interruptible sleep checking for user-reset rate limits
+      const interval = 2000;
+      let elapsed = 0;
+      while (elapsed < delayMs && grokbotRunning) {
+        await new Promise(r => setTimeout(r, Math.min(interval, delayMs - elapsed)));
+        elapsed += interval;
+        
+        // Refresh rate limit state in case it was cleared by user manually
+        const rateLimitsAfter = getGrokRateLimits();
+        let cleared = false;
+        for (const r of rateLimited) {
+          if (!rateLimitsAfter[r.grokState]) {
+            grokbotLog(`⚡ [${r.stateName}] Rate limit di-reset manual oleh user! Melanjutkan proses...`);
+            cleared = true;
+            break;
+          }
+        }
+        if (cleared) break;
+      }
+      
+      if (grokbotRunning) {
+        grokbotLog(`⚡ Waktu tunggu selesai. Melanjutkan generator...`);
       }
     }
   }
