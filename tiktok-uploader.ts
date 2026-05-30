@@ -495,6 +495,22 @@ async function uploadSingleVideo(
         const aigcSwitch = page.locator('[data-e2e="aigc_container"] .Switch__content');
         await aigcSwitch.click({ force: true });
         log('✓ AI-generated diklik');
+
+        // Tunggu apakah modal "Labeling AI-generated content" muncul
+        try {
+          const turnOnBtn = page.locator('.TUXModal, [class*="modal"], [role="dialog"]')
+            .filter({ hasText: /Labeling AI-generated content|AI-generated/i })
+            .locator('button')
+            .filter({ hasText: /^Turn on$/i });
+          
+          if (await turnOnBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await turnOnBtn.click();
+            log('✓ Pop-up "Labeling AI-generated content" diklik Turn on');
+            await page.waitForTimeout(1000);
+          }
+        } catch (eModal) {
+          log('ℹ Tidak ada pop-up labeling AI-generated content atau gagal handle');
+        }
       } catch { log('⚠ AI-generated gagal'); }
     } catch (e: any) {
       log('⚠ Switches: ' + e.message);
