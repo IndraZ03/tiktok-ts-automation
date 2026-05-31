@@ -13,6 +13,19 @@ import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, ge
 import multer from 'multer';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
+import {
+  loadLeonardoData,
+  saveLeonardoData,
+  getFreshJWT,
+  fetchCreditBalance,
+  uploadInitImage,
+  triggerKlingGenerate,
+  checkGenerationStatus,
+  fetchGenerationVideoUrl,
+  downloadVideoToLocal,
+  LeonardoAccount,
+  LeonardoPrompt
+} from './leonardo-helper.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -22,6 +35,7 @@ const PORT = 5000;
 
 app.use(express.json());
 app.use(express.static('public'));
+app.use('/bahan', express.static(path.join(__dirname, 'bahan')));
 
 // Multer for bahan image uploads
 const bahanUpload = multer({ dest: path.join(__dirname, '_tmp_uploads') });
@@ -1105,6 +1119,373 @@ app.post('/api/merge/permutation', mergeUpload.fields([
   }
 
   res.end();
+});
+
+// ═══════════════════════════════════════════════════════════
+//  MERGE-UPLOAD ROUTE & APIs
+// ═══════════════════════════════════════════════════════════
+const MERGE_UPLOAD_CONFIG_FILE = path.join(__dirname, 'merge-upload-config.json');
+
+function loadMergeUploadConfig() {
+  if (fs.existsSync(MERGE_UPLOAD_CONFIG_FILE)) {
+    try {
+      return JSON.parse(fs.readFileSync(MERGE_UPLOAD_CONFIG_FILE, 'utf-8'));
+    } catch (e) {
+      return {};
+    }
+  }
+  return {};
+}
+
+function saveMergeUploadConfig(config: any) {
+  fs.writeFileSync(MERGE_UPLOAD_CONFIG_FILE, JSON.stringify(config, null, 2), 'utf-8');
+}
+
+app.get('/merge-upload', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'merge-upload.html'));
+});
+
+app.get('/api/merge-upload/config', (req, res) => {
+  res.json(loadMergeUploadConfig());
+});
+
+app.post('/api/merge-upload/config/save', (req, res) => {
+  saveMergeUploadConfig(req.body);
+  res.json({ success: true });
+});
+
+app.get('/api/merge-upload/scan-subfolders', (req, res) => {
+  const parent = req.query.parent as string;
+  if (!parent) return res.status(400).json({ success: false, error: 'Parameter parent wajib diisi.' });
+  const resolved = path.resolve(parent);
+  if (!fs.existsSync(resolved) || !fs.statSync(resolved).isDirectory()) {
+    return res.json({ success: false, error: 'Folder tidak ditemukan atau bukan directory.' });
+  }
+  try {
+    const items = fs.readdirSync(resolved);
+    const subfolders: string[] = [];
+    for (const item of items) {
+      const itemPath = path.join(resolved, item);
+      if (fs.statSync(itemPath).isDirectory()) {
+        subfolders.push(itemPath);
+      }
+    }
+    res.json({ success: true, subfolders });
+  } catch (e: any) {
+    res.json({ success: false, error: e.message });
+  }
+});
+
+app.get('/api/merge-upload/list-folders', (req, res) => {
+  const dirsToScan = [
+    path.join(__dirname, 'bahan'),
+    path.join(__dirname, 'split-videos'),
+    path.join(__dirname, 'merged-videos')
+  ];
+  const results: string[] = [];
+
+  for (const rootDir of dirsToScan) {
+    if (!fs.existsSync(rootDir)) continue;
+    try {
+      results.push(rootDir);
+      const items = fs.readdirSync(rootDir);
+      for (const item of items) {
+        const itemPath = path.join(rootDir, item);
+        if (fs.statSync(itemPath).isDirectory()) {
+          results.push(itemPath);
+          try {
+            const subItems = fs.readdirSync(itemPath);
+            for (const subItem of subItems) {
+              const subItemPath = path.join(itemPath, subItem);
+              if (fs.statSync(subItemPath).isDirectory()) {
+                results.push(subItemPath);
+              }
+            }
+          } catch {}
+        }
+      }
+    } catch {}
+  }
+  
+  // Unique absolute paths
+  const uniqueDirs = Array.from(new Set(results.map(p => path.resolve(p))));
+  res.json({ success: true, folders: uniqueDirs });
+});
+
+app.post('/api/merge-upload/merge', mergeUpload.fields([
+  { name: 'sound', maxCount: 1 }
+]), async (req: any, res) => {
+  const folder = req.body?.folder as string;
+  const soundFile = ((req.files?.sound || []) as Express.Multer.File[])[0];
+
+  if (!folder || !fs.existsSync(folder) || !fs.statSync(folder).isDirectory()) {
+    if (soundFile) try { fs.unlinkSync(soundFile.path); } catch { }
+    return res.status(400).json({ success: false, error: 'Folder tidak valid atau tidak ditemukan.' });
+  }
+
+  // Handle persistent sound file
+  const audioDir = path.join(__dirname, 'audio');
+  if (!fs.existsSync(audioDir)) {
+    fs.mkdirSync(audioDir, { recursive: true });
+  }
+  
+  let soundPathToUse = '';
+  if (soundFile) {
+    const ext = path.extname(soundFile.originalname).toLowerCase();
+    if (!['.mp3', '.wav'].includes(ext)) {
+      try { fs.unlinkSync(soundFile.path); } catch { }
+      return res.status(400).json({ success: false, error: 'Format sound harus .mp3 atau .wav.' });
+    }
+    
+    // Copy to a persistent filename
+    soundPathToUse = path.join(audioDir, `merge-upload-default${ext}`);
+    try {
+      if (fs.existsSync(soundPathToUse)) {
+        fs.unlinkSync(soundPathToUse);
+      }
+      fs.renameSync(soundFile.path, soundPathToUse);
+      
+      // Save configuration info
+      const config = loadMergeUploadConfig();
+      config.soundFileName = soundFile.originalname;
+      config.soundFilePath = soundPathToUse;
+      saveMergeUploadConfig(config);
+    } catch (e: any) {
+      console.error('[MERGE-UPLOAD] Gagal menyimpan sound default:', e);
+      // Fallback: use the temp file directly
+      soundPathToUse = soundFile.path;
+    }
+  } else {
+    // Check if there is a saved sound
+    const config = loadMergeUploadConfig();
+    if (config.soundFilePath && fs.existsSync(config.soundFilePath)) {
+      soundPathToUse = config.soundFilePath;
+    } else {
+      // Find any default file in audio/ starting with merge-upload-default
+      const files = fs.readdirSync(audioDir);
+      const defaultSound = files.find(f => f.startsWith('merge-upload-default.'));
+      if (defaultSound) {
+        soundPathToUse = path.join(audioDir, defaultSound);
+      }
+    }
+  }
+
+  if (!soundPathToUse) {
+    return res.status(400).json({ success: false, error: 'Sound belum dipilih dan tidak ada sound default yang tersimpan.' });
+  }
+
+  // Scan folder for videos
+  const videos = fs.readdirSync(folder)
+    .filter(f => {
+      const ext = path.extname(f).toLowerCase();
+      if (!VIDEO_EXTS.includes(ext)) return false;
+      // Exclude subdirectories
+      if (fs.statSync(path.join(folder, f)).isDirectory()) return false;
+      return true;
+    })
+    .sort();
+
+  if (videos.length === 0) {
+    return res.status(400).json({ success: false, error: 'Tidak ada file video di folder terpilih.' });
+  }
+
+  if (videos.length % 4 !== 0) {
+    return res.status(400).json({ success: false, error: `Jumlah video harus kelipatan 4. (Saat ini terdapat ${videos.length} video).` });
+  }
+
+  // SSE response headers
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: unknown) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const groupCount = videos.length / 4;
+  const generatedFolders: string[] = [];
+  const originalFilesToDelete: string[] = [];
+
+  let totalMerges = groupCount * 16;
+  let mergesCompleted = 0;
+  let successCount = 0;
+  let failCount = 0;
+  const errors: string[] = [];
+
+  try {
+    for (let g = 0; g < groupCount; g++) {
+      const groupVideos = videos.slice(g * 4, (g + 1) * 4);
+      const groupName = String(g + 1);
+      const groupDir = path.join(folder, groupName);
+      
+      fs.mkdirSync(groupDir, { recursive: true });
+      generatedFolders.push(groupDir);
+
+      // Track original files for deletion
+      for (const v of groupVideos) {
+        originalFilesToDelete.push(path.join(folder, v));
+      }
+
+      // Generate P(4,2) + 4 = 16 combinations
+      const combinations: { video1: string; video2: string }[] = [];
+      // Permutations (pairs where i !== j)
+      for (let i = 0; i < 4; i++) {
+        for (let j = 0; j < 4; j++) {
+          if (i !== j) {
+            combinations.push({ video1: groupVideos[i], video2: groupVideos[j] });
+          }
+        }
+      }
+      // Self-merges (i === j)
+      for (let i = 0; i < 4; i++) {
+        combinations.push({ video1: groupVideos[i], video2: groupVideos[i] });
+      }
+
+      // Execute merges
+      for (let c = 0; c < combinations.length; c++) {
+        const combo = combinations[c];
+        const v1Path = path.join(folder, combo.video1);
+        const v2Path = path.join(folder, combo.video2);
+        const base1 = path.basename(combo.video1, path.extname(combo.video1));
+        const base2 = path.basename(combo.video2, path.extname(combo.video2));
+        
+        const outputFilename = `merged_${base1}_x_${base2}.mp4`;
+        const outputPath = path.join(groupDir, outputFilename);
+
+        mergesCompleted++;
+        sendEvent('progress', {
+          current: mergesCompleted,
+          total: totalMerges,
+          message: `Grup ${groupName} [${c + 1}/16]: Merge ${combo.video1} + ${combo.video2} → ${outputFilename}`,
+          groupName,
+          video1: combo.video1,
+          video2: combo.video2,
+        });
+
+        try {
+          await mergeVideosCopyWithOptionalAudio(
+            [v1Path, v2Path],
+            outputPath,
+            soundPathToUse,
+            { tempDir: path.join(__dirname, '_tmp_uploads') }
+          );
+          successCount++;
+        } catch (err: any) {
+          failCount++;
+          const errMsg = `Grup ${groupName} Gagal merge ${combo.video1} + ${combo.video2}: ${err.message}`;
+          errors.push(errMsg);
+          console.error('[MERGE-UPLOAD-MERGE]', errMsg);
+        }
+      }
+    }
+
+    // Deletion if successful
+    if (failCount === 0) {
+      sendEvent('progress', {
+        current: mergesCompleted,
+        total: totalMerges,
+        message: `🧹 Membersihkan file video asli...`,
+      });
+      for (const filepath of originalFilesToDelete) {
+        if (fs.existsSync(filepath)) {
+          try { fs.unlinkSync(filepath); } catch {}
+        }
+      }
+      sendEvent('progress', {
+        current: mergesCompleted,
+        total: totalMerges,
+        message: `✓ Selesai membersihkan file asli.`,
+      });
+    } else {
+      sendEvent('progress', {
+        current: mergesCompleted,
+        total: totalMerges,
+        message: `⚠ Ada merge yang gagal. File video asli tidak dihapus untuk mencegah kehilangan data.`,
+      });
+    }
+
+    sendEvent('done', {
+      success: failCount === 0,
+      successCount,
+      failCount,
+      totalMerges,
+      generatedFolders: generatedFolders.map(p => ({
+        path: p,
+        name: path.basename(p)
+      })),
+      errors,
+    });
+
+  } catch (err: any) {
+    sendEvent('error', {
+      success: false,
+      error: err.message || 'Terjadi kesalahan sistem saat merge.'
+    });
+  } finally {
+    res.end();
+  }
+});
+
+app.post('/api/merge-upload/upload/start', async (req, res) => {
+  if (getIsRunning()) {
+    return res.status(400).json({ success: false, error: 'Upload sedang berjalan!' });
+  }
+
+  const config = {
+    ...req.body,
+    statesDir: STATES_DIR,
+  };
+
+  // Callback: mark video as uploaded + delete video file and check for group folder deletion
+  const onVideoUploaded = (videoFilename: string) => {
+    // 1. Mark in standard uploaded file
+    const marksFile = path.join(config.videoFolder, '.uploaded.json');
+    let marks: Record<string, boolean> = {};
+    try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+    marks[videoFilename] = true;
+    fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
+    broadcastLog(`[VIDEO_UPLOADED]:${videoFilename}`);
+
+    // 2. Delete the physical video file immediately
+    const videoPath = path.join(config.videoFolder, videoFilename);
+    if (fs.existsSync(videoPath)) {
+      try {
+        fs.unlinkSync(videoPath);
+        broadcastLog(`🗑️ File video dihapus dari disk: ${videoFilename}`);
+      } catch (e: any) {
+        broadcastLog(`⚠ Gagal menghapus file video: ${e.message}`);
+      }
+    }
+
+    // 3. Check if all video files are uploaded in the subfolder, if so, delete the subfolder and contents
+    const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+    try {
+      const remainingVideos = fs.readdirSync(config.videoFolder)
+        .filter(f => exts.includes(path.extname(f).toLowerCase()));
+
+      if (remainingVideos.length === 0) {
+        // Purge all files in the folder (including .uploaded.json etc)
+        const allFiles = fs.readdirSync(config.videoFolder);
+        for (const file of allFiles) {
+          try { fs.unlinkSync(path.join(config.videoFolder, file)); } catch {}
+        }
+        // Remove empty directory
+        fs.rmdirSync(config.videoFolder);
+        broadcastLog(`🗑️ Folder grup ${path.basename(config.videoFolder)} selesai diupload & dihapus secara otomatis!`);
+      }
+    } catch (e: any) {
+      broadcastLog(`⚠ Gagal membersihkan folder grup: ${e.message}`);
+    }
+  };
+
+  res.json({ success: true, message: 'Upload dimulai' });
+  runUpload(config, broadcastLog, onVideoUploaded).then(() => {
+    broadcastLog('===== UPLOAD PROCESS FINISHED =====');
+  }).catch(e => {
+    broadcastLog('❌ Fatal: ' + e.message);
+  });
 });
 
 app.get('/', (req, res) => {
@@ -3159,6 +3540,418 @@ app.get('/api/grokbot/logs', (req, res) => {
     const idx = grokbotSseClients.indexOf(res);
     if (idx >= 0) grokbotSseClients.splice(idx, 1);
   });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  LEONARDO AI INTEGRATION APIs
+// ═══════════════════════════════════════════════════════════
+
+app.get('/leonardo', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'leonardo.html'));
+});
+
+app.get('/api/leonardo/config', (req, res) => {
+  try {
+    const data = loadLeonardoData();
+    const leonardoBahanDir = path.join(__dirname, 'bahan', 'leonardo');
+    if (!fs.existsSync(leonardoBahanDir)) {
+      fs.mkdirSync(leonardoBahanDir, { recursive: true });
+    }
+
+    const folders = fs.readdirSync(leonardoBahanDir)
+      .filter(f => fs.statSync(path.join(leonardoBahanDir, f)).isDirectory());
+
+    const bahanList = folders.map(folderName => {
+      const folderPath = path.join(leonardoBahanDir, folderName);
+      const files = fs.readdirSync(folderPath)
+        .filter(f => ['.png', '.jpg', '.jpeg', '.webp'].includes(path.extname(f).toLowerCase()))
+        .map(f => `/bahan/leonardo/${folderName}/${f}`);
+      return {
+        name: folderName,
+        images: files
+      };
+    });
+
+    res.json({
+      accounts: data.accounts.map(acc => ({
+        id: acc.id,
+        name: acc.name,
+        email: acc.email,
+        credits: acc.credits,
+        isActive: acc.isActive
+      })),
+      prompts: data.prompts,
+      bahan: bahanList
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/leonardo/accounts/add', async (req, res) => {
+  const { name, cookies } = req.body;
+  if (!name || !cookies) {
+    return res.status(400).json({ error: 'Nama dan Cookies wajib diisi.' });
+  }
+
+  try {
+    const token = await getFreshJWT(cookies);
+    const details = await fetchCreditBalance(token);
+    const data = loadLeonardoData();
+
+    const hasActive = data.accounts.some(acc => acc.isActive);
+
+    const newAccount: LeonardoAccount = {
+      id: `acc_${Date.now()}`,
+      name,
+      cookies,
+      isActive: !hasActive,
+      email: details.email,
+      credits: details.credits
+    };
+
+    data.accounts.push(newAccount);
+    saveLeonardoData(data);
+
+    res.json({ success: true, account: newAccount });
+  } catch (err: any) {
+    console.error('Error adding Leonardo account:', err);
+    res.status(500).json({ error: err.message || 'Gagal memverifikasi cookie sesi Leonardo.' });
+  }
+});
+
+app.post('/api/leonardo/accounts/activate', (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'ID akun diperlukan' });
+
+  const data = loadLeonardoData();
+  let activatedName = '';
+  data.accounts.forEach(acc => {
+    if (acc.id === id) {
+      acc.isActive = true;
+      activatedName = acc.name;
+    } else {
+      acc.isActive = false;
+    }
+  });
+
+  if (!activatedName) {
+    return res.status(404).json({ error: 'Akun tidak ditemukan' });
+  }
+
+  saveLeonardoData(data);
+  res.json({ success: true, message: `Akun "${activatedName}" berhasil diaktifkan.` });
+});
+
+app.post('/api/leonardo/accounts/delete', (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'ID akun diperlukan' });
+
+  const data = loadLeonardoData();
+  const index = data.accounts.findIndex(acc => acc.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Akun tidak ditemukan' });
+  }
+
+  const deleted = data.accounts.splice(index, 1)[0];
+
+  if (deleted.isActive && data.accounts.length > 0) {
+    data.accounts[0].isActive = true;
+  }
+
+  saveLeonardoData(data);
+  res.json({ success: true, message: `Akun "${deleted.name}" berhasil dihapus.` });
+});
+
+app.post('/api/leonardo/accounts/refresh', async (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'ID akun diperlukan' });
+
+  const data = loadLeonardoData();
+  const account = data.accounts.find(acc => acc.id === id);
+  if (!account) return res.status(404).json({ error: 'Akun tidak ditemukan' });
+
+  try {
+    const token = await getFreshJWT(account.cookies);
+    const details = await fetchCreditBalance(token);
+    account.email = details.email;
+    account.credits = details.credits;
+    saveLeonardoData(data);
+    res.json({ success: true, credits: details.credits, email: details.email });
+  } catch (err: any) {
+    console.error('Error refreshing credits:', err);
+    res.status(500).json({ error: err.message || 'Gagal merefresh saldo kredit.' });
+  }
+});
+
+app.post('/api/leonardo/prompts/save', (req, res) => {
+  const { name, prompt } = req.body;
+  if (!name || !prompt) {
+    return res.status(400).json({ error: 'Nama dan isi prompt wajib diisi.' });
+  }
+
+  const data = loadLeonardoData();
+  const newPrompt: LeonardoPrompt = {
+    id: `prompt_${Date.now()}`,
+    name,
+    prompt
+  };
+
+  data.prompts.push(newPrompt);
+  saveLeonardoData(data);
+  res.json({ success: true, prompt: newPrompt });
+});
+
+app.post('/api/leonardo/prompts/delete', (req, res) => {
+  const { id } = req.body;
+  if (!id) return res.status(400).json({ error: 'ID prompt diperlukan' });
+
+  const data = loadLeonardoData();
+  const index = data.prompts.findIndex(p => p.id === id);
+  if (index === -1) {
+    return res.status(404).json({ error: 'Prompt tidak ditemukan' });
+  }
+
+  const deleted = data.prompts.splice(index, 1)[0];
+  saveLeonardoData(data);
+  res.json({ success: true, message: `Prompt "${deleted.name}" berhasil dihapus.` });
+});
+
+app.post('/api/leonardo/bahan/upload', bahanUpload.array('images', 100), (req: any, res) => {
+  const folderName = req.body.folderName;
+  if (!folderName) {
+    return res.status(400).json({ error: 'Nama bahan (folderName) diperlukan.' });
+  }
+
+  const leonardoBahanDir = path.join(__dirname, 'bahan', 'leonardo');
+  const targetDir = path.join(leonardoBahanDir, folderName.trim());
+  if (!fs.existsSync(targetDir)) {
+    fs.mkdirSync(targetDir, { recursive: true });
+  }
+
+  const files = req.files as Express.Multer.File[];
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: 'Tidak ada file foto yang dipilih.' });
+  }
+
+  try {
+    for (const f of files) {
+      const dest = path.join(targetDir, f.originalname);
+      fs.renameSync(f.path, dest);
+    }
+    res.json({ success: true, count: files.length, folderName });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/leonardo/bahan/delete', (req, res) => {
+  const { name } = req.body;
+  if (!name) return res.status(400).json({ error: 'Nama bahan diperlukan' });
+
+  const leonardoBahanDir = path.join(__dirname, 'bahan', 'leonardo');
+  const targetDir = path.join(leonardoBahanDir, name);
+  if (!fs.existsSync(targetDir)) {
+    return res.status(404).json({ error: 'Bahan tidak ditemukan' });
+  }
+
+  try {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    res.json({ success: true, message: `Bahan "${name}" berhasil dihapus.` });
+  } catch (err: any) {
+    res.status(500).json({ error: `Gagal menghapus folder: ${err.message}` });
+  }
+});
+
+app.post('/api/leonardo/generate', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: any) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const { promptText, duration, mode, aspectRatio, motion_has_audio, imagePath, accountId, targetFolder } = req.body;
+
+  try {
+    // 1. Get active account
+    sendEvent('progress', { percent: 5, message: 'Membaca akun aktif...' });
+    const db = loadLeonardoData();
+    const activeAcc = accountId 
+      ? db.accounts.find(a => a.id === accountId)
+      : db.accounts.find(a => a.isActive);
+
+    if (!activeAcc) {
+      throw new Error(accountId ? 'Akun Leonardo yang dipilih tidak ditemukan.' : 'Tidak ada akun Leonardo yang diaktifkan. Silakan aktifkan akun terlebih dahulu di Manajemen Akun.');
+    }
+
+    // 2. Fetch fresh token
+    sendEvent('progress', { percent: 15, message: `Menghubungkan ke "${activeAcc.name}" & mengambil token JWT...` });
+    const token = await getFreshJWT(activeAcc.cookies);
+
+    // 3. Check & refresh credit balance
+    const creditDetails = await fetchCreditBalance(token);
+    activeAcc.email = creditDetails.email;
+    activeAcc.credits = creditDetails.credits;
+    saveLeonardoData(db);
+
+    // 4. Upload init image if provided
+    let imageId: string | undefined;
+    if (imagePath) {
+      sendEvent('progress', { percent: 30, message: 'Mengunggah gambar referensi ke Leonardo AI S3...' });
+      
+      // Front-end sends path like /bahan/leonardo/... We resolve it locally.
+      const relativePath = imagePath.startsWith('/') ? imagePath.substring(1) : imagePath;
+      const physicalPath = path.join(__dirname, relativePath);
+      
+      if (!fs.existsSync(physicalPath)) {
+        throw new Error(`File gambar referensi tidak ditemukan di path: ${physicalPath}`);
+      }
+      
+      imageId = await uploadInitImage(token, physicalPath);
+      sendEvent('progress', { percent: 45, message: 'Gambar referensi berhasil diunggah!' });
+    }
+
+    // 5. Trigger Kling generation
+    sendEvent('progress', { percent: 55, message: 'Memicu generasi video model Kling-3.0...' });
+    
+    let width = 720;
+    let height = 1280;
+    if (aspectRatio === '16:9') {
+      width = 1280;
+      height = 720;
+    } else if (aspectRatio === '1:1') {
+      width = 960;
+      height = 960;
+    }
+
+    const generationId = await triggerKlingGenerate(token, {
+      prompt: promptText,
+      imageId,
+      duration: parseInt(duration) || 10,
+      width,
+      height,
+      mode: mode || 'RESOLUTION_720',
+      motion_has_audio: !!motion_has_audio
+    });
+
+    sendEvent('progress', { percent: 65, message: `Video dipicu sukses! ID: ${generationId}. Mulai polling status...` });
+
+    // 6. Polling status loop
+    let isComplete = false;
+    let attempts = 0;
+    const maxAttempts = 100; // 5-6 mins max
+    let currentStatus = 'PENDING';
+    
+    while (!isComplete && attempts < maxAttempts) {
+      attempts++;
+      await new Promise(r => setTimeout(r, 4000));
+
+      currentStatus = await checkGenerationStatus(token, generationId);
+      sendEvent('progress', { 
+        percent: Math.min(90, 65 + Math.floor(attempts * 1.2)), 
+        message: `Menunggu generasi video... Status: ${currentStatus} (Polling #${attempts})` 
+      });
+
+      if (currentStatus === 'COMPLETE' || currentStatus === 'COMPLETED') {
+        isComplete = true;
+      } else if (currentStatus === 'FAILED' || currentStatus === 'ERROR') {
+        throw new Error('Generasi video di Leonardo AI gagal atau ditolak.');
+      }
+    }
+
+    if (!isComplete) {
+      throw new Error('Waktu generasi video habis (timeout). Silakan periksa dashboard Leonardo Anda.');
+    }
+
+    // 7. Get final video URL
+    sendEvent('progress', { percent: 92, message: 'Video selesai! Mengambil URL unduhan S3...' });
+    const result = await fetchGenerationVideoUrl(token, generationId);
+
+    // 8. Download video to local static
+    sendEvent('progress', { percent: 95, message: 'Mengunduh file video ke server lokal...' });
+    const localDownloadUrl = await downloadVideoToLocal(result.videoUrl, generationId);
+
+    // Copy to target folder if specified
+    if (targetFolder && fs.existsSync(targetFolder)) {
+      try {
+        const physicalPath = path.join(__dirname, 'public', localDownloadUrl);
+        if (fs.existsSync(physicalPath)) {
+          const dest = path.join(targetFolder, path.basename(localDownloadUrl));
+          fs.copyFileSync(physicalPath, dest);
+          sendEvent('progress', { percent: 98, message: `Berhasil menyalin video ke folder lokal: ${dest}` });
+        }
+      } catch (copyErr: any) {
+        console.warn('Gagal menyalin file ke folder lokal target:', copyErr);
+      }
+    }
+
+    // 9. Success
+    sendEvent('done', {
+      success: true,
+      videoUrl: localDownloadUrl,
+      thumbnailUrl: result.thumbnailUrl,
+      message: 'Video berhasil dibuat!'
+    });
+
+  } catch (err: any) {
+    console.error('[LEONARDO-GENERATE] SSE Error:', err);
+    sendEvent('error', {
+      success: false,
+      error: err.message || 'Gagal melakukan generasi video Leonardo.'
+    });
+  } finally {
+    res.end();
+  }
+});
+
+app.get('/api/leonardo/select-folder', (req, res) => {
+  const psCommand = `powershell -NoProfile -Command "[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; $g = New-Object System.Windows.Forms.FolderBrowserDialog; $g.ShowDialog() | Out-Null; $g.SelectedPath"`;
+  exec(psCommand, (err, stdout) => {
+    if (err) {
+      return res.status(500).json({ error: err.message });
+    }
+    const selectedPath = stdout.trim();
+    res.json({ success: true, path: selectedPath });
+  });
+});
+
+app.get('/api/leonardo/preview-local', (req, res) => {
+  const filePath = req.query.path as string;
+  if (!filePath || !fs.existsSync(filePath)) {
+    return res.status(404).send('File video tidak ditemukan.');
+  }
+  res.sendFile(filePath);
+});
+
+app.post('/api/leonardo/scan-folder', (req, res) => {
+  const { folderPath } = req.body;
+  if (!folderPath || !fs.existsSync(folderPath)) {
+    return res.json({ success: true, videos: [] });
+  }
+  try {
+    const files = fs.readdirSync(folderPath);
+    const videos = files
+      .filter(f => f.toLowerCase().endsWith('.mp4') && f.toLowerCase().startsWith('leonardo-'))
+      .map(f => {
+        const fullPath = path.join(folderPath, f);
+        const stats = fs.statSync(fullPath);
+        return {
+          filename: f,
+          fullPath,
+          mtime: stats.mtime.getTime()
+        };
+      });
+    
+    // Urutkan berdasarkan waktu modifikasi terbaru (newest first)
+    videos.sort((a, b) => b.mtime - a.mtime);
+    res.json({ success: true, videos });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // Jalankan server

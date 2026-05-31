@@ -1,0 +1,2384 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Leonardo AI Video Generator</title>
+  <!-- Google Fonts Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Outfit', 'Plus Jakarta Sans', 'sans-serif'],
+          },
+        }
+      }
+    }
+  </script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <style>
+    /* Premium Glassmorphism & Neon Glow Styles */
+    body {
+      background: linear-gradient(135deg, #090B11 0%, #111422 50%, #07090D 100%);
+      min-height: 100vh;
+      color: #E2E8F0;
+    }
+    .glass-panel {
+      background: rgba(17, 24, 39, 0.55);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
+    }
+    .glass-input {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #F8FAFC;
+    }
+    .glass-input:focus {
+      background: rgba(255, 255, 255, 0.06);
+      border-color: #A78BFA;
+      box-shadow: 0 0 15px rgba(167, 139, 250, 0.2);
+    }
+    .btn-glow-purple {
+      background: linear-gradient(135deg, #8B5CF6 0%, #6D28D9 100%);
+      box-shadow: 0 0 20px rgba(139, 92, 246, 0.4);
+      transition: all 0.3s ease;
+    }
+    .btn-glow-purple:hover {
+      box-shadow: 0 0 30px rgba(139, 92, 246, 0.7);
+      transform: translateY(-2px);
+    }
+    .btn-glow-pink {
+      background: linear-gradient(135deg, #EC4899 0%, #BE185D 100%);
+      box-shadow: 0 0 20px rgba(236, 72, 153, 0.4);
+      transition: all 0.3s ease;
+    }
+    .btn-glow-pink:hover {
+      box-shadow: 0 0 30px rgba(236, 72, 153, 0.7);
+      transform: translateY(-2px);
+    }
+    /* Hide scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(0, 0, 0, 0.1);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(167, 139, 250, 0.3);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(167, 139, 250, 0.5);
+    }
+    /* Glowing loader animation */
+    @keyframes pulse-glow {
+      0%, 100% {
+        box-shadow: 0 0 15px rgba(139, 92, 246, 0.4), inset 0 0 15px rgba(139, 92, 246, 0.2);
+      }
+      50% {
+        box-shadow: 0 0 35px rgba(236, 72, 153, 0.7), inset 0 0 25px rgba(236, 72, 153, 0.4);
+      }
+    }
+    .pulsing-loader {
+      animation: pulse-glow 3s infinite alternate;
+    }
+  </style>
+</head>
+<body class="font-sans antialiased text-gray-200">
+
+  <!-- Outer Wrapper -->
+  <div class="flex h-screen overflow-hidden">
+
+    <!-- 1. SIDEBAR -->
+    <aside class="w-80 glass-panel border-r border-gray-800 flex flex-col justify-between shrink-0">
+      <div>
+        <!-- Logo -->
+        <div class="p-6 border-b border-gray-800 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center shadow-lg shadow-purple-900/50">
+            <i class="fa-solid fa-wand-magic-sparkles text-lg text-white"></i>
+          </div>
+          <div>
+            <h1 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">LEOSTUDIO</h1>
+            <p class="text-xs text-purple-400 font-semibold tracking-widest uppercase">Kling-3.0 Engine</p>
+          </div>
+        </div>
+
+        <!-- Navigation Menu -->
+        <nav class="p-4 space-y-2">
+          <button onclick="switchTab('generate')" id="btn-tab-generate" 
+                  class="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group bg-purple-600/10 border border-purple-500/20 text-purple-300">
+            <i class="fa-solid fa-clapperboard text-lg group-hover:scale-110 transition duration-200"></i>
+            <span>Video Generate</span>
+          </button>
+          <button onclick="switchTab('brutal')" id="btn-tab-brutal" 
+                  class="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent">
+            <i class="fa-solid fa-bolt-lightning text-lg group-hover:scale-110 transition duration-200 text-pink-400"></i>
+            <span>⚡ Brutal-Generate</span>
+          </button>
+          <button onclick="switchTab('infinite')" id="btn-tab-infinite" 
+                  class="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent">
+            <i class="fa-solid fa-infinity text-lg group-hover:scale-110 transition duration-200 text-purple-400 animate-pulse"></i>
+            <span>♾️ Infinite-Generate</span>
+          </button>
+          <button onclick="switchTab('accounts')" id="btn-tab-accounts" 
+                  class="w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent">
+            <i class="fa-solid fa-users-gear text-lg group-hover:scale-110 transition duration-200"></i>
+            <span>Manajemen Akun</span>
+          </button>
+        </nav>
+      </div>
+
+      <!-- Global Credit Display & Quick Back Nav -->
+      <div class="p-4 border-t border-gray-800 space-y-4">
+        <div class="glass-panel p-4 rounded-2xl border border-white/5 bg-black/10 flex items-center gap-3">
+          <div class="w-10 h-10 rounded-xl bg-pink-500/10 border border-pink-500/20 flex items-center justify-center text-pink-400 shrink-0">
+            <i class="fa-solid fa-globe text-base animate-pulse"></i>
+          </div>
+          <div>
+            <p class="text-[9px] text-gray-400 font-bold uppercase tracking-wider">Kredit Global Semua Akun</p>
+            <h4 id="global-credits-display" class="text-sm font-black text-pink-400 mt-0.5">-- tokens</h4>
+          </div>
+        </div>
+
+        <a href="/" class="w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-2xl bg-white/5 border border-white/10 text-gray-300 font-semibold text-sm hover:bg-white/10 transition">
+          <i class="fa-solid fa-arrow-left-long"></i>
+          <span>Navigasi Bot Utama</span>
+        </a>
+      </div>
+    </aside>
+
+    <!-- 2. MAIN CONTAINER -->
+    <main class="flex-1 flex flex-col overflow-y-auto relative p-8">
+
+      <!-- ================= GENERATE TAB ================= -->
+      <section id="tab-generate" class="space-y-6 max-w-5xl mx-auto w-full">
+        <!-- Header / Account Overview -->
+        <div class="glass-panel rounded-3xl p-6 flex flex-wrap justify-between items-center gap-4">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400">
+              <i class="fa-solid fa-user-shield text-2xl"></i>
+            </div>
+            <div>
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Akun Leonardo Aktif</p>
+              <h2 id="active-account-name" class="text-xl font-bold text-gray-100">Menghubungkan...</h2>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Sisa Kredit</p>
+              <p id="active-account-credits" class="text-2xl font-black text-purple-400">-- tokens</p>
+            </div>
+            <button onclick="refreshActiveAccount()" id="btn-refresh-credit" 
+                    class="p-3.5 rounded-2xl bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition active:scale-95" title="Refresh Kredit">
+              <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- Generate Config Panel -->
+          <div class="lg:col-span-7 space-y-6">
+            <div class="glass-panel rounded-3xl p-6 space-y-6">
+              <h3 class="text-lg font-bold flex items-center gap-2 border-b border-gray-800 pb-3">
+                <i class="fa-solid fa-sliders text-purple-400"></i>
+                <span>Konfigurasi Kling-3.0</span>
+              </h3>
+
+              <!-- Prompt Dropdown Selection -->
+              <div class="space-y-2">
+                <label class="block text-sm font-semibold text-gray-400">Pilih Template Prompt</label>
+                <select id="select-prompt" onchange="applyPromptTemplate()" class="w-full glass-input rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="">-- Pilih Prompt Template (Opsional) --</option>
+                </select>
+              </div>
+
+              <!-- Raw Prompt Input -->
+              <div class="space-y-2">
+                <label class="block text-sm font-semibold text-gray-400">Ketik Prompt Detail Anda</label>
+                <textarea id="input-prompt-text" rows="5" placeholder="Masukkan detail prompt pembuatan video Anda di sini..." 
+                          class="w-full glass-input rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm leading-relaxed"></textarea>
+              </div>
+
+              <!-- Bahan Dropdown -->
+              <div class="space-y-2">
+                <label class="block text-sm font-semibold text-gray-400">Pilih Bahan Referensi Gambar</label>
+                <select id="select-bahan" onchange="loadBahanPhotos()" class="w-full glass-input rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                  <option value="">-- Tanpa Gambar (Text to Video) --</option>
+                </select>
+              </div>
+
+              <!-- Bahan Photo Selector Grid -->
+              <div id="bahan-photos-container" class="hidden space-y-3 bg-white/5 border border-white/10 p-4 rounded-2xl">
+                <p class="text-xs font-semibold text-purple-400 uppercase tracking-wider"><i class="fa-regular fa-image"></i> Pilih Gambar Referensi Mulai (Start Frame)</p>
+                <div id="bahan-photos-grid" class="grid grid-cols-4 sm:grid-cols-5 gap-3 max-h-48 overflow-y-auto p-1">
+                  <!-- Photos rendered here -->
+                </div>
+              </div>
+
+              <!-- Sliders & Selects Grid -->
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Duration Slider -->
+                <div class="space-y-2 md:col-span-2">
+                  <div class="flex justify-between items-center">
+                    <label class="text-sm font-semibold text-gray-400">Durasi Video</label>
+                    <span id="label-duration" class="px-3 py-1 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-xs font-bold">10 detik</span>
+                  </div>
+                  <input type="range" id="input-duration" min="1" max="15" value="10" oninput="updateDurationLabel()"
+                         class="w-full h-2 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                  <div class="flex justify-between text-[10px] text-gray-500 px-1">
+                    <span>1s</span>
+                    <span>5s</span>
+                    <span>10s (Default)</span>
+                    <span>15s</span>
+                  </div>
+                </div>
+
+                <!-- Quality Select -->
+                <div class="space-y-2">
+                  <label class="block text-sm font-semibold text-gray-400">Resolusi / Kualitas</label>
+                  <select id="select-quality" class="w-full glass-input rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="RESOLUTION_720" selected>HD 720p (Sangat Direkomendasikan)</option>
+                    <option value="RESOLUTION_1080">FHD 1080p</option>
+                  </select>
+                </div>
+
+                <!-- Aspect Ratio Select -->
+                <div class="space-y-2">
+                  <label class="block text-sm font-semibold text-gray-400">Rasio Video</label>
+                  <select id="select-aspect" class="w-full glass-input rounded-2xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-purple-500">
+                    <option value="9:16" selected>🎬 9:16 (Vertikal - TikTok/Reels)</option>
+                    <option value="16:9">🖥️ 16:9 (Landscape - YouTube)</option>
+                    <option value="1:1">⬛ 1:1 (Square - Feed)</option>
+                  </select>
+                </div>
+
+                <!-- Audio Select Toggle -->
+                <div class="space-y-2 md:col-span-2">
+                  <label class="block text-sm font-semibold text-gray-400">Suara Video (Audio)</label>
+                  <div class="grid grid-cols-2 gap-4">
+                    <button onclick="setAudio(false)" id="btn-audio-off" 
+                            class="py-3 px-4 rounded-2xl font-semibold border text-sm transition text-purple-300 border-purple-500/30 bg-purple-600/10">
+                      <i class="fa-solid fa-volume-xmark mr-2"></i> Tanpa Audio
+                    </button>
+                    <button onclick="setAudio(true)" id="btn-audio-on" 
+                            class="py-3 px-4 rounded-2xl font-semibold border text-sm transition text-gray-400 border-white/10 hover:bg-white/5">
+                      <i class="fa-solid fa-volume-high mr-2"></i> Dengan Audio
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Action button -->
+              <button onclick="triggerLeonardoGenerate()" id="btn-submit-generate" 
+                      class="w-full py-5 btn-glow-purple text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-3 select-none">
+                <i class="fa-solid fa-wand-magic-sparkles"></i>
+                <span>Mulai Generate Video</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Video Preview & Real-time Console Panel -->
+          <div class="lg:col-span-5 space-y-6">
+            <!-- Pulsing Loading Indicator & Interactive Preview Card -->
+            <div class="glass-panel rounded-3xl p-6 min-h-[350px] flex flex-col justify-between relative overflow-hidden">
+              <h3 class="text-lg font-bold flex items-center gap-2 border-b border-gray-800 pb-3">
+                <i class="fa-solid fa-tv text-pink-500"></i>
+                <span>Preview Output</span>
+              </h3>
+
+              <!-- State A: Waiting Input -->
+              <div id="preview-waiting" class="flex-1 flex flex-col items-center justify-center text-center p-8 space-y-4">
+                <div class="w-20 h-20 rounded-full bg-white/5 border border-white/10 flex items-center justify-center text-gray-500">
+                  <i class="fa-solid fa-photo-film text-3xl"></i>
+                </div>
+                <div>
+                  <h4 class="font-bold text-gray-300">Belum Ada Video</h4>
+                  <p class="text-xs text-gray-500 mt-1">Konfigurasikan opsi Kling-3.0 di samping lalu klik generate video</p>
+                </div>
+              </div>
+
+              <!-- State B: Glowing Pulse Generating -->
+              <div id="preview-generating" class="hidden flex-1 flex flex-col items-center justify-center text-center p-8 space-y-6">
+                <div class="w-28 h-28 rounded-full border border-purple-500/25 pulsing-loader flex items-center justify-center relative">
+                  <div class="absolute inset-2 rounded-full border border-dashed border-purple-400/40 animate-spin" style="animation-duration: 10s"></div>
+                  <i class="fa-solid fa-wand-magic-sparkles text-4xl text-purple-400"></i>
+                </div>
+                <div class="space-y-2">
+                  <h4 id="generating-status-title" class="font-bold text-purple-300 text-lg">Memulai Generator...</h4>
+                  <p id="generating-status-message" class="text-xs text-gray-400 max-w-sm">Mohon tunggu, kami sedang menyiapkan sesi aman...</p>
+                </div>
+              </div>
+
+              <!-- State C: Complete Player & Downloader -->
+              <div id="preview-success" class="hidden flex-1 flex flex-col justify-between py-4 space-y-4">
+                <div class="relative w-full rounded-2xl overflow-hidden border border-white/10 bg-black aspect-[9/16] max-h-[360px] flex items-center justify-center">
+                  <video id="output-video-player" controls class="w-full h-full object-contain"></video>
+                </div>
+                
+                <div class="space-y-3">
+                  <div class="flex gap-2">
+                    <a href="" id="btn-download-video" download 
+                       class="flex-1 py-4 btn-glow-pink text-white text-center font-bold rounded-2xl block text-sm select-none">
+                      <i class="fa-solid fa-cloud-arrow-down mr-2"></i> Download Video (.mp4)
+                    </a>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Terminal SSE Logs Console -->
+            <div class="glass-panel rounded-3xl p-6 space-y-3">
+              <div class="flex justify-between items-center border-b border-gray-800 pb-3">
+                <h3 class="text-xs font-bold tracking-widest text-gray-400 uppercase flex items-center gap-2">
+                  <i class="fa-solid fa-terminal text-purple-400"></i>
+                  <span>Alur Generator Log</span>
+                </h3>
+                <span class="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+              </div>
+              <!-- Log window -->
+              <div id="sse-console-log" class="h-44 overflow-y-auto bg-black/60 p-4 rounded-2xl border border-white/5 font-mono text-[10px] text-green-400 space-y-2 select-text">
+                <div class="text-gray-500">// Menunggu instruksi generate...</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= BRUTAL-GENERATE TAB ================= -->
+      <section id="tab-brutal" class="hidden space-y-6 max-w-[1500px] mx-auto w-full">
+        <!-- Header / Overall Controls -->
+        <div class="glass-panel rounded-3xl p-6 flex flex-wrap justify-between items-center gap-6">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 shrink-0">
+              <i class="fa-solid fa-bolt-lightning text-2xl animate-bounce"></i>
+            </div>
+            <div>
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Multi-Render Engine</p>
+              <h2 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-400 to-purple-400">Brutal-Generate (5 Workers Paralel)</h2>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-4">
+            <!-- Folder Selector Form -->
+            <div class="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-2xl max-w-sm">
+              <i class="fa-regular fa-folder text-gray-400 text-sm"></i>
+              <input type="text" id="brutal-target-folder" placeholder="Folder Penyimpanan Lokal (Opsional)" 
+                     class="bg-transparent border-none text-xs text-gray-100 placeholder-gray-500 focus:outline-none w-48 py-1">
+              <button onclick="selectLocalFolder()" class="px-2.5 py-1 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 text-[10px] font-bold transition">
+                Pilih Folder
+              </button>
+            </div>
+
+            <button onclick="applyWorkerOneToAll()" 
+                    class="px-4 py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 font-bold rounded-2xl text-xs transition flex items-center gap-2">
+              <i class="fa-solid fa-copy text-pink-400"></i>
+              <span>Aplikasikan W1 ke Semua</span>
+            </button>
+            
+            <button onclick="downloadAllBrutalVideos()" id="btn-download-all-brutal" disabled
+                    class="px-4 py-3.5 bg-white/5 border border-white/10 text-gray-500 rounded-2xl text-xs font-bold transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
+              <span>Unduh Semua</span>
+            </button>
+
+            <button onclick="triggerBrutalGenerateAll()" id="btn-brutal-submit-all" 
+                    class="px-6 py-3.5 btn-glow-pink text-white text-xs font-bold rounded-2xl flex items-center gap-2 select-none">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Mulai Generate Semua</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5-Worker Cards Grid Container -->
+        <div id="brutal-workers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <!-- Rendered Dynamically via JS to avoid massive HTML repetition -->
+        </div>
+      </section>
+
+      <!-- ================= BRUTAL-GENERATE TAB ================= -->
+      <section id="tab-brutal" class="hidden space-y-6 max-w-[1500px] mx-auto w-full">
+        <!-- Header / Overall Controls -->
+        <div class="glass-panel rounded-3xl p-6 flex flex-wrap justify-between items-center gap-6">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-pink-500/10 border border-pink-500/30 flex items-center justify-center text-pink-400 shrink-0">
+              <i class="fa-solid fa-bolt-lightning text-2xl animate-bounce"></i>
+            </div>
+            <div>
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Multi-Render Engine</p>
+              <h2 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-pink-400 to-purple-400">Brutal-Generate (5 Workers Paralel)</h2>
+            </div>
+          </div>
+
+          <div class="flex flex-wrap items-center gap-4">
+            <!-- Folder Selector Form -->
+            <div class="flex items-center gap-2 bg-white/5 border border-white/10 px-4 py-2 rounded-2xl max-w-sm">
+              <i class="fa-regular fa-folder text-gray-400 text-sm"></i>
+              <input type="text" id="brutal-target-folder" placeholder="Folder Penyimpanan Lokal (Opsional)" 
+                     class="bg-transparent border-none text-xs text-gray-100 placeholder-gray-500 focus:outline-none w-48 py-1">
+              <button onclick="selectLocalFolder()" class="px-2.5 py-1 rounded-xl bg-purple-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 text-[10px] font-bold transition">
+                Pilih Folder
+              </button>
+            </div>
+
+            <button onclick="applyWorkerOneToAll()" 
+                    class="px-4 py-3.5 bg-white/5 border border-white/10 hover:bg-white/10 text-gray-300 font-bold rounded-2xl text-xs transition flex items-center gap-2">
+              <i class="fa-solid fa-copy text-pink-400"></i>
+              <span>Aplikasikan W1 ke Semua</span>
+            </button>
+            
+            <button onclick="downloadAllBrutalVideos()" id="btn-download-all-brutal" disabled
+                    class="px-4 py-3.5 bg-white/5 border border-white/10 text-gray-500 rounded-2xl text-xs font-bold transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-cloud-arrow-down"></i>
+              <span>Unduh Semua</span>
+            </button>
+
+            <button onclick="triggerBrutalGenerateAll()" id="btn-brutal-submit-all" 
+                    class="px-6 py-3.5 btn-glow-pink text-white text-xs font-bold rounded-2xl flex items-center gap-2 select-none">
+              <i class="fa-solid fa-wand-magic-sparkles"></i>
+              <span>Mulai Generate Semua</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- 5-Worker Cards Grid Container -->
+        <div id="brutal-workers-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <!-- Rendered Dynamically via JS to avoid massive HTML repetition -->
+        </div>
+      </section>
+
+      <!-- ================= BRUTAL-GENERATE TAB END ================= -->
+
+      <!-- ================= INFINITE-GENERATE TAB ================= -->
+      <section id="tab-infinite" class="hidden space-y-6 max-w-[1500px] mx-auto w-full">
+        <!-- Header / Account Overview -->
+        <div class="glass-panel rounded-3xl p-6 flex flex-wrap justify-between items-center gap-6">
+          <div class="flex items-center gap-4">
+            <div class="w-12 h-12 rounded-2xl bg-purple-500/10 border border-purple-500/30 flex items-center justify-center text-purple-400 shrink-0">
+              <i class="fa-solid fa-infinity text-2xl animate-spin" style="animation-duration: 6s"></i>
+            </div>
+            <div>
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Otomatisasi Loop Render</p>
+              <h2 class="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-400">Infinite-Generate (Auto-Switch Account)</h2>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-6">
+            <div class="text-right">
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Akun Aktif</p>
+              <p id="infinite-active-account" class="text-sm font-bold text-gray-100">Menghubungkan...</p>
+            </div>
+            <div class="text-right">
+              <p class="text-xs text-gray-400 font-semibold uppercase tracking-wider">Kredit Akun</p>
+              <p id="infinite-active-credits" class="text-base font-black text-purple-400">-- tokens</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <!-- Left Panel: Configuration Form -->
+          <div class="lg:col-span-5 space-y-6">
+            <div class="glass-panel rounded-3xl p-6 space-y-5">
+              <h3 class="text-base font-bold flex items-center gap-2 border-b border-gray-800 pb-3">
+                <i class="fa-solid fa-gears text-purple-400"></i>
+                <span>Setelan Video & Loop</span>
+              </h3>
+
+              <!-- Prompt Template -->
+              <div class="space-y-1">
+                <label class="block text-xs font-semibold text-gray-400">Pilih Template Prompt</label>
+                <select id="infinite-prompt-select" onchange="applyInfinitePromptTemplate()" class="w-full glass-input rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500">
+                  <option value="">-- Pilih Prompt Template (Opsional) --</option>
+                </select>
+              </div>
+
+              <!-- Raw Prompt textarea -->
+              <div class="space-y-1">
+                <label class="block text-xs font-semibold text-gray-400">Ketik Prompt Detail</label>
+                <textarea id="infinite-prompt-text" rows="4" placeholder="Detail prompt pembuatan video..." 
+                          class="w-full glass-input rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500 leading-relaxed"></textarea>
+              </div>
+
+              <!-- Bahan folder selection -->
+              <div class="space-y-1">
+                <label class="block text-xs font-semibold text-gray-400">Pilih Bahan Folder</label>
+                <select id="infinite-bahan" onchange="loadInfiniteBahanPhotos()" class="w-full glass-input rounded-xl px-3 py-2.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500">
+                  <option value="">-- Tanpa Gambar (Text to Video) --</option>
+                </select>
+              </div>
+
+              <!-- Selected Image Preview & Selector (Horizontal list) -->
+              <div id="infinite-photo-preview-container" class="hidden space-y-1.5 p-2 rounded-xl bg-black/40 border border-white/5">
+                <p class="text-[9px] font-bold text-purple-400 uppercase tracking-wider"><i class="fa-regular fa-image"></i> Pilih Gambar Referensi Mulai:</p>
+                <div id="infinite-photos-scroll" class="flex gap-2 overflow-x-auto pb-1.5 pt-0.5">
+                  <!-- Images rendered dynamically -->
+                </div>
+              </div>
+
+              <!-- Parameters Grid -->
+              <div class="grid grid-cols-2 gap-4">
+                <!-- Duration slider -->
+                <div class="space-y-1 col-span-2">
+                  <div class="flex justify-between text-xs">
+                    <label class="font-semibold text-gray-400">Durasi Video</label>
+                    <span id="infinite-duration-label" class="text-purple-400 font-bold">10 detik</span>
+                  </div>
+                  <input type="range" id="infinite-duration" min="1" max="15" value="10" oninput="updateInfiniteDurationLabel()"
+                         class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-purple-500">
+                </div>
+
+                <!-- Quality -->
+                <div class="space-y-1">
+                  <label class="block text-xs font-semibold text-gray-400">Resolusi</label>
+                  <select id="infinite-quality" class="w-full glass-input rounded-xl px-3 py-2 text-xs focus:outline-none">
+                    <option value="RESOLUTION_720" selected>HD 720p</option>
+                    <option value="RESOLUTION_1080">FHD 1080p</option>
+                  </select>
+                </div>
+
+                <!-- Aspect ratio -->
+                <div class="space-y-1">
+                  <label class="block text-xs font-semibold text-gray-400">Aspek Rasio</label>
+                  <select id="infinite-aspect" class="w-full glass-input rounded-xl px-3 py-2 text-xs focus:outline-none">
+                    <option value="9:16" selected>🎬 9:16 (Vertikal)</option>
+                    <option value="16:9">🖥️ 16:9 (Landscape)</option>
+                    <option value="1:1">⬛ 1:1 (Square)</option>
+                  </select>
+                </div>
+
+                <!-- Audio Switch -->
+                <div class="flex items-center justify-between col-span-2 py-1 border-t border-gray-800/50 mt-1">
+                  <label class="text-xs font-semibold text-gray-400">Sertakan Audio</label>
+                  <input type="checkbox" id="infinite-audio" class="w-4 h-4 text-purple-600 bg-gray-800 border-gray-700 rounded focus:ring-purple-500">
+                </div>
+              </div>
+
+              <!-- Loop Configurations -->
+              <div class="border-t border-gray-800 pt-4 space-y-4">
+                <h4 class="text-xs font-bold text-gray-400 uppercase tracking-wider">Konfigurasi Pengulangan (Loop)</h4>
+                
+                <div class="grid grid-cols-2 gap-4">
+                  <!-- Worker Count Select -->
+                  <div class="space-y-1">
+                    <label class="block text-[11px] font-semibold text-gray-400">Jumlah Worker</label>
+                    <select id="infinite-worker-count" onchange="renderInfiniteMiniWorkers()" class="w-full glass-input rounded-xl px-3 py-2 text-xs focus:outline-none">
+                      <option value="1">1 Worker</option>
+                      <option value="2">2 Worker</option>
+                      <option value="3">3 Worker</option>
+                      <option value="4">4 Worker</option>
+                      <option value="5" selected>5 Worker (Maks)</option>
+                    </select>
+                  </div>
+
+                  <!-- Token Consumption Estimate -->
+                  <div class="space-y-1">
+                    <label class="block text-[11px] font-semibold text-gray-400">Konsumsi Token/Video</label>
+                    <input type="number" id="infinite-token-cost" value="30" min="1"
+                           class="w-full glass-input rounded-xl px-3 py-1.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500">
+                  </div>
+                </div>
+
+                <!-- Folder selector -->
+                <div class="space-y-1">
+                  <label class="block text-[11px] font-semibold text-gray-400">Folder Penyimpanan Lokal</label>
+                  <div class="flex items-center gap-2 bg-white/5 border border-white/10 px-3 py-1.5 rounded-xl">
+                    <i class="fa-regular fa-folder text-gray-400 text-xs"></i>
+                    <input type="text" id="infinite-target-folder" placeholder="C:\Penyimpanan\Video" 
+                           class="bg-transparent border-none text-xs text-gray-100 placeholder-gray-500 focus:outline-none flex-1 py-0.5">
+                    <button onclick="selectInfiniteLocalFolder()" class="px-2.5 py-1 rounded-lg bg-purple-500/15 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 text-[10px] font-bold transition">
+                      Pilih Folder
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Start / Stop Button -->
+              <div class="pt-2">
+                <button onclick="toggleInfiniteGenerateLoop()" id="btn-infinite-submit" 
+                        class="w-full py-4.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-green-900/20 active:scale-95 transition duration-200 select-none">
+                  <i class="fa-solid fa-infinity animate-pulse"></i>
+                  <span id="btn-infinite-submit-text">Mulai Infinite Generate</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right Panel: Worker Circular Status & Folder Gallery -->
+          <div class="lg:col-span-7 space-y-6 flex flex-col h-full">
+            <!-- Mini Worker Status Circles -->
+            <div class="glass-panel rounded-3xl p-6 space-y-4">
+              <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                <i class="fa-solid fa-chart-line text-purple-400"></i>
+                <span>Status Aktif Mini Workers</span>
+              </h3>
+
+              <div class="grid grid-cols-5 gap-3" id="infinite-mini-workers-container">
+                <!-- Mini worker circles rendered dynamically via JS -->
+              </div>
+            </div>
+
+            <!-- Folder Scanner Output Video Gallery -->
+            <div class="glass-panel rounded-3xl p-6 space-y-4 flex-1 flex flex-col justify-between">
+              <div class="flex justify-between items-center border-b border-gray-800 pb-3 shrink-0">
+                <h3 class="text-xs font-bold text-gray-400 uppercase tracking-widest flex items-center gap-2">
+                  <i class="fa-solid fa-images text-pink-500"></i>
+                  <span>Galeri Video Folder Lokal</span>
+                </h3>
+                <span id="gallery-count-badge" class="px-2 py-0.5 text-[10px] font-black rounded-full bg-pink-500/10 border border-pink-500/30 text-pink-400">0 VIDEO</span>
+              </div>
+
+              <!-- Gallery Scroll Area -->
+              <div id="infinite-gallery-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-4 max-h-[360px] overflow-y-auto pr-1 flex-1 py-1">
+                <!-- Local videos rendered dynamically here -->
+                <div class="col-span-3 py-16 text-center text-gray-500 italic text-xs">
+                  <i class="fa-regular fa-folder-open text-3xl mb-2 block text-gray-600"></i>
+                  Pilih folder penyimpanan lokal untuk menampilkan isi galeri video
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================= MANAGEMENT TAB ================= -->
+      <section id="tab-accounts" class="hidden space-y-8 max-w-5xl mx-auto w-full">
+        <!-- COOKIES MANAGEMENT SECTION -->
+        <div class="glass-panel rounded-3xl p-8 space-y-6">
+          <div class="flex justify-between items-center border-b border-gray-800 pb-4">
+            <h3 class="text-xl font-bold flex items-center gap-3">
+              <i class="fa-solid fa-key text-purple-400"></i>
+              <span>Manajemen Cookie Sesi Leonardo</span>
+            </h3>
+            <span class="px-4 py-1.5 rounded-full bg-purple-500/10 text-purple-400 border border-purple-500/30 text-xs font-bold uppercase tracking-wider">Database</span>
+          </div>
+
+          <!-- Add Account Form -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white/5 p-6 rounded-2xl border border-white/10">
+            <div class="md:col-span-4 space-y-2">
+              <label class="block text-sm font-semibold text-gray-400">Nama Penanda Akun</label>
+              <input type="text" id="add-account-name" placeholder="Contoh: Akun Utama Premium" 
+                     class="w-full glass-input rounded-2xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div class="md:col-span-6 space-y-2">
+              <label class="block text-sm font-semibold text-gray-400">Cookies Sesi Browser (Raw Cookies String)</label>
+              <input type="text" id="add-account-cookies" placeholder="Paste data raw cookies dari Chrome Developer Tools..." 
+                     class="w-full glass-input rounded-2xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <button onclick="addLeonardoAccount()" id="btn-add-account" 
+                    class="md:col-span-2 py-3.5 btn-glow-purple text-white font-bold rounded-2xl select-none">
+              <i class="fa-solid fa-plus mr-2"></i> Tambah Akun
+            </button>
+          </div>
+
+          <!-- List Accounts Table -->
+          <div class="overflow-hidden border border-gray-800 rounded-2xl">
+            <table class="w-full border-collapse text-left">
+              <thead>
+                <tr class="bg-white/5 border-b border-gray-800 font-semibold text-xs text-gray-400 uppercase tracking-wider">
+                  <th class="p-5">Pilih</th>
+                  <th class="p-5">Nama Akun</th>
+                  <th class="p-5">Sisa Kredit</th>
+                  <th class="p-5">Email Terdaftar</th>
+                  <th class="p-5 text-right">Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="accounts-table-body" class="text-sm divide-y divide-gray-800">
+                <!-- Rendered Dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- PROMPTS MANAGEMENT SECTION -->
+        <div class="glass-panel rounded-3xl p-8 space-y-6">
+          <h3 class="text-xl font-bold flex items-center gap-3 border-b border-gray-800 pb-4">
+            <i class="fa-solid fa-file-pen text-pink-500"></i>
+            <span>Pustaka Prompt Template</span>
+          </h3>
+
+          <!-- Add Prompt Form -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-4 items-end bg-white/5 p-6 rounded-2xl border border-white/10">
+            <div class="md:col-span-4 space-y-2">
+              <label class="block text-sm font-semibold text-gray-400">Nama / Judul Prompt</label>
+              <input type="text" id="add-prompt-name" placeholder="Contoh: Iklan Gadget" 
+                     class="w-full glass-input rounded-2xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <div class="md:col-span-6 space-y-2">
+              <label class="block text-sm font-semibold text-gray-400">Isi Prompt Deskripsi</label>
+              <input type="text" id="add-prompt-text" placeholder="Detail deskripsi perintah video..." 
+                     class="w-full glass-input rounded-2xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-purple-500">
+            </div>
+            <button onclick="savePromptTemplate()" 
+                    class="md:col-span-2 py-3.5 btn-glow-pink text-white font-bold rounded-2xl select-none">
+              <i class="fa-solid fa-floppy-disk mr-2"></i> Simpan Prompt
+            </button>
+          </div>
+
+          <!-- Prompt List -->
+          <div id="prompts-list-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-[300px] overflow-y-auto">
+            <!-- Rendered Dynamically -->
+          </div>
+        </div>
+
+        <!-- BAHAN MANAGEMENT SECTION -->
+        <div class="glass-panel rounded-3xl p-8 space-y-6">
+          <h3 class="text-xl font-bold flex items-center gap-3 border-b border-gray-800 pb-4">
+            <i class="fa-regular fa-folder-open text-purple-400"></i>
+            <span>Pustaka Bahan Gambar Referensi</span>
+          </h3>
+
+          <!-- Add Bahan Form -->
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-6 bg-white/5 p-6 rounded-2xl border border-white/10">
+            <div class="md:col-span-4 space-y-3">
+              <label class="block text-sm font-semibold text-gray-400">Nama Pustaka Bahan Baru</label>
+              <input type="text" id="add-bahan-name" placeholder="Contoh: Tablet commercial" 
+                     class="w-full glass-input rounded-2xl px-4 py-3.5 focus:outline-none focus:ring-2 focus:ring-purple-500">
+              
+              <button onclick="uploadBahanImages()" id="btn-upload-bahan" 
+                      class="w-full py-4 btn-glow-purple text-white font-bold rounded-2xl select-none">
+                <i class="fa-solid fa-cloud-arrow-up mr-2"></i> Mulai Unggah Foto
+              </button>
+            </div>
+            
+            <div class="md:col-span-8 space-y-2">
+              <label class="block text-sm font-semibold text-gray-400">Unggah Gambar (Bisa pilih banyak foto)</label>
+              <div class="relative w-full h-44 rounded-2xl border-2 border-dashed border-white/15 bg-white/5 flex flex-col items-center justify-center hover:bg-white/10 transition cursor-pointer">
+                <input type="file" id="add-bahan-files" multiple accept="image/*" onchange="updateUploadFileCount()"
+                       class="absolute inset-0 opacity-0 cursor-pointer w-full h-full">
+                <div class="text-center space-y-2 select-none pointer-events-none">
+                  <i class="fa-solid fa-images text-4xl text-purple-400/80"></i>
+                  <p class="text-sm font-medium text-gray-300" id="upload-box-text">Klik untuk memilah banyak foto</p>
+                  <p class="text-[10px] text-gray-500">Mendukung format PNG, JPG, JPEG, atau WEBP</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Existing Bahan Folders Grid -->
+          <div id="bahan-folders-grid" class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+            <!-- Rendered Dynamically -->
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <script>
+    let activeTab = 'generate';
+    let localConfig = { accounts: [], prompts: [], bahan: [] };
+    let hasAudio = false;
+    let selectedReferenceImagePath = '';
+
+    // Brutal-Generate State Variables
+    let selectedBrutalReferenceImagePath = { 1: '', 2: '', 3: '', 4: '', 5: '' };
+    let brutalVideos = { 1: '', 2: '', 3: '', 4: '', 5: '' };
+    let brutalThumbs = { 1: '', 2: '', 3: '', 4: '', 5: '' };
+
+    // Infinite-Generate State Variables
+    let selectedInfiniteReferenceImagePath = '';
+    let infiniteLoopActive = false;
+    let infiniteWorkers = { 1: { active: false, percent: 0, status: 'Mengantre...', message: 'Menunggu loop...' } };
+    
+    // Setup for 5 workers inside infinite
+    for (let i = 1; i <= 5; i++) {
+      infiniteWorkers[i] = { active: false, percent: 0, status: 'Mengantre...', message: 'Menunggu loop...' };
+    }
+
+    // Switch between Video Generate, Brutal-Generate, Infinite-Generate & Account Management tabs
+    function switchTab(tabId) {
+      activeTab = tabId;
+      document.getElementById('tab-generate').classList.toggle('hidden', tabId !== 'generate');
+      document.getElementById('tab-brutal').classList.toggle('hidden', tabId !== 'brutal');
+      document.getElementById('tab-infinite').classList.toggle('hidden', tabId !== 'infinite');
+      document.getElementById('tab-accounts').classList.toggle('hidden', tabId !== 'accounts');
+      
+      const btnGen = document.getElementById('btn-tab-generate');
+      const btnBrut = document.getElementById('btn-tab-brutal');
+      const btnInf = document.getElementById('btn-tab-infinite');
+      const btnAcc = document.getElementById('btn-tab-accounts');
+
+      // Reset menu button styles
+      btnGen.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent";
+      btnBrut.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent";
+      btnInf.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent";
+      btnAcc.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group text-gray-400 hover:bg-white/5 hover:text-gray-200 border border-transparent";
+
+      if (tabId === 'generate') {
+        btnGen.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group bg-purple-600/10 border border-purple-500/20 text-purple-300";
+      } else if (tabId === 'brutal') {
+        btnBrut.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group bg-pink-600/10 border border-pink-500/20 text-pink-300";
+      } else if (tabId === 'infinite') {
+        btnInf.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group bg-purple-600/10 border border-purple-500/20 text-purple-300";
+      } else {
+        btnAcc.className = "w-full flex items-center gap-4 px-4 py-3.5 rounded-2xl text-left font-medium transition duration-200 group bg-purple-600/10 border border-purple-500/20 text-purple-300";
+      }
+    }
+
+    // Toggle Audio Generation config
+    function setAudio(on) {
+      hasAudio = on;
+      const btnOff = document.getElementById('btn-audio-off');
+      const btnOn = document.getElementById('btn-audio-on');
+
+      if (on) {
+        btnOn.className = "py-3 px-4 rounded-2xl font-semibold border text-sm transition text-purple-300 border-purple-500/30 bg-purple-600/10";
+        btnOff.className = "py-3 px-4 rounded-2xl font-semibold border text-sm transition text-gray-400 border-white/10 hover:bg-white/5";
+      } else {
+        btnOff.className = "py-3 px-4 rounded-2xl font-semibold border text-sm transition text-purple-300 border-purple-500/30 bg-purple-600/10";
+        btnOn.className = "py-3 px-4 rounded-2xl font-semibold border text-sm transition text-gray-400 border-white/10 hover:bg-white/5";
+      }
+    }
+
+    function updateDurationLabel() {
+      const duration = document.getElementById('input-duration').value;
+      document.getElementById('label-duration').textContent = `${duration} detik`;
+    }
+
+    function updateUploadFileCount() {
+      const files = document.getElementById('add-bahan-files').files;
+      const text = document.getElementById('upload-box-text');
+      if (files.length > 0) {
+        text.innerHTML = `<span class="text-purple-400 font-bold">${files.length} file</span> terpilih dan siap diunggah`;
+      } else {
+        text.innerText = 'Klik untuk memilah banyak foto';
+      }
+    }
+
+    // Load server configurations (Accounts, Prompts, Bahan)
+    async function loadConfig() {
+      try {
+        const res = await fetch('/api/leonardo/config');
+        const data = await res.json();
+        localConfig = data;
+
+        // Render Active Account Details
+        const activeAcc = data.accounts.find(a => a.isActive);
+        if (activeAcc) {
+          document.getElementById('active-account-name').textContent = activeAcc.name;
+          document.getElementById('active-account-credits').textContent = `${activeAcc.credits || 0} tokens`;
+        } else {
+          document.getElementById('active-account-name').textContent = 'Tidak Ada Akun Aktif';
+          document.getElementById('active-account-credits').textContent = '0 tokens';
+        }
+
+        // Render Global Credit Display (Accumulating all account credits)
+        const totalCredits = data.accounts.reduce((sum, acc) => sum + (acc.credits || 0), 0);
+        document.getElementById('global-credits-display').textContent = `${totalCredits.toLocaleString('id-ID')} tokens`;
+
+        // Render Prompts Selection Dropdown
+        const selectPrompt = document.getElementById('select-prompt');
+        selectPrompt.innerHTML = '<option value="">-- Pilih Prompt Template (Opsional) --</option>';
+        data.prompts.forEach(p => {
+          const opt = document.createElement('option');
+          opt.value = p.id;
+          opt.textContent = p.name;
+          selectPrompt.appendChild(opt);
+        });
+
+        // Render Bahan Selection Dropdown
+        const selectBahan = document.getElementById('select-bahan');
+        selectBahan.innerHTML = '<option value="">-- Tanpa Gambar (Text to Video) --</option>';
+        data.bahan.forEach(b => {
+          const opt = document.createElement('option');
+          opt.value = b.name;
+          opt.textContent = `📁 ${b.name} (${b.images.length} foto)`;
+          selectBahan.appendChild(opt);
+        });
+
+        // Populate options for 5 Brutal Workers
+        for (let i = 1; i <= 5; i++) {
+          const selectAcc = document.getElementById(`worker-account-${i}`);
+          if (selectAcc) {
+            const currentSelected = selectAcc.value;
+            selectAcc.innerHTML = '<option value="">-- Auto-distribute --</option>';
+            data.accounts.forEach(a => {
+              const opt = document.createElement('option');
+              opt.value = a.id;
+              opt.textContent = a.name;
+              selectAcc.appendChild(opt);
+            });
+            if (currentSelected) selectAcc.value = currentSelected;
+          }
+
+          const selectPromptBrutal = document.getElementById(`worker-prompt-select-${i}`);
+          if (selectPromptBrutal) {
+            const currentSelected = selectPromptBrutal.value;
+            selectPromptBrutal.innerHTML = '<option value="">-- Pilih Prompt (Opsional) --</option>';
+            data.prompts.forEach(p => {
+              const opt = document.createElement('option');
+              opt.value = p.id;
+              opt.textContent = p.name;
+              selectPromptBrutal.appendChild(opt);
+            });
+            if (currentSelected) selectPromptBrutal.value = currentSelected;
+          }
+
+          const selectBahanBrutal = document.getElementById(`worker-bahan-${i}`);
+          if (selectBahanBrutal) {
+            const currentSelected = selectBahanBrutal.value;
+            selectBahanBrutal.innerHTML = '<option value="">-- Tanpa Gambar (Text to Video) --</option>';
+            data.bahan.forEach(b => {
+              const opt = document.createElement('option');
+              opt.value = b.name;
+              opt.textContent = `📁 ${b.name} (${b.images.length} foto)`;
+              selectBahanBrutal.appendChild(opt);
+            });
+            if (currentSelected) selectBahanBrutal.value = currentSelected;
+          }
+        }
+
+        // Render Active Account & Credits for Infinite-Generate
+        const infActiveName = document.getElementById('infinite-active-account');
+        const infActiveCredits = document.getElementById('infinite-active-credits');
+        if (activeAcc) {
+          if (infActiveName) infActiveName.textContent = activeAcc.name;
+          if (infActiveCredits) infActiveCredits.textContent = `${activeAcc.credits || 0} tokens`;
+        } else {
+          if (infActiveName) infActiveName.textContent = 'Tidak Ada Akun Aktif';
+          if (infActiveCredits) infActiveCredits.textContent = '0 tokens';
+        }
+
+        // Populate options for Infinite-Generate
+        const selectPromptInf = document.getElementById('infinite-prompt-select');
+        if (selectPromptInf) {
+          const currentSelected = selectPromptInf.value;
+          selectPromptInf.innerHTML = '<option value="">-- Pilih Prompt Template (Opsional) --</option>';
+          data.prompts.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            selectPromptInf.appendChild(opt);
+          });
+          if (currentSelected) selectPromptInf.value = currentSelected;
+        }
+
+        const selectBahanInf = document.getElementById('infinite-bahan');
+        if (selectBahanInf) {
+          const currentSelected = selectBahanInf.value;
+          selectBahanInf.innerHTML = '<option value="">-- Tanpa Gambar (Text to Video) --</option>';
+          data.bahan.forEach(b => {
+            const opt = document.createElement('option');
+            opt.value = b.name;
+            opt.textContent = `📁 ${b.name} (${b.images.length} foto)`;
+            selectBahanInf.appendChild(opt);
+          });
+          if (currentSelected) selectBahanInf.value = currentSelected;
+        }
+
+        // Clear photoselector just in case
+        document.getElementById('bahan-photos-container').classList.add('hidden');
+        selectedReferenceImagePath = '';
+
+        // Render Management UI Lists
+        renderAccountsTable(data.accounts);
+        renderPromptsList(data.prompts);
+        renderBahanList(data.bahan);
+      } catch (err) {
+        alert('Gagal memuat konfigurasi server.');
+      }
+    }
+
+    function applyPromptTemplate() {
+      const promptId = document.getElementById('select-prompt').value;
+      const promptObj = localConfig.prompts.find(p => p.id === promptId);
+      if (promptObj) {
+        document.getElementById('input-prompt-text').value = promptObj.prompt;
+      } else {
+        document.getElementById('input-prompt-text').value = '';
+      }
+    }
+
+    function loadBahanPhotos() {
+      const bahanName = document.getElementById('select-bahan').value;
+      const container = document.getElementById('bahan-photos-container');
+      const grid = document.getElementById('bahan-photos-grid');
+      
+      grid.innerHTML = '';
+      selectedReferenceImagePath = '';
+
+      if (!bahanName) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      const bahanObj = localConfig.bahan.find(b => b.name === bahanName);
+      if (!bahanObj || bahanObj.images.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      
+      bahanObj.images.forEach((imgSrc) => {
+        const item = document.createElement('div');
+        item.className = "aspect-square rounded-xl overflow-hidden border-2 border-white/5 hover:border-purple-500/50 cursor-pointer relative group transition";
+        item.innerHTML = `<img src="${imgSrc}" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">`;
+        
+        item.onclick = () => {
+          // Deselect previous selection
+          const prev = grid.querySelector('.border-purple-500');
+          if (prev) {
+            prev.className = "aspect-square rounded-xl overflow-hidden border-2 border-white/5 hover:border-purple-500/50 cursor-pointer relative group transition";
+          }
+          // Set active selection
+          item.className = "aspect-square rounded-xl overflow-hidden border-2 border-purple-500 bg-purple-500/10 shadow-lg shadow-purple-500/20 cursor-pointer relative group transition";
+          selectedReferenceImagePath = imgSrc;
+        };
+
+        grid.appendChild(item);
+      });
+    }
+
+    // ─── MANAGEMENT TAB ACTIONS ─────────────────────────────
+
+    function renderAccountsTable(accounts) {
+      const tbody = document.getElementById('accounts-table-body');
+      tbody.innerHTML = '';
+
+      if (accounts.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="5" class="p-8 text-center italic text-gray-500">Belum ada akun Leonardo yang ditambahkan.</td></tr>`;
+        return;
+      }
+
+      accounts.forEach(acc => {
+        const row = document.createElement('tr');
+        row.className = acc.isActive ? 'bg-purple-900/10 border-b border-gray-800' : 'hover:bg-white/5 border-b border-gray-800';
+        
+        row.innerHTML = `
+          <td class="p-5">
+            <input type="radio" name="active-account" ${acc.isActive ? 'checked' : ''} onchange="activateAccount('${acc.id}')"
+                   class="w-4 h-4 text-purple-600 focus:ring-purple-500 bg-gray-800 border-gray-700">
+          </td>
+          <td class="p-5 font-bold ${acc.isActive ? 'text-purple-400' : 'text-gray-100'}">${acc.name} ${acc.isActive ? '<span class="ml-2 text-[10px] font-black tracking-widest bg-purple-500/10 border border-purple-500/30 text-purple-400 px-2 py-0.5 rounded-full uppercase">Aktif</span>' : ''}</td>
+          <td class="p-5 font-black text-gray-200">${acc.credits !== undefined ? acc.credits + ' tokens' : '0 tokens'}</td>
+          <td class="p-5 text-gray-400">${acc.email || 'Unknown'}</td>
+          <td class="p-5 text-right space-x-2">
+            <button onclick="refreshAccount('${acc.id}', this)" class="px-3.5 py-2.5 rounded-xl bg-white/5 border border-white/10 text-gray-300 hover:bg-white/10 transition active:scale-95" title="Refresh">
+              <i class="fa-solid fa-arrows-rotate"></i>
+            </button>
+            <button onclick="deleteAccount('${acc.id}')" class="px-3.5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition active:scale-95" title="Hapus">
+              <i class="fa-solid fa-trash-can"></i>
+            </button>
+          </td>
+        `;
+        tbody.appendChild(row);
+      });
+    }
+
+    async function addLeonardoAccount() {
+      const name = document.getElementById('add-account-name').value.trim();
+      const cookies = document.getElementById('add-account-cookies').value.trim();
+      const btn = document.getElementById('btn-add-account');
+
+      if (!name || !cookies) {
+        return alert('❌ Nama dan string cookies sesi wajib diisi.');
+      }
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Verifikasi...';
+
+      try {
+        const res = await fetch('/api/leonardo/accounts/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, cookies })
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert('✅ Akun Leonardo berhasil ditambahkan dan diverifikasi!');
+          document.getElementById('add-account-name').value = '';
+          document.getElementById('add-account-cookies').value = '';
+          await loadConfig();
+        } else {
+          alert('❌ Gagal: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan saat memverifikasi cookie akun.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-plus mr-2"></i> Tambah Akun';
+      }
+    }
+
+    async function activateAccount(id) {
+      try {
+        const res = await fetch('/api/leonardo/accounts/activate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await loadConfig();
+        } else {
+          alert('❌ Gagal: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Error mengaktifkan akun.');
+      }
+    }
+
+    async function deleteAccount(id) {
+      if (!confirm('Apakah Anda yakin ingin menghapus akun ini dari database?')) return;
+      try {
+        const res = await fetch('/api/leonardo/accounts/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await loadConfig();
+        } else {
+          alert('❌ Gagal: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Error menghapus akun.');
+      }
+    }
+
+    async function refreshAccount(id, element) {
+      const originalHtml = element.innerHTML;
+      element.disabled = true;
+      element.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i>';
+
+      try {
+        const res = await fetch('/api/leonardo/accounts/refresh', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await loadConfig();
+        } else {
+          alert('❌ Gagal refresh saldo: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan koneksi saat me-refresh saldo.');
+      } finally {
+        element.disabled = false;
+        element.innerHTML = originalHtml;
+      }
+    }
+
+    async function refreshActiveAccount() {
+      const activeAcc = localConfig.accounts.find(a => a.isActive);
+      if (!activeAcc) return alert('Tidak ada akun aktif yang dipilih.');
+      const btn = document.getElementById('btn-refresh-credit');
+      await refreshAccount(activeAcc.id, btn);
+    }
+
+    // Prompts rendering & actions
+    function renderPromptsList(prompts) {
+      const list = document.getElementById('prompts-list-grid');
+      list.innerHTML = '';
+
+      if (prompts.length === 0) {
+        list.innerHTML = `<div class="md:col-span-2 p-6 text-center italic text-gray-500 bg-white/5 border border-white/5 rounded-2xl">Belum ada template prompt tersimpan.</div>`;
+        return;
+      }
+
+      prompts.forEach(p => {
+        const card = document.createElement('div');
+        card.className = "bg-white/5 border border-white/10 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-pink-500/30 transition";
+        card.innerHTML = `
+          <div>
+            <h4 class="font-bold text-gray-200">${p.name}</h4>
+            <p class="text-xs text-gray-400 mt-2 leading-relaxed bg-black/35 p-3 rounded-xl border border-white/5 select-all">${p.prompt}</p>
+          </div>
+          <div class="text-right">
+            <button onclick="deletePrompt('${p.id}')" class="px-3.5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition text-xs font-bold active:scale-95">
+              <i class="fa-solid fa-trash-can mr-2"></i> Hapus Prompt
+            </button>
+          </div>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    async function savePromptTemplate() {
+      const name = document.getElementById('add-prompt-name').value.trim();
+      const prompt = document.getElementById('add-prompt-text').value.trim();
+
+      if (!name || !prompt) {
+        return alert('Nama dan teks prompt wajib diisi.');
+      }
+
+      try {
+        const res = await fetch('/api/leonardo/prompts/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, prompt })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('add-prompt-name').value = '';
+          document.getElementById('add-prompt-text').value = '';
+          await loadConfig();
+        } else {
+          alert('❌ Gagal: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Error koneksi menyimpan prompt.');
+      }
+    }
+
+    async function deletePrompt(id) {
+      if (!confirm('Hapus template prompt ini?')) return;
+      try {
+        const res = await fetch('/api/leonardo/prompts/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await loadConfig();
+        } else {
+          alert('❌ Gagal: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Error koneksi menghapus prompt.');
+      }
+    }
+
+    // Bahan rendering & upload
+    function renderBahanList(bahan) {
+      const grid = document.getElementById('bahan-folders-grid');
+      grid.innerHTML = '';
+
+      if (bahan.length === 0) {
+        grid.innerHTML = `<div class="sm:col-span-2 md:col-span-3 p-8 text-center italic text-gray-500 bg-white/5 border border-white/5 rounded-2xl">Belum ada folder bahan gambar diunggah.</div>`;
+        return;
+      }
+
+      bahan.forEach(b => {
+        const card = document.createElement('div');
+        card.className = "bg-white/5 border border-white/10 p-5 rounded-2xl flex flex-col justify-between space-y-4 hover:border-purple-500/30 transition relative overflow-hidden group";
+        
+        // Show first image as background preview or simple icon
+        const hasImages = b.images.length > 0;
+        const bgImg = hasImages ? b.images[0] : '';
+
+        card.innerHTML = `
+          <div class="space-y-3">
+            <div class="h-32 rounded-xl overflow-hidden bg-black/40 border border-white/5 flex items-center justify-center relative">
+              ${hasImages ? `<img src="${bgImg}" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">` : `<i class="fa-regular fa-folder text-4xl text-gray-600"></i>`}
+              <span class="absolute bottom-2 right-2 px-2.5 py-1 text-[10px] font-black rounded-full bg-black/75 border border-white/10 text-purple-400">
+                ${b.images.length} FOTO
+              </span>
+            </div>
+            <div>
+              <h4 class="font-bold text-gray-200 text-base">${b.name}</h4>
+              <p class="text-xs text-gray-500 mt-1">/bahan/leonardo/${b.name}</p>
+            </div>
+          </div>
+          <div class="text-right">
+            <button onclick="deleteBahan('${b.name}')" class="px-3.5 py-2.5 rounded-xl bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-500/20 transition text-xs font-bold active:scale-95 w-full">
+              <i class="fa-solid fa-trash-can mr-2"></i> Hapus Folder Bahan
+            </button>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+    async function uploadBahanImages() {
+      const name = document.getElementById('add-bahan-name').value.trim();
+      const fileInput = document.getElementById('add-bahan-files');
+      const btn = document.getElementById('btn-upload-bahan');
+
+      if (!name) return alert('Nama pustaka bahan wajib diisi.');
+      if (fileInput.files.length === 0) return alert('Pilih minimal 1 file foto terlebih dahulu.');
+
+      btn.disabled = true;
+      btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> Mengunggah...';
+
+      const formData = new FormData();
+      formData.append('folderName', name);
+      for (const f of fileInput.files) {
+        formData.append('images', f);
+      }
+
+      try {
+        const res = await fetch('/api/leonardo/bahan/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        
+        if (data.success) {
+          alert(`✅ Sukses mengunggah ${data.count} foto ke folder "${data.folderName}"!`);
+          document.getElementById('add-bahan-name').value = '';
+          fileInput.value = '';
+          updateUploadFileCount();
+          await loadConfig();
+        } else {
+          alert('❌ Gagal unggah: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Error koneksi saat mengunggah foto.');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fa-solid fa-cloud-arrow-up mr-2"></i> Mulai Unggah Foto';
+      }
+    }
+
+    async function deleteBahan(name) {
+      if (!confirm(`Apakah Anda yakin ingin menghapus folder bahan "${name}" beserta seluruh isinya secara permanen?`)) return;
+      try {
+        const res = await fetch('/api/leonardo/bahan/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        if (data.success) {
+          await loadConfig();
+        } else {
+          alert('❌ Gagal: ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Error koneksi menghapus folder bahan.');
+      }
+    }
+
+    // ─── GENERATE VIDEO SYSTEM (SSE LOGS & POLLING) ─────────
+
+    let sseConsole = document.getElementById('sse-console-log');
+    
+    function logToConsole(message, type = 'info') {
+      const div = document.createElement('div');
+      const time = new Date().toLocaleTimeString();
+      
+      let colorClass = 'text-green-400';
+      let prefix = '⚡';
+
+      if (type === 'error') {
+        colorClass = 'text-red-400 font-bold';
+        prefix = '❌';
+      } else if (type === 'success') {
+        colorClass = 'text-pink-400 font-bold';
+        prefix = '🎉';
+      } else if (type === 'system') {
+        colorClass = 'text-purple-400';
+        prefix = '⚙️';
+      }
+
+      div.className = `${colorClass} leading-relaxed`;
+      div.innerHTML = `<span class="text-gray-600">[${time}]</span> <span class="font-bold">${prefix}</span> ${message}`;
+      
+      sseConsole.appendChild(div);
+      sseConsole.scrollTop = sseConsole.scrollHeight;
+    }
+
+    async function triggerLeonardoGenerate() {
+      const promptText = document.getElementById('input-prompt-text').value.trim();
+      const duration = document.getElementById('input-duration').value;
+      const mode = document.getElementById('select-quality').value;
+      const aspectRatio = document.getElementById('select-aspect').value;
+      const selectBahan = document.getElementById('select-bahan').value;
+
+      if (!promptText) {
+        return alert('❌ Silakan ketik isi prompt detail Anda terlebih dahulu!');
+      }
+
+      const activeAcc = localConfig.accounts.find(a => a.isActive);
+      if (!activeAcc) {
+        return alert('❌ Tidak ada akun aktif. Silakan tambahkan dan aktifkan akun di menu "Manajemen Akun" terlebih dahulu!');
+      }
+
+      // Prepare DOM Preview States
+      const btn = document.getElementById('btn-submit-generate');
+      const wState = document.getElementById('preview-waiting');
+      const gState = document.getElementById('preview-generating');
+      const sState = document.getElementById('preview-success');
+
+      btn.disabled = true;
+      btn.className = "w-full py-5 bg-gray-800 text-gray-500 rounded-2xl flex items-center justify-center gap-3 cursor-not-allowed select-none border border-white/5 shadow-none";
+      btn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> GENERATING IN PROGRESS...';
+
+      wState.classList.add('hidden');
+      sState.classList.add('hidden');
+      gState.classList.remove('hidden');
+
+      document.getElementById('generating-status-title').textContent = 'Memulai Sesi...';
+      document.getElementById('generating-status-message').textContent = 'Menghubungkan ke server lokal Express...';
+
+      sseConsole.innerHTML = '';
+      logToConsole('Menyiapkan parameter Kling-3.0...', 'system');
+      logToConsole(`Prompt: "${promptText.substring(0, 80)}..."`, 'info');
+      logToConsole(`Config: Durasi=${duration}s, Rasio=${aspectRatio}, Kualitas=${mode}, Audio=${hasAudio ? 'Ya' : 'Tidak'}`, 'system');
+
+      if (selectBahan && selectedReferenceImagePath) {
+        logToConsole(`Gambar referensi terdeteksi: "${selectedReferenceImagePath}"`, 'info');
+      } else {
+        logToConsole('Mode generasi: Text to Video (Tanpa Gambar Referensi)', 'info');
+      }
+
+      try {
+        const response = await fetch('/api/leonardo/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            promptText,
+            duration,
+            mode,
+            aspectRatio,
+            motion_has_audio: hasAudio,
+            imagePath: (selectBahan && selectedReferenceImagePath) ? selectedReferenceImagePath : undefined
+          })
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error(`Koneksi HTTP Gagal: ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() || '';
+
+          for (const chunk of chunks) {
+            const eventLine = chunk.split('\n').find(line => line.startsWith('event: '));
+            const dataLine = chunk.split('\n').find(line => line.startsWith('data: '));
+            if (!dataLine) continue;
+
+            const eventName = eventLine ? eventLine.slice(7) : 'message';
+            const data = JSON.parse(dataLine.slice(6));
+
+            if (eventName === 'progress') {
+              logToConsole(data.message, 'info');
+              document.getElementById('generating-status-title').textContent = `Memproses (${data.percent}%)`;
+              document.getElementById('generating-status-message').textContent = data.message;
+            }
+
+            if (eventName === 'done') {
+              logToConsole(data.message, 'success');
+              
+              // Load output video
+              const player = document.getElementById('output-video-player');
+              player.src = data.videoUrl;
+              player.load();
+
+              const downloadBtn = document.getElementById('btn-download-video');
+              downloadBtn.href = data.videoUrl;
+
+              // Switch preview to success state
+              gState.classList.add('hidden');
+              sState.classList.remove('hidden');
+              
+              // Auto reload sisa credit
+              await loadConfig();
+            }
+
+            if (eventName === 'error') {
+              throw new Error(data.error);
+            }
+          }
+        }
+
+      } catch (err) {
+        logToConsole(err.message, 'error');
+        document.getElementById('generating-status-title').textContent = 'Generasi Gagal';
+        document.getElementById('generating-status-message').innerHTML = `<span class="text-red-400 font-bold">${err.message}</span>`;
+        
+        setTimeout(() => {
+          gState.classList.add('hidden');
+          wState.classList.remove('hidden');
+        }, 5000);
+      } finally {
+        btn.disabled = false;
+        btn.className = "w-full py-5 btn-glow-purple text-white text-lg font-bold rounded-2xl flex items-center justify-center gap-3 select-none";
+        btn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Mulai Generate Video</span>';
+      }
+    }
+
+    // ─── BRUTAL-GENERATE SYSTEM (5 WORKERS PARALLEL ORCHESTRATOR) ───
+
+    function renderWorkerCards() {
+      const container = document.getElementById('brutal-workers-grid');
+      container.innerHTML = '';
+      
+      for (let i = 1; i <= 5; i++) {
+        const card = document.createElement('div');
+        card.id = `worker-card-${i}`;
+        card.className = "glass-panel rounded-2xl p-4 flex flex-col justify-between space-y-4 relative overflow-hidden min-h-[500px]";
+        card.innerHTML = `
+          <!-- Header -->
+          <div class="flex justify-between items-center border-b border-gray-800 pb-2">
+            <div class="flex items-center gap-2">
+              <span class="w-2.5 h-2.5 rounded-full bg-gray-500 transition duration-300" id="worker-dot-${i}"></span>
+              <h4 class="font-bold text-gray-200 text-xs">🤖 Worker ${i}</h4>
+            </div>
+            <input type="checkbox" id="worker-active-${i}" checked class="w-4 h-4 text-pink-600 bg-gray-800 border-gray-700 rounded focus:ring-pink-500">
+          </div>
+
+          <!-- Parameters inside scroll container -->
+          <div class="space-y-3 flex-1 overflow-y-auto pr-1 max-h-[380px]">
+            <!-- Account -->
+            <div class="space-y-1">
+              <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Akun Leonardo</label>
+              <select id="worker-account-${i}" class="w-full glass-input rounded-xl px-2 py-1.5 text-[11px] focus:outline-none">
+                <option value="">-- Auto-distribute --</option>
+              </select>
+            </div>
+
+            <!-- Prompt Template -->
+            <div class="space-y-1">
+              <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Template Prompt</label>
+              <select id="worker-prompt-select-${i}" onchange="applyBrutalPromptTemplate(${i})" class="w-full glass-input rounded-xl px-2 py-1.5 text-[11px] focus:outline-none">
+                <option value="">-- Pilih Prompt (Opsional) --</option>
+              </select>
+            </div>
+
+            <!-- Raw Textarea -->
+            <div class="space-y-1">
+              <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Isi Prompt Detail</label>
+              <textarea id="worker-prompt-text-${i}" rows="3" placeholder="Deskripsi video..." 
+                        class="w-full glass-input rounded-xl px-2.5 py-1.5 text-[10px] leading-normal focus:outline-none focus:ring-1 focus:ring-pink-500"></textarea>
+            </div>
+
+            <!-- Bahan folder selection -->
+            <div class="space-y-1">
+              <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Bahan Folder</label>
+              <select id="worker-bahan-${i}" onchange="loadBrutalBahanPhotos(${i})" class="w-full glass-input rounded-xl px-2 py-1.5 text-[11px] focus:outline-none">
+                <option value="">-- Tanpa Gambar (Text to Video) --</option>
+              </select>
+            </div>
+
+            <!-- Selected Image Preview & Selector -->
+            <div id="worker-photo-preview-container-${i}" class="hidden space-y-1 p-2 rounded-xl bg-black/40 border border-white/5">
+              <p class="text-[8px] font-bold text-purple-400 uppercase tracking-wider"><i class="fa-regular fa-image"></i> Pilih Gambar Referensi:</p>
+              <div id="worker-photos-scroll-${i}" class="flex gap-2 overflow-x-auto pb-1 pt-0.5">
+                <!-- Images rendered dynamically -->
+              </div>
+            </div>
+
+            <!-- Duration slider -->
+            <div class="space-y-1">
+              <div class="flex justify-between text-[9px]">
+                <span class="font-bold text-gray-400 uppercase">Durasi</span>
+                <span id="worker-duration-label-${i}" class="text-pink-400 font-bold">10 detik</span>
+              </div>
+              <input type="range" id="worker-duration-${i}" min="1" max="15" value="10" oninput="updateWorkerDurationLabel(${i})"
+                     class="w-full h-1 bg-gray-800 rounded-lg appearance-none cursor-pointer accent-pink-500">
+            </div>
+
+            <!-- Quality -->
+            <div class="space-y-1">
+              <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Resolusi</label>
+              <select id="worker-quality-${i}" class="w-full glass-input rounded-xl px-2 py-1.5 text-[11px] focus:outline-none">
+                <option value="RESOLUTION_720" selected>HD 720p</option>
+                <option value="RESOLUTION_1080">FHD 1080p</option>
+              </select>
+            </div>
+
+            <!-- Aspect ratio -->
+            <div class="space-y-1">
+              <label class="block text-[9px] font-bold text-gray-400 uppercase tracking-wider">Aspek Rasio</label>
+              <select id="worker-aspect-${i}" class="w-full glass-input rounded-xl px-2 py-1.5 text-[11px] focus:outline-none">
+                <option value="9:16" selected>🎬 9:16 (Vertikal)</option>
+                <option value="16:9">🖥️ 16:9 (Landscape)</option>
+                <option value="1:1">⬛ 1:1 (Square)</option>
+              </select>
+            </div>
+
+            <!-- Audio -->
+            <div class="flex items-center justify-between pt-1">
+              <label class="text-[9px] font-bold text-gray-400 uppercase">Sertakan Audio</label>
+              <input type="checkbox" id="worker-audio-${i}" class="w-3.5 h-3.5 text-pink-600 bg-gray-800 border-gray-700 rounded focus:ring-pink-500">
+            </div>
+          </div>
+
+          <!-- Progress & Status Overlay -->
+          <div id="worker-overlay-${i}" class="hidden absolute inset-0 bg-black/90 backdrop-blur-sm flex flex-col items-center justify-center text-center p-4 space-y-4 z-10 transition duration-300">
+            <div class="w-20 h-20 rounded-full border border-pink-500/25 pulsing-loader flex items-center justify-center relative">
+              <div class="absolute inset-1.5 rounded-full border border-dashed border-pink-400/40 animate-spin" style="animation-duration: 8s"></div>
+              <span id="worker-percent-${i}" class="text-lg font-black text-pink-400">0%</span>
+            </div>
+            <div class="space-y-1">
+              <h5 class="font-bold text-xs text-pink-300" id="worker-status-title-${i}">Mengantre...</h5>
+              <p class="text-[9px] text-gray-400 max-w-[185px] leading-relaxed select-text" id="worker-status-msg-${i}">Menunggu antrean...</p>
+            </div>
+          </div>
+
+          <!-- Action / Output Area -->
+          <div class="border-t border-gray-800 pt-3 flex flex-col space-y-2">
+            <div id="worker-output-preview-${i}" class="hidden relative w-full rounded-xl overflow-hidden border border-white/5 bg-black aspect-video flex items-center justify-center group cursor-pointer"
+                 onclick="openBrutalVideoModal(${i})">
+              <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end justify-center pb-2 opacity-0 group-hover:opacity-100 transition z-10">
+                <span class="text-[10px] text-white font-bold"><i class="fa-solid fa-circle-play mr-1"></i> Putar Video</span>
+              </div>
+              <div class="absolute inset-0 flex items-center justify-center bg-black/40">
+                <i class="fa-solid fa-play text-xl text-white/80 filter drop-shadow"></i>
+              </div>
+              <img id="worker-output-thumb-${i}" src="" class="w-full h-full object-cover">
+            </div>
+            
+            <a href="" id="worker-download-btn-${i}" download class="hidden w-full py-2 bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-bold rounded-xl text-[10px] text-center select-none shadow">
+              <i class="fa-solid fa-cloud-arrow-down mr-1"></i> Unduh Video (.mp4)
+            </a>
+          </div>
+        `;
+        container.appendChild(card);
+      }
+    }
+
+    function applyBrutalPromptTemplate(idx) {
+      const promptId = document.getElementById(`worker-prompt-select-${idx}`).value;
+      const promptObj = localConfig.prompts.find(p => p.id === promptId);
+      if (promptObj) {
+        document.getElementById(`worker-prompt-text-${idx}`).value = promptObj.prompt;
+      } else {
+        document.getElementById(`worker-prompt-text-${idx}`).value = '';
+      }
+    }
+
+    function loadBrutalBahanPhotos(idx) {
+      const bahanName = document.getElementById(`worker-bahan-${idx}`).value;
+      const container = document.getElementById(`worker-photo-preview-container-${idx}`);
+      const scrollDiv = document.getElementById(`worker-photos-scroll-${idx}`);
+      
+      scrollDiv.innerHTML = '';
+      selectedBrutalReferenceImagePath[idx] = '';
+
+      if (!bahanName) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      const bahanObj = localConfig.bahan.find(b => b.name === bahanName);
+      if (!bahanObj || bahanObj.images.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      
+      bahanObj.images.forEach((imgSrc) => {
+        const item = document.createElement('div');
+        item.className = "aspect-square rounded-lg overflow-hidden border-2 border-white/5 hover:border-purple-500/50 cursor-pointer relative group shrink-0 w-12 h-12 transition";
+        item.innerHTML = `<img src="${imgSrc}" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">`;
+        
+        item.onclick = () => {
+          // Deselect previous selection
+          const prev = scrollDiv.querySelector('.border-purple-500');
+          if (prev) {
+            prev.className = "aspect-square rounded-lg overflow-hidden border-2 border-white/5 hover:border-purple-500/50 cursor-pointer relative group shrink-0 w-12 h-12 transition";
+          }
+          // Set active selection
+          item.className = "aspect-square rounded-lg overflow-hidden border-2 border-purple-500 bg-purple-500/10 cursor-pointer relative group shrink-0 w-12 h-12 transition";
+          selectedBrutalReferenceImagePath[idx] = imgSrc;
+        };
+
+        scrollDiv.appendChild(item);
+      });
+    }
+
+    function updateWorkerDurationLabel(idx) {
+      const duration = document.getElementById(`worker-duration-${idx}`).value;
+      document.getElementById(`worker-duration-label-${idx}`).textContent = `${duration} detik`;
+    }
+
+    function applyWorkerOneToAll() {
+      const pText = document.getElementById('worker-prompt-text-1').value.trim();
+      const pSelect = document.getElementById('worker-prompt-select-1').value;
+      const account = document.getElementById('worker-account-1').value;
+      const duration = document.getElementById('worker-duration-1').value;
+      const quality = document.getElementById('worker-quality-1').value;
+      const aspect = document.getElementById('worker-aspect-1').value;
+      const audio = document.getElementById('worker-audio-1').checked;
+      const bahan = document.getElementById('worker-bahan-1').value;
+      const selectedPath = selectedBrutalReferenceImagePath[1] || '';
+
+      for (let i = 2; i <= 5; i++) {
+        document.getElementById(`worker-prompt-text-${i}`).value = pText;
+        document.getElementById(`worker-prompt-select-${i}`).value = pSelect;
+        document.getElementById(`worker-account-${i}`).value = account;
+        document.getElementById(`worker-duration-${i}`).value = duration;
+        document.getElementById(`worker-quality-${i}`).value = quality;
+        document.getElementById(`worker-aspect-${i}`).value = aspect;
+        document.getElementById(`worker-audio-${i}`).checked = audio;
+        document.getElementById(`worker-bahan-${i}`).value = bahan;
+        updateWorkerDurationLabel(i);
+
+        // Reload scroll list
+        loadBrutalBahanPhotos(i);
+        
+        // Force select the matching image
+        if (selectedPath) {
+          selectedBrutalReferenceImagePath[i] = selectedPath;
+          setTimeout(() => {
+            const grid = document.getElementById(`worker-photos-scroll-${i}`);
+            if (grid) {
+              const prev = grid.querySelector('.border-purple-500');
+              if (prev) {
+                prev.className = "aspect-square rounded-lg overflow-hidden border-2 border-white/5 hover:border-purple-500/50 cursor-pointer relative group shrink-0 w-12 h-12 transition";
+              }
+              const items = grid.querySelectorAll('div');
+              for (const item of items) {
+                const img = item.querySelector('img');
+                if (img && img.src.includes(selectedPath)) {
+                  item.className = "aspect-square rounded-lg overflow-hidden border-2 border-purple-500 bg-purple-500/10 cursor-pointer relative group shrink-0 w-12 h-12 transition";
+                  break;
+                }
+              }
+            }
+          }, 100);
+        }
+      }
+    }
+
+    async function selectLocalFolder() {
+      try {
+        const res = await fetch('/api/leonardo/select-folder');
+        const data = await res.json();
+        if (data.success && data.path) {
+          document.getElementById('brutal-target-folder').value = data.path;
+        }
+      } catch (err) {
+        console.error('Failed to open local folder dialog:', err);
+      }
+    }
+
+    function openBrutalVideoModal(idx) {
+      const videoUrl = brutalVideos[idx];
+      if (!videoUrl) return;
+      
+      const modal = document.getElementById('brutal-video-modal');
+      const player = document.getElementById('modal-video-player');
+      const title = document.getElementById('modal-video-title');
+      const download = document.getElementById('modal-video-download');
+
+      player.src = videoUrl;
+      player.load();
+      title.textContent = `🎬 Preview Video - Worker ${idx}`;
+      download.href = videoUrl;
+
+      modal.classList.remove('hidden');
+    }
+
+    function closeBrutalVideoModal() {
+      const modal = document.getElementById('brutal-video-modal');
+      const player = document.getElementById('modal-video-player');
+      player.pause();
+      player.src = '';
+      modal.classList.add('hidden');
+    }
+
+    function downloadAllBrutalVideos() {
+      let delay = 0;
+      for (let idx = 1; idx <= 5; idx++) {
+        const url = brutalVideos[idx];
+        if (url) {
+          setTimeout(() => {
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `leonardo-worker-${idx}.mp4`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+          }, delay);
+          delay += 1000;
+        }
+      }
+    }
+
+    async function triggerBrutalGenerateAll() {
+      const activeWorkers = [];
+      const targetFolder = document.getElementById('brutal-target-folder').value.trim();
+
+      for (let idx = 1; idx <= 5; idx++) {
+        const active = document.getElementById(`worker-active-${idx}`).checked;
+        const promptText = document.getElementById(`worker-prompt-text-${idx}`).value.trim();
+
+        if (active) {
+          if (!promptText) {
+            return alert(`❌ Silakan isi prompt detail untuk Worker ${idx} terlebih dahulu!`);
+          }
+          activeWorkers.push(idx);
+        }
+      }
+
+      if (activeWorkers.length === 0) {
+        return alert('❌ Silakan centang/aktifkan minimal 1 Worker untuk generate!');
+      }
+
+      // Deactivate global generate buttons
+      const submitBtn = document.getElementById('btn-brutal-submit-all');
+      submitBtn.disabled = true;
+      submitBtn.className = "px-6 py-3.5 bg-gray-800 text-gray-500 rounded-2xl text-xs font-bold flex items-center gap-2 cursor-not-allowed select-none border border-white/5 shadow-none";
+      submitBtn.innerHTML = '<i class="fa-solid fa-spinner animate-spin"></i> GENERATING IN PROGRESS...';
+
+      // Start all active workers in parallel!
+      const promises = activeWorkers.map((idx) => runSingleWorker(idx, targetFolder));
+      
+      await Promise.all(promises);
+
+      // Re-enable generate buttons
+      submitBtn.disabled = false;
+      submitBtn.className = "px-6 py-3.5 btn-glow-pink text-white text-xs font-bold rounded-2xl flex items-center gap-2 select-none";
+      submitBtn.innerHTML = '<i class="fa-solid fa-wand-magic-sparkles"></i> <span>Mulai Generate Semua</span>';
+
+      // Enable download all button if any video is completed
+      const anyCompleted = Object.values(brutalVideos).some(v => !!v);
+      const dlAllBtn = document.getElementById('btn-download-all-brutal');
+      if (anyCompleted) {
+        dlAllBtn.disabled = false;
+        dlAllBtn.className = "px-4 py-3.5 bg-white/5 border border-purple-500/30 text-purple-300 hover:bg-white/10 rounded-2xl text-xs font-bold transition flex items-center gap-2";
+      }
+    }
+
+    async function runSingleWorker(idx, targetFolder) {
+      const overlay = document.getElementById(`worker-overlay-${idx}`);
+      const percentText = document.getElementById(`worker-percent-${idx}`);
+      const title = document.getElementById(`worker-status-title-${idx}`);
+      const msg = document.getElementById(`worker-status-msg-${idx}`);
+      const dot = document.getElementById(`worker-dot-${idx}`);
+      const dlBtn = document.getElementById(`worker-download-btn-${idx}`);
+      const preview = document.getElementById(`worker-output-preview-${idx}`);
+      const thumb = document.getElementById(`worker-output-thumb-${idx}`);
+
+      // Reset card output states
+      dlBtn.classList.add('hidden');
+      preview.classList.add('hidden');
+      brutalVideos[idx] = '';
+      brutalThumbs[idx] = '';
+
+      // Show overlay
+      overlay.classList.remove('hidden');
+      dot.className = "w-2.5 h-2.5 rounded-full bg-yellow-500 animate-pulse";
+      percentText.textContent = "0%";
+      title.textContent = "Mengantre...";
+      msg.textContent = "Menghubungkan ke API generator...";
+
+      const promptText = document.getElementById(`worker-prompt-text-${idx}`).value.trim();
+      const accountId = document.getElementById(`worker-account-${idx}`).value;
+      const duration = document.getElementById(`worker-duration-${idx}`).value;
+      const mode = document.getElementById(`worker-quality-${idx}`).value;
+      const aspectRatio = document.getElementById(`worker-aspect-${idx}`).value;
+      const selectBahan = document.getElementById(`worker-bahan-${idx}`).value;
+      const refImagePath = selectedBrutalReferenceImagePath[idx];
+
+      try {
+        const response = await fetch('/api/leonardo/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            promptText,
+            duration,
+            mode,
+            aspectRatio,
+            motion_has_audio: document.getElementById(`worker-audio-${idx}`).checked,
+            imagePath: (selectBahan && refImagePath) ? refImagePath : undefined,
+            accountId: accountId ? accountId : undefined,
+            targetFolder: targetFolder ? targetFolder : undefined
+          })
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() || '';
+
+          for (const chunk of chunks) {
+            const eventLine = chunk.split('\n').find(line => line.startsWith('event: '));
+            const dataLine = chunk.split('\n').find(line => line.startsWith('data: '));
+            if (!dataLine) continue;
+
+            const eventName = eventLine ? eventLine.slice(7) : 'message';
+            const data = JSON.parse(dataLine.slice(6));
+
+            if (eventName === 'progress') {
+              percentText.textContent = `${data.percent}%`;
+              title.textContent = `Memproses (${data.percent}%)`;
+              msg.textContent = data.message;
+            }
+
+            if (eventName === 'done') {
+              // Complete!
+              dot.className = "w-2.5 h-2.5 rounded-full bg-green-500";
+              brutalVideos[idx] = data.videoUrl;
+              brutalThumbs[idx] = data.thumbnailUrl || '/logo.png';
+              
+              // Load thumbnail
+              thumb.src = data.thumbnailUrl || '/logo.png';
+              preview.classList.remove('hidden');
+
+              // Setup download button
+              dlBtn.href = data.videoUrl;
+              dlBtn.classList.remove('hidden');
+
+              // Hide overlay
+              overlay.classList.add('hidden');
+              
+              // Refresh credits globally
+              await loadConfig();
+              return;
+            }
+
+            if (eventName === 'error') {
+              throw new Error(data.error);
+            }
+          }
+        }
+      } catch (err) {
+        dot.className = "w-2.5 h-2.5 rounded-full bg-red-500";
+        title.textContent = "Gagal";
+        msg.innerHTML = `<span class="text-red-400 font-bold">${err.message}</span>`;
+        
+        // Keep error visible for 6 seconds then close overlay
+        await new Promise(r => setTimeout(r, 6000));
+        overlay.classList.add('hidden');
+      }
+    }
+
+    // ─── INFINITE-GENERATE SYSTEM (LOOP & AUTO-SWITCH ACCOUNT) ───
+
+    function applyInfinitePromptTemplate() {
+      const promptId = document.getElementById('infinite-prompt-select').value;
+      const promptObj = localConfig.prompts.find(p => p.id === promptId);
+      if (promptObj) {
+        document.getElementById('infinite-prompt-text').value = promptObj.prompt;
+      } else {
+        document.getElementById('infinite-prompt-text').value = '';
+      }
+    }
+
+    function loadInfiniteBahanPhotos() {
+      const bahanName = document.getElementById('infinite-bahan').value;
+      const container = document.getElementById('infinite-photo-preview-container');
+      const scrollDiv = document.getElementById('infinite-photos-scroll');
+      
+      scrollDiv.innerHTML = '';
+      selectedInfiniteReferenceImagePath = '';
+
+      if (!bahanName) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      const bahanObj = localConfig.bahan.find(b => b.name === bahanName);
+      if (!bahanObj || bahanObj.images.length === 0) {
+        container.classList.add('hidden');
+        return;
+      }
+
+      container.classList.remove('hidden');
+      
+      bahanObj.images.forEach((imgSrc) => {
+        const item = document.createElement('div');
+        item.className = "aspect-square rounded-lg overflow-hidden border-2 border-white/5 hover:border-purple-500/50 cursor-pointer relative group shrink-0 w-16 h-16 transition";
+        item.innerHTML = `<img src="${imgSrc}" class="w-full h-full object-cover group-hover:scale-110 transition duration-300">`;
+        
+        item.onclick = () => {
+          // Deselect previous selection
+          const prev = scrollDiv.querySelector('.border-purple-500');
+          if (prev) {
+            prev.className = "aspect-square rounded-lg overflow-hidden border-2 border-white/5 hover:border-purple-500/50 cursor-pointer relative group shrink-0 w-16 h-16 transition";
+          }
+          // Set active selection
+          item.className = "aspect-square rounded-lg overflow-hidden border-2 border-purple-500 bg-purple-500/10 cursor-pointer relative group shrink-0 w-16 h-16 transition";
+          selectedInfiniteReferenceImagePath = imgSrc;
+        };
+
+        scrollDiv.appendChild(item);
+      });
+    }
+
+    function updateInfiniteDurationLabel() {
+      const duration = document.getElementById('infinite-duration').value;
+      document.getElementById('infinite-duration-label').textContent = `${duration} detik`;
+    }
+
+    async function selectInfiniteLocalFolder() {
+      try {
+        const res = await fetch('/api/leonardo/select-folder');
+        const data = await res.json();
+        if (data.success && data.path) {
+          document.getElementById('infinite-target-folder').value = data.path;
+          scanInfiniteLocalFolder();
+        }
+      } catch (err) {
+        console.error('Failed to open local folder dialog:', err);
+      }
+    }
+
+    async function scanInfiniteLocalFolder() {
+      const folderPath = document.getElementById('infinite-target-folder').value.trim();
+      const grid = document.getElementById('infinite-gallery-grid');
+      const badge = document.getElementById('gallery-count-badge');
+
+      if (!folderPath) {
+        grid.innerHTML = `
+          <div class="col-span-3 py-16 text-center text-gray-500 italic text-xs">
+            <i class="fa-regular fa-folder-open text-3xl mb-2 block text-gray-600"></i>
+            Pilih folder penyimpanan lokal untuk menampilkan isi galeri video
+          </div>
+        `;
+        badge.textContent = '0 VIDEO';
+        return;
+      }
+
+      try {
+        const res = await fetch('/api/leonardo/scan-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderPath })
+        });
+        const data = await res.json();
+        
+        if (data.success && data.videos && data.videos.length > 0) {
+          badge.textContent = `${data.videos.length} VIDEO`;
+          grid.innerHTML = '';
+          
+          data.videos.forEach(v => {
+            const card = document.createElement('div');
+            card.className = "glass-panel rounded-2xl p-2 flex flex-col justify-between space-y-2 hover:border-pink-500/30 transition relative overflow-hidden group cursor-pointer";
+            
+            const streamUrl = `/api/leonardo/preview-local?path=${encodeURIComponent(v.fullPath)}`;
+            
+            card.innerHTML = `
+              <div class="relative w-full rounded-xl overflow-hidden bg-black aspect-video flex items-center justify-center">
+                <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent flex items-end justify-center pb-2 opacity-0 group-hover:opacity-100 transition z-10">
+                  <span class="text-[10px] text-white font-bold"><i class="fa-solid fa-circle-play mr-1"></i> Putar Video</span>
+                </div>
+                <div class="absolute inset-0 flex items-center justify-center bg-black/40">
+                  <i class="fa-solid fa-play text-xl text-white/80 filter drop-shadow"></i>
+                </div>
+                <div class="w-full h-full bg-slate-950 flex items-center justify-center text-gray-500">
+                  <i class="fa-solid fa-file-video text-3xl"></i>
+                </div>
+              </div>
+              <div class="px-1 py-1">
+                <p class="text-[10px] font-bold text-gray-300 truncate" title="${v.filename}">${v.filename}</p>
+                <p class="text-[8px] text-gray-500 mt-0.5">${new Date(v.mtime).toLocaleString('id-ID')}</p>
+              </div>
+            `;
+            
+            card.onclick = () => {
+              const modal = document.getElementById('brutal-video-modal');
+              const player = document.getElementById('modal-video-player');
+              const title = document.getElementById('modal-video-title');
+              const download = document.getElementById('modal-video-download');
+
+              player.src = streamUrl;
+              player.load();
+              title.textContent = `🎬 Preview Video Lokal - ${v.filename}`;
+              download.href = streamUrl;
+
+              modal.classList.remove('hidden');
+            };
+
+            grid.appendChild(card);
+          });
+        } else {
+          badge.textContent = '0 VIDEO';
+          grid.innerHTML = `
+            <div class="col-span-3 py-16 text-center text-gray-500 italic text-xs">
+              <i class="fa-regular fa-folder-open text-3xl mb-2 block text-gray-600"></i>
+              Folder kosong atau tidak ditemukan file video leonardo-*.mp4
+            </div>
+          `;
+        }
+      } catch (err) {
+        console.error('Failed to scan local folder:', err);
+      }
+    }
+
+    function renderInfiniteMiniWorkers() {
+      const container = document.getElementById('infinite-mini-workers-container');
+      if (!container) return;
+      container.innerHTML = '';
+      
+      const maxWorkers = parseInt(document.getElementById('infinite-worker-count').value) || 5;
+
+      for (let i = 1; i <= 5; i++) {
+        const w = infiniteWorkers[i];
+        const isMuted = i > maxWorkers;
+        
+        let colorClass = 'bg-gray-700 border-gray-600 text-gray-500';
+        let pulsing = '';
+
+        if (infiniteLoopActive && !isMuted) {
+          if (w.active) {
+            colorClass = 'bg-purple-500/10 border-purple-500 text-purple-400';
+            pulsing = 'animate-pulse';
+          } else if (w.status === 'Selesai') {
+            colorClass = 'bg-green-500/10 border-green-500 text-green-400';
+          } else if (w.status === 'Gagal') {
+            colorClass = 'bg-red-500/10 border-red-500 text-red-400';
+          } else {
+            colorClass = 'bg-yellow-500/10 border-yellow-500 text-yellow-400';
+          }
+        } else if (isMuted) {
+          colorClass = 'bg-gray-800/40 border-gray-800/80 text-gray-600 opacity-40';
+        }
+
+        const circle = document.createElement('div');
+        circle.className = `glass-panel border rounded-2xl p-3 flex flex-col items-center justify-center text-center transition-all duration-300 relative ${colorClass} ${pulsing}`;
+        circle.innerHTML = `
+          <span class="text-[9px] font-bold tracking-wider block">W${i}</span>
+          <span class="text-sm font-black mt-1 block">${isMuted ? 'OFF' : (w.active ? w.percent + '%' : 'Idle')}</span>
+          <span class="text-[8px] mt-1 text-gray-400 font-semibold truncate w-full block" title="${isMuted ? 'Nonaktif' : w.message}">${isMuted ? 'Nonaktif' : w.status}</span>
+        `;
+        container.appendChild(circle);
+      }
+    }
+
+    function toggleInfiniteGenerateLoop() {
+      const btn = document.getElementById('btn-infinite-submit');
+      const btnText = document.getElementById('btn-infinite-submit-text');
+
+      if (infiniteLoopActive) {
+        infiniteLoopActive = false;
+        btn.className = "w-full py-4.5 bg-gradient-to-r from-green-500 to-emerald-600 hover:from-green-600 hover:to-emerald-700 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-green-900/20 active:scale-95 transition duration-200 select-none";
+        btnText.textContent = "Mulai Infinite Generate";
+        
+        for (let i = 1; i <= 5; i++) {
+          if (infiniteWorkers[i].active) {
+            infiniteWorkers[i].active = false;
+            infiniteWorkers[i].status = 'Berhenti';
+            infiniteWorkers[i].message = 'Dihentikan oleh pengguna';
+          }
+        }
+        renderInfiniteMiniWorkers();
+      } else {
+        const promptText = document.getElementById('infinite-prompt-text').value.trim();
+        if (!promptText) {
+          return alert('❌ Silakan ketik prompt detail untuk loop render Anda!');
+        }
+
+        const activeAcc = localConfig.accounts.find(a => a.isActive);
+        if (!activeAcc) {
+          return alert('❌ Tidak ada akun aktif. Tambahkan/aktifkan akun di menu Manajemen Akun terlebih dahulu!');
+        }
+
+        const totalCredits = localConfig.accounts.reduce((sum, acc) => sum + (acc.credits || 0), 0);
+        const costEst = parseInt(document.getElementById('infinite-token-cost').value) || 30;
+        if (totalCredits < costEst) {
+          return alert('❌ Kredit global tidak mencukupi untuk melakukan render!');
+        }
+
+        infiniteLoopActive = true;
+        btn.className = "w-full py-4.5 bg-gradient-to-r from-red-500 to-rose-600 hover:from-red-600 hover:to-rose-700 text-white font-bold rounded-2xl flex items-center justify-center gap-2 shadow-lg shadow-red-900/20 active:scale-95 transition duration-200 select-none";
+        btnText.textContent = "Hentikan Infinite Generate";
+
+        for (let i = 1; i <= 5; i++) {
+          infiniteWorkers[i] = { active: false, percent: 0, status: 'Mengantre...', message: 'Menunggu slot loop...' };
+        }
+
+        renderInfiniteMiniWorkers();
+        runInfiniteGenerateLoop();
+      }
+    }
+
+    async function runInfiniteGenerateLoop() {
+      const folderPath = document.getElementById('infinite-target-folder').value.trim();
+      const costEst = parseInt(document.getElementById('infinite-token-cost').value) || 30;
+
+      while (infiniteLoopActive) {
+        const maxWorkers = parseInt(document.getElementById('infinite-worker-count').value) || 5;
+
+        const totalCredits = localConfig.accounts.reduce((sum, acc) => sum + (acc.credits || 0), 0);
+        if (totalCredits < costEst) {
+          alert('⚠️ Kredit Global Habis! Loop dihentikan secara otomatis.');
+          toggleInfiniteGenerateLoop();
+          break;
+        }
+
+        let launchedAny = false;
+        for (let i = 1; i <= maxWorkers; i++) {
+          if (!infiniteLoopActive) break;
+          
+          if (!infiniteWorkers[i].active) {
+            let activeAcc = localConfig.accounts.find(a => a.isActive);
+            if (!activeAcc || (activeAcc.credits || 0) < costEst) {
+              const candidate = localConfig.accounts.find(a => (a.credits || 0) >= costEst);
+              if (candidate) {
+                console.log(`Auto-switching active account to ${candidate.name} because active account credits are low.`);
+                try {
+                  const res = await fetch('/api/leonardo/accounts/activate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id: candidate.id })
+                  });
+                  await res.json();
+                  await loadConfig();
+                  activeAcc = candidate;
+                } catch (switchErr) {
+                  console.error('Failed to auto-switch account:', switchErr);
+                }
+              } else {
+                alert('⚠️ Seluruh akun Anda kehabisan kredit! Loop dihentikan secara otomatis.');
+                toggleInfiniteGenerateLoop();
+                return;
+              }
+            }
+
+            launchedAny = true;
+            runSingleInfiniteWorker(i, activeAcc.id, folderPath);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+
+        await new Promise(r => setTimeout(r, 4000));
+      }
+    }
+
+    async function runSingleInfiniteWorker(idx, accountId, targetFolder) {
+      infiniteWorkers[idx].active = true;
+      infiniteWorkers[idx].percent = 0;
+      infiniteWorkers[idx].status = 'Menghubungkan';
+      infiniteWorkers[idx].message = 'Menyiapkan sesi rendering...';
+      renderInfiniteMiniWorkers();
+
+      const promptText = document.getElementById('infinite-prompt-text').value.trim();
+      const duration = document.getElementById('infinite-duration').value;
+      const mode = document.getElementById('infinite-quality').value;
+      const aspectRatio = document.getElementById('infinite-aspect').value;
+      const selectBahan = document.getElementById('infinite-bahan').value;
+      const refImagePath = selectedInfiniteReferenceImagePath;
+
+      try {
+        const response = await fetch('/api/leonardo/generate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            promptText,
+            duration,
+            mode,
+            aspectRatio,
+            motion_has_audio: document.getElementById('infinite-audio').checked,
+            imagePath: (selectBahan && refImagePath) ? refImagePath : undefined,
+            accountId,
+            targetFolder: targetFolder ? targetFolder : undefined
+          })
+        });
+
+        if (!response.ok || !response.body) {
+          throw new Error(`HTTP ${response.status}`);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          if (!infiniteLoopActive) {
+            reader.cancel();
+            break;
+          }
+
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() || '';
+
+          for (const chunk of chunks) {
+            const eventLine = chunk.split('\n').find(line => line.startsWith('event: '));
+            const dataLine = chunk.split('\n').find(line => line.startsWith('data: '));
+            if (!dataLine) continue;
+
+            const eventName = eventLine ? eventLine.slice(7) : 'message';
+            const data = JSON.parse(dataLine.slice(6));
+
+            if (eventName === 'progress') {
+              infiniteWorkers[idx].percent = data.percent;
+              infiniteWorkers[idx].status = 'Progres';
+              infiniteWorkers[idx].message = data.message;
+              renderInfiniteMiniWorkers();
+            }
+
+            if (eventName === 'done') {
+              infiniteWorkers[idx].active = false;
+              infiniteWorkers[idx].percent = 100;
+              infiniteWorkers[idx].status = 'Selesai';
+              infiniteWorkers[idx].message = 'Video berhasil dirender!';
+              renderInfiniteMiniWorkers();
+
+              scanInfiniteLocalFolder();
+              await loadConfig();
+              return;
+            }
+
+            if (eventName === 'error') {
+              throw new Error(data.error);
+            }
+          }
+        }
+      } catch (err) {
+        infiniteWorkers[idx].active = false;
+        infiniteWorkers[idx].status = 'Gagal';
+        infiniteWorkers[idx].message = err.message || 'Gagal merender video';
+        renderInfiniteMiniWorkers();
+      }
+    }
+
+    // Initialize all components
+    window.onload = async () => {
+      renderWorkerCards();
+      renderInfiniteMiniWorkers();
+      await loadConfig();
+
+      const infFolder = document.getElementById('infinite-target-folder').value;
+      if (infFolder) {
+        scanInfiniteLocalFolder();
+      }
+    };
+  </script>
+
+  <!-- ================= PREMIUM VIDEO PLAYER MODAL ================= -->
+  <div id="brutal-video-modal" class="hidden fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-4 transition-all duration-300">
+    <div class="glass-panel rounded-3xl p-6 w-full max-w-3xl border border-white/10 relative shadow-2xl flex flex-col space-y-4">
+      <button onclick="closeBrutalVideoModal()" class="absolute -top-3 -right-3 w-10 h-10 rounded-full bg-white/10 border border-white/10 text-gray-300 hover:bg-white/20 transition flex items-center justify-center font-bold text-lg select-none">
+        &times;
+      </button>
+      <div class="relative w-full rounded-2xl overflow-hidden border border-white/10 bg-black aspect-video flex items-center justify-center">
+        <video id="modal-video-player" controls autoplay class="w-full h-full object-contain"></video>
+      </div>
+      <div class="flex justify-between items-center">
+        <h4 id="modal-video-title" class="font-bold text-gray-200">🤖 Preview Video Worker</h4>
+        <a href="" id="modal-video-download" download class="px-5 py-2.5 btn-glow-pink text-white font-bold rounded-xl text-xs select-none">
+          <i class="fa-solid fa-cloud-arrow-down mr-1.5"></i> Unduh Video (.mp4)
+        </a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "selectedFolder": "C:\\tiktok-ts-automation\\xprime-toko",
+  "uploadParentFolder": "C:\\tiktok-ts-automation\\xprime-toko",
+  "uploadFolder": "C:\\tiktok-ts-automation\\xprime-toko\\3",
+  "stateFile": "tiktok-state-toko.json",
+  "addProduct": true,
+  "productNameRadio": "X-PRIME Tablet Matepad Pro S25 10.1 Inch HD 120Hz 16GB RAM 1TB ROM 8800mAh Android 15 dengan Keyboard dan Hadiah Khusus",
+  "productTitle": "BISA COD BELI DI SINI",
+  "productDescription": "",
+  "description": "X-PRIME Tablet Matepad Pro S25 10.1 Inch HD 120Hz 16GB RAM 1TB ROM 8800mAh Android 15 dengan Keyboard dan Hadiah Khusus",
+  "hashtags": "tablet, tabletsejutaan, tabletmurah",
+  "scheduleDate": "2026-06-04",
+  "scheduleTime": "07:20",
+  "intervalMinutes": 180,
+  "headless": true,
+  "skipSwitches": false,
+  "deleteAfterUpload": true,
+  "soundFileName": "",
+  "soundFilePath": ""
+}

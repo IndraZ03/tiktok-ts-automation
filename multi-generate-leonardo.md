@@ -1,0 +1,5 @@
+/leonardo tambahkan halaman Multi-Generate dimana bisa melakukan generate image to video 
+
+fiturnya :
+1. ada 5 worker yang tersedia
+2. user dapat setting tiap worker dari prompt, bahan, durasi, resolusi, rasio, suara video bisa juga user hanya setting satu worker kemudian ada button aplikasikan ke semua worker maka settingan akan sama semua. kemudian ketika klik generate secara paralel worker akan bekerja. tampilkan persentase nya tidak perlu ada log. jika sudah selesai tiap worker ada preview yang jika diklik maka akan muncul preview penuh videonya. beri button download pada tiap worker tetapi bisa langsung download semua video juga. untuk penyimpanan video user dapat memilih apakah mau mengunggah path dengan diklik maka user dapat select folder. apa download media leonardo langsung saja via browser.

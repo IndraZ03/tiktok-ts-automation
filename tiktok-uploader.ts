@@ -587,32 +587,66 @@ async function uploadSingleVideo(
       }
       await page.waitForTimeout(2000);
 
-      // Navigate to correct month if needed
-      const targetMonth = new Date(scheduleDate).toLocaleString('en-US', { month: 'long' });
+      // Navigate to correct month if needed (supports English and Indonesian months)
+      const monthIdx = new Date(scheduleDate).getMonth(); // 0 to 11
+      const englishMonths = [
+        'January', 'February', 'March', 'April', 'May', 'June', 
+        'July', 'August', 'September', 'October', 'November', 'December'
+      ];
+      const indonesianMonths = [
+        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
+        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
+      ];
+      const targetEnglish = englishMonths[monthIdx];
+      const targetIndonesian = indonesianMonths[monthIdx];
+
       try {
         let attempts = 0;
         while (attempts < 6) {
           const monthTitle = await page.locator('.calendar-wrapper .month-title, [class*="calendar"] [class*="month-title"]').textContent().catch(() => '');
-          if (monthTitle?.includes(targetMonth)) break;
-          const arrows = page.locator('.calendar-wrapper .arrow, [class*="calendar"] [class*="arrow"]');
-          const arrowCount = await arrows.count();
-          if (arrowCount >= 2) await arrows.nth(1).click();
+          if (
+            monthTitle?.toLowerCase().includes(targetEnglish.toLowerCase()) ||
+            monthTitle?.toLowerCase().includes(targetIndonesian.toLowerCase())
+          ) {
+            break;
+          }
+          // Target the right-arrow (next month). Sibling after title-wrapper is the next month arrow.
+          const nextArrow = page.locator('.calendar-wrapper .title-wrapper ~ .arrow, [class*="calendar"] [class*="title-wrapper"] ~ [class*="arrow"]').first();
+          if (await nextArrow.isVisible().catch(() => false)) {
+            await nextArrow.click();
+            log('✓ Klik arrow bulan berikutnya (CSS sibling)');
+          } else {
+            // Fallback arrow logic
+            const arrows = page.locator('.calendar-wrapper .arrow, [class*="calendar"] [class*="arrow"]');
+            const arrowCount = await arrows.count();
+            if (arrowCount === 1) {
+              await arrows.nth(0).click();
+              log('✓ Klik arrow bulan berikutnya (single arrow)');
+            } else if (arrowCount >= 2) {
+              await arrows.nth(1).click();
+              log('✓ Klik arrow bulan berikutnya (arrow index 1)');
+            }
+          }
           await page.waitForTimeout(1000);
           attempts++;
         }
       } catch { /* ignore */ }
 
-      // Click target day
+      // Click target day exactly using Regex filter on valid/active days
       try {
-        const daySpan = page.locator(`.calendar-wrapper span.day.valid:text("${targetDay}"), [class*="calendar"] span[class*="day"][class*="valid"]:text("${targetDay}")`).first();
+        const daySpan = page.locator('.calendar-wrapper span.day.valid, [class*="calendar"] span[class*="day"][class*="valid"]')
+          .filter({ hasText: new RegExp('^' + targetDay + '$') })
+          .first();
         await daySpan.click();
         log(`✓ Tanggal ${targetDay} dipilih`);
       } catch {
+        // Fallback to iterating elements
         const days = page.locator('.calendar-wrapper span[class*="day"], [class*="calendar"] span[class*="day"]');
         const dayCount = await days.count();
         for (let i = 0; i < dayCount; i++) {
           const text = await days.nth(i).textContent();
-          if (text?.trim() === targetDay) {
+          const className = await days.nth(i).getAttribute('class') || '';
+          if (text?.trim() === targetDay && className.includes('valid')) {
             await days.nth(i).click();
             log(`✓ Tanggal ${targetDay} dipilih (fallback)`);
             break;

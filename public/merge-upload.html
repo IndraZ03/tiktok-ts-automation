@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Permutation Merger & TikTok Uploader</title>
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg-dark: #0a0b10;
+      --bg-card: rgba(20, 22, 33, 0.7);
+      --border-glow: rgba(236, 72, 153, 0.2);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-pink: #ec4899;
+      --accent-purple: #8b5cf6;
+      --accent-emerald: #10b981;
+      --accent-cyan: #06b6d4;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 0%, #1c133a 0%, var(--bg-dark) 100%);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding-bottom: 5rem;
+    }
+
+    h1, h2, h3, .font-heading {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* Glassmorphism containers */
+    .glass-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 2.25rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-card:hover {
+      border-color: var(--border-glow);
+      box-shadow: 0 20px 40px rgba(236, 72, 153, 0.1);
+    }
+
+    /* Premium gradient buttons */
+    .btn-gradient {
+      background: linear-gradient(135deg, var(--accent-pink) 0%, var(--accent-purple) 100%);
+      color: #fff;
+      border: none;
+      padding: 1rem 2rem;
+      border-radius: 16px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.25s ease;
+      box-shadow: 0 8px 16px rgba(236, 72, 153, 0.3);
+    }
+
+    .btn-gradient:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 20px rgba(236, 72, 153, 0.5);
+      filter: brightness(1.1);
+    }
+
+    .btn-gradient:active {
+      transform: translateY(1px);
+    }
+
+    .btn-gradient:disabled {
+      background: #374151 !important;
+      color: #9ca3af !important;
+      box-shadow: none !important;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-main);
+      padding: 0.75rem 1.5rem;
+      border-radius: 14px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Inputs */
+    .input-field {
+      width: 100%;
+      background: rgba(10, 11, 16, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 0.85rem 1.25rem;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .input-field:focus {
+      border-color: var(--accent-pink);
+      box-shadow: 0 0 0 4px rgba(236, 72, 153, 0.15);
+    }
+
+    /* Step indicator badge */
+    .step-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      color: white;
+      font-weight: 700;
+      font-size: 0.85rem;
+      margin-right: 0.75rem;
+    }
+
+    /* Logs Console */
+    .console-logs {
+      font-family: 'Fira Code', 'Courier New', monospace;
+      font-size: 0.8rem;
+      background-color: #05060a;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 1.25rem;
+      color: #00ffcc;
+      height: 220px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Layout structure */
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 2.5rem 1.5rem;
+    }
+
+    header {
+      margin-bottom: 3rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #ff79c6 0%, #bd93f9 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .grid-cols {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 2.25rem;
+    }
+
+    @media (min-width: 768px) {
+      .grid-cols {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 550;
+      color: #d1d5db;
+      margin-bottom: 0.5rem;
+    }
+
+    .validation-status {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+      font-size: 0.85rem;
+      font-weight: 500;
+    }
+
+    /* Custom Checkbox toggle switches */
+    .switch-group {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.5rem 0;
+    }
+
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input { 
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #374151;
+      transition: .4s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider {
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+    }
+
+    input:checked + .slider:before {
+      transform: translateX(20px);
+    }
+
+    .progress-bar-wrap {
+      margin-top: 1.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      overflow: hidden;
+      height: 8px;
+      width: 100%;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0;
+      background: linear-gradient(90deg, var(--accent-pink) 0%, var(--accent-emerald) 100%);
+      transition: width 0.3s ease;
+    }
+
+    /* Micro animations */
+    @keyframes pulse {
+      0% { opacity: 0.6; }
+      50% { opacity: 1; }
+      100% { opacity: 0.6; }
+    }
+
+    .loading-pulse {
+      animation: pulse 1.5s infinite ease-in-out;
+    }
+
+    .back-btn {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 0.95rem;
+      font-weight: 500;
+      transition: color 0.2s ease;
+      display: flex;
+      align-items: center;
+      gap: 0.25rem;
+    }
+
+    .back-btn:hover {
+      color: #fff;
+    }
+
+    /* Dropdown customization */
+    select.input-field {
+      appearance: none;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23ffffff' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 1.25rem center;
+      background-size: 1.25rem;
+      padding-right: 2.5rem;
+    }
+
+    select.input-field option {
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+    }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <!-- Header -->
+    <header>
+      <div>
+        <a href="/" class="back-btn">← Dashboard</a>
+        <h1 class="text-3xl font-extrabold tracking-tight mt-1">
+          <span class="gradient-text">Permutation Merger</span> & TikTok Uploader
+        </h1>
+        <p class="text-sm text-gray-400 mt-1">Gabungkan & replace audio video kelipatan 4, lalu upload otomatis ke TikTok.</p>
+      </div>
+      <div>
+        <span class="px-4 py-1.5 text-xs font-semibold bg-pink-900/50 text-pink-300 rounded-full border border-pink-700/30">V2 PIPELINE</span>
+      </div>
+    </header>
+
+    <div class="grid-cols">
+      <!-- LEFT SECTION: VIDEO MERGER & SOUND REPLACEMENT -->
+      <div class="space-y-6">
+        <div class="glass-card">
+          <h2 class="text-xl font-bold mb-6 flex items-center">
+            <span class="step-badge">1</span> PENGGABUNG VIDEO (PERMUTASI)
+          </h2>
+
+          <!-- Folder Path Input & Browse -->
+          <div class="form-group">
+            <label class="form-label" for="folder-input">Folder Sumber Video</label>
+            <div style="display: flex; gap: 0.75rem;">
+              <input type="text" id="folder-input" class="input-field" style="flex: 1;" placeholder="Masukkan path folder video..." oninput="validateFolder(); autoSaveConfig();">
+              <button class="btn-secondary" type="button" onclick="browseFolder('folder-input')">📂 Browse</button>
+            </div>
+            <div id="folder-validation-status" class="validation-status" style="display: none;"></div>
+          </div>
+
+          <!-- Replace Sound Input -->
+          <div class="form-group">
+            <label class="form-label" for="sound-file">Replace Sound (.mp3 atau .wav)</label>
+            <input type="file" id="sound-file" accept=".mp3,.wav" class="input-field" onchange="soundFileChanged()">
+            <p id="saved-sound-info" class="text-xs text-gray-400 mt-1.5" style="display: none; font-style: italic;">
+              🎵 Sound aktif saat ini: <span id="saved-sound-name" class="font-semibold text-emerald-400">Default</span>
+            </p>
+          </div>
+
+          <!-- Merge Execution -->
+          <div style="margin-top: 2rem;">
+            <button id="btn-merge" class="btn-gradient" style="width: 100%;" onclick="startPermutationMerge()" disabled>
+              ⚡ Jalankan Permutasi Video (P(n,2) + n)
+            </button>
+            
+            <div id="merge-progress-wrap" style="display: none; margin-top: 1.5rem;">
+              <div style="display: flex; justify-content: space-between; font-size: 0.85rem; margin-bottom: 0.5rem;">
+                <span id="merge-progress-label">Menghubungkan...</span>
+                <span id="merge-progress-pct" class="font-bold text-pink-400">0%</span>
+              </div>
+              <div class="progress-bar-wrap">
+                <div id="merge-progress-bar" class="progress-bar-fill"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Live Log Console for Merge stage -->
+        <div id="merge-logs-container" class="glass-card" style="display: none;">
+          <h3 class="text-sm font-bold mb-3 text-gray-300 tracking-wider font-heading uppercase">🪵 Log Proses Merger</h3>
+          <div id="merge-logs" class="console-logs"></div>
+        </div>
+      </div>
+
+      <!-- RIGHT SECTION: TIKTOK AUTO UPLOADER -->
+      <div class="space-y-6">
+        <div class="glass-card">
+          <h2 class="text-xl font-bold mb-6 flex items-center">
+            <span class="step-badge">2</span> TIKTOK AUTO UPLOADER
+          </h2>
+
+          <!-- Parent Upload Folder Input & Browse -->
+          <div class="form-group">
+            <label class="form-label" for="upload-parent-folder">Parent Folder Video (Hasil Merge)</label>
+            <div style="display: flex; gap: 0.75rem;">
+              <input type="text" id="upload-parent-folder" class="input-field" style="flex: 1;" placeholder="Masukkan path parent folder..." oninput="scanSubfolders(); autoSaveConfig();">
+              <button class="btn-secondary" type="button" onclick="browseFolder('upload-parent-folder')">📂 Browse</button>
+            </div>
+          </div>
+
+          <!-- Generated Folders Selector -->
+          <div class="form-group">
+            <label class="form-label" for="upload-folder-select">Pilih Grup Subfolder</label>
+            <select id="upload-folder-select" class="input-field" onchange="validateUploadFolder(); autoSaveConfig();">
+              <option value="">-- Pilih grup subfolder --</option>
+            </select>
+            <div id="upload-validation-status" class="validation-status" style="display: none;"></div>
+          </div>
+
+          <!-- Storage State selector -->
+          <div class="form-group">
+            <label class="form-label" for="state-select">Akun TikTok (Storage State)</label>
+            <select id="state-select" class="input-field" onchange="autoSaveConfig()">
+              <option value="">-- Pilih Akun --</option>
+            </select>
+          </div>
+
+          <!-- Product Toggle & Info -->
+          <div class="form-group" style="margin-top: 1.5rem;">
+            <div class="switch-group">
+              <span class="form-label" style="margin-bottom: 0;">🛒 Tambahkan Tautan Produk</span>
+              <label class="switch">
+                <input type="checkbox" id="chk-product" onchange="toggleProductFields(); autoSaveConfig();">
+                <span class="slider"></span>
+              </label>
+            </div>
+            
+            <div id="product-fields" class="space-y-3" style="display: none; margin-top: 1rem; border-left: 2px solid var(--accent-pink); padding-left: 1rem;">
+              <input type="text" id="product-name-radio" placeholder="Nama Produk (Radio Selection)" class="input-field" oninput="autoSaveConfig()">
+              <input type="text" id="product-title" placeholder="Judul Produk (Di Keranjang)" class="input-field" oninput="autoSaveConfig()">
+              <textarea id="product-desc" placeholder="Deskripsi/Judul Produk Tambahan" rows="2" class="input-field resize-none" oninput="autoSaveConfig()"></textarea>
+            </div>
+          </div>
+
+          <!-- Description and Hashtags -->
+          <div class="form-group">
+            <label class="form-label" for="description">Caption / Deskripsi Video</label>
+            <textarea id="description" placeholder="Tulis caption video di sini..." rows="3" class="input-field" oninput="autoSaveConfig()"></textarea>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="hashtags">Hashtags (Pisah Koma)</label>
+            <input type="text" id="hashtags" placeholder="fyp, viral, affiliate" class="input-field" oninput="autoSaveConfig()">
+          </div>
+
+          <!-- Schedule Settings -->
+          <div class="grid-cols" style="gap: 1rem;">
+            <div class="form-group">
+              <label class="form-label" for="schedule-date">Tanggal Mulai</label>
+              <input type="date" id="schedule-date" class="input-field" onchange="autoSaveConfig()">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="schedule-time">Jam Mulai</label>
+              <input type="time" id="schedule-time" class="input-field" onchange="autoSaveConfig()">
+            </div>
+          </div>
+
+          <div class="grid-cols" style="gap: 1rem; margin-top: 0.5rem;">
+            <div class="form-group">
+              <label class="form-label" for="interval-minutes">Jeda Antar Video (Menit)</label>
+              <input type="number" id="interval-minutes" value="60" min="1" class="input-field" oninput="autoSaveConfig()">
+            </div>
+            <div class="form-group">
+              <label class="form-label" for="start-video">Mulai Dari Video</label>
+              <select id="start-video" class="input-field" onchange="autoSaveConfig()">
+                <option value="">Urutan Pertama</option>
+              </select>
+            </div>
+          </div>
+
+          <!-- Stealth Settings toggles -->
+          <div class="space-y-2" style="margin-top: 1.5rem; border-top: 1px solid rgba(255, 255, 255, 0.08); padding-top: 1rem;">
+            <div class="switch-group">
+              <span class="text-sm text-gray-300">👁 Headless Mode (Sembunyikan Browser)</span>
+              <label class="switch">
+                <input type="checkbox" id="chk-headless" checked onchange="autoSaveConfig()">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="switch-group">
+              <span class="text-sm text-gray-300">🔀 Lewati Switch Pengaturan Lanjut</span>
+              <label class="switch">
+                <input type="checkbox" id="chk-switches" checked onchange="autoSaveConfig()">
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="switch-group">
+              <span class="text-sm font-semibold text-emerald-400">🗑️ Hapus Video & Folder Setelah Upload</span>
+              <label class="switch">
+                <input type="checkbox" id="chk-delete-after" checked onchange="autoSaveConfig()">
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <!-- Upload Execution button -->
+          <div style="margin-top: 2rem;">
+            <button id="btn-upload" class="btn-gradient" style="width: 100%; background: linear-gradient(135deg, var(--accent-emerald) 0%, var(--accent-cyan) 100%); box-shadow: 0 8px 16px rgba(16, 185, 129, 0.25);" onclick="startTikTokUpload()" disabled>
+              🚀 Mulai Upload Otomatis ke TikTok
+            </button>
+            <button id="btn-stop-upload" class="btn-secondary" style="width: 100%; margin-top: 0.75rem; display: none;" onclick="stopTikTokUpload()">
+              ⛔ Hentikan Upload
+            </button>
+          </div>
+        </div>
+
+        <!-- Live Upload Log console -->
+        <div id="upload-logs-container" class="glass-card" style="display: none;">
+          <h3 class="text-sm font-bold mb-3 text-gray-300 tracking-wider font-heading uppercase">🪵 Log Stealth Playwright</h3>
+          <div id="upload-logs" class="console-logs" style="color: #ff79c6;"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- STATE VARIABLES ---
+    let stateList = [];
+    let savedConfig = {};
+    let mergeRunning = false;
+    let uploadRunning = false;
+    let sseSource = null;
+
+    // --- INITIALIZATION ---
+    window.addEventListener('DOMContentLoaded', async () => {
+      await loadStates();
+      await fetchSavedConfig();
+    });
+
+    // Load available TikTok storage states
+    async function loadStates() {
+      try {
+        const res = await fetch('/api/states?platform=tiktok');
+        stateList = await res.json();
+        const select = document.getElementById('state-select');
+        select.innerHTML = '<option value="">-- Pilih Akun (Storage State) --</option>';
+        stateList.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.filename;
+          opt.textContent = `${s.filename} (${s.expiry.daysLeft} hari)`;
+          select.appendChild(opt);
+        });
+      } catch (e) {
+        console.error('Gagal mengambil states:', e);
+      }
+    }
+
+    // Load saved configuration from server
+    async function fetchSavedConfig() {
+      try {
+        const res = await fetch('/api/merge-upload/config');
+        savedConfig = await res.json();
+        
+        // Pre-fill input elements
+        if (savedConfig.stateFile) document.getElementById('state-select').value = savedConfig.stateFile;
+        if (savedConfig.addProduct) {
+          document.getElementById('chk-product').checked = true;
+          toggleProductFields();
+        }
+        if (savedConfig.productNameRadio) document.getElementById('product-name-radio').value = savedConfig.productNameRadio;
+        if (savedConfig.productTitle) document.getElementById('product-title').value = savedConfig.productTitle;
+        if (savedConfig.productDescription) document.getElementById('product-desc').value = savedConfig.productDescription;
+        if (savedConfig.description) document.getElementById('description').value = savedConfig.description;
+        if (savedConfig.hashtags) document.getElementById('hashtags').value = savedConfig.hashtags;
+        if (savedConfig.scheduleDate) document.getElementById('schedule-date').value = savedConfig.scheduleDate;
+        if (savedConfig.scheduleTime) document.getElementById('schedule-time').value = savedConfig.scheduleTime;
+        if (savedConfig.intervalMinutes) document.getElementById('interval-minutes').value = savedConfig.intervalMinutes;
+        if (savedConfig.headless !== undefined) document.getElementById('chk-headless').checked = savedConfig.headless;
+        if (savedConfig.skipSwitches !== undefined) document.getElementById('chk-switches').checked = savedConfig.skipSwitches;
+        if (savedConfig.deleteAfterUpload !== undefined) document.getElementById('chk-delete-after').checked = savedConfig.deleteAfterUpload;
+        
+        // Sound configuration
+        if (savedConfig.soundFileName) {
+          document.getElementById('saved-sound-info').style.display = 'block';
+          document.getElementById('saved-sound-name').textContent = savedConfig.soundFileName;
+        }
+        
+        // Folder and Parent selection
+        if (savedConfig.selectedFolder) {
+          document.getElementById('folder-input').value = savedConfig.selectedFolder;
+          validateFolder();
+        }
+        if (savedConfig.uploadParentFolder) {
+          document.getElementById('upload-parent-folder').value = savedConfig.uploadParentFolder;
+          await scanSubfolders();
+        }
+      } catch (e) {
+        console.error('Gagal memuat config:', e);
+      }
+    }
+
+    // Auto-save configuration on input changes
+    async function autoSaveConfig() {
+      const config = {
+        selectedFolder: document.getElementById('folder-input').value,
+        uploadParentFolder: document.getElementById('upload-parent-folder').value,
+        uploadFolder: document.getElementById('upload-folder-select').value,
+        stateFile: document.getElementById('state-select').value,
+        addProduct: document.getElementById('chk-product').checked,
+        productNameRadio: document.getElementById('product-name-radio').value,
+        productTitle: document.getElementById('product-title').value,
+        productDescription: document.getElementById('product-desc').value,
+        description: document.getElementById('description').value,
+        hashtags: document.getElementById('hashtags').value,
+        scheduleDate: document.getElementById('schedule-date').value,
+        scheduleTime: document.getElementById('schedule-time').value,
+        intervalMinutes: parseInt(document.getElementById('interval-minutes').value) || 60,
+        headless: document.getElementById('chk-headless').checked,
+        skipSwitches: document.getElementById('chk-switches').checked,
+        deleteAfterUpload: document.getElementById('chk-delete-after').checked,
+        soundFileName: savedConfig.soundFileName || '',
+        soundFilePath: savedConfig.soundFilePath || ''
+      };
+
+      try {
+        await fetch('/api/merge-upload/config/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(config)
+        });
+      } catch (e) {
+        console.error('Auto-save gagal:', e);
+      }
+    }
+
+    // Toggle product input form visibility
+    function toggleProductFields() {
+      const isChecked = document.getElementById('chk-product').checked;
+      document.getElementById('product-fields').style.display = isChecked ? 'block' : 'none';
+    }
+
+    // Scan subfolders of parent path
+    async function scanSubfolders() {
+      const parent = document.getElementById('upload-parent-folder').value;
+      const select = document.getElementById('upload-folder-select');
+      const statusDiv = document.getElementById('upload-validation-status');
+
+      if (!parent) {
+        select.innerHTML = '<option value="">-- Pilih grup subfolder --</option>';
+        statusDiv.style.display = 'none';
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/merge-upload/scan-subfolders?parent=${encodeURIComponent(parent)}`);
+        const data = await res.json();
+        
+        select.innerHTML = '<option value="">-- Pilih grup subfolder --</option>';
+        if (data.success && data.subfolders) {
+          data.subfolders.forEach(f => {
+            const opt = document.createElement('option');
+            opt.value = f;
+            opt.textContent = f.split(/[\\/]/).pop(); // show folder name only
+            select.appendChild(opt);
+          });
+          
+          // Pre-select saved upload folder if it fits
+          if (savedConfig.uploadFolder && data.subfolders.includes(savedConfig.uploadFolder)) {
+            select.value = savedConfig.uploadFolder;
+            validateUploadFolder();
+          }
+        }
+      } catch (e) {
+        console.error('Scan subfolders gagal:', e);
+      }
+    }
+
+    // Open file manager / browser dialog for custom folders
+    async function browseFolder(inputId) {
+      const res = await fetch('/api/browse-folder');
+      const data = await res.json();
+      if (data.success && data.folder) {
+        document.getElementById(inputId).value = data.folder;
+        if (inputId === 'folder-input') {
+          validateFolder();
+        } else if (inputId === 'upload-parent-folder') {
+          scanSubfolders();
+        }
+        autoSaveConfig();
+      }
+    }
+
+    // Scan videos in the selected folder and validate kelipatan 4
+    async function validateFolder() {
+      const folder = document.getElementById('folder-input').value;
+      const statusDiv = document.getElementById('folder-validation-status');
+      const btnMerge = document.getElementById('btn-merge');
+
+      if (!folder) {
+        statusDiv.style.display = 'none';
+        btnMerge.disabled = true;
+        return;
+      }
+
+      statusDiv.style.display = 'flex';
+      statusDiv.className = 'validation-status loading-pulse text-cyan-400';
+      statusDiv.innerHTML = '⏳ Menghitung video di folder...';
+
+      try {
+        const res = await fetch(`/api/tiktok/videos?folder=${encodeURIComponent(folder)}`);
+        const data = await res.json();
+        
+        if (!data.videos || data.videos.length === 0) {
+          statusDiv.className = 'validation-status text-red-500';
+          statusDiv.innerHTML = '❌ Tidak ada video di folder ini!';
+          btnMerge.disabled = true;
+        } else {
+          const count = data.videos.length;
+          const multipleOf4 = count % 4 === 0;
+
+          if (multipleOf4) {
+            statusDiv.className = 'validation-status text-emerald-400';
+            statusDiv.innerHTML = `✅ Ditemukan <strong>${count}</strong> video (Kelipatan 4 terverifikasi!)`;
+            btnMerge.disabled = false;
+          } else {
+            statusDiv.className = 'validation-status text-pink-500';
+            statusDiv.innerHTML = `⚠ Ditemukan <strong>${count}</strong> video. Harus kelipatan 4! (Kurang/lebih ${count % 4} video)`;
+            btnMerge.disabled = true;
+          }
+        }
+      } catch (e) {
+        statusDiv.className = 'validation-status text-red-500';
+        statusDiv.innerHTML = '❌ Gagal memvalidasi folder: ' + e.message;
+        btnMerge.disabled = true;
+      }
+    }
+
+    // Sound file change
+    function soundFileChanged() {
+      const file = document.getElementById('sound-file').files[0];
+      if (file) {
+        document.getElementById('saved-sound-info').style.display = 'block';
+        document.getElementById('saved-sound-name').textContent = `${file.name} (Akan diupload saat merge)`;
+      }
+    }
+
+    // Scan videos inside group folder and populate upload video list
+    async function validateUploadFolder() {
+      const folder = document.getElementById('upload-folder-select').value;
+      const statusDiv = document.getElementById('upload-validation-status');
+      const btnUpload = document.getElementById('btn-upload');
+      const startVideoSelect = document.getElementById('start-video');
+
+      if (!folder) {
+        statusDiv.style.display = 'none';
+        btnUpload.disabled = true;
+        startVideoSelect.innerHTML = '<option value="">Urutan Pertama</option>';
+        return;
+      }
+
+      statusDiv.style.display = 'flex';
+      statusDiv.className = 'validation-status loading-pulse text-cyan-400';
+      statusDiv.innerHTML = '⏳ Membaca isi folder grup...';
+
+      try {
+        const res = await fetch(`/api/tiktok/videos?folder=${encodeURIComponent(folder)}`);
+        const data = await res.json();
+        
+        if (!data.videos || data.videos.length === 0) {
+          statusDiv.className = 'validation-status text-red-500';
+          statusDiv.innerHTML = '❌ Tidak ada video di folder grup ini! (Mungkin sudah selesai upload & dihapus)';
+          btnUpload.disabled = true;
+          startVideoSelect.innerHTML = '<option value="">Tidak ada video</option>';
+        } else {
+          const count = data.videos.length;
+          statusDiv.className = 'validation-status text-emerald-400';
+          statusDiv.innerHTML = `✅ Ditemukan <strong>${count}</strong> video siap diupload.`;
+          btnUpload.disabled = false;
+
+          // Populate startFromVideo select
+          startVideoSelect.innerHTML = '';
+          data.videos.sort().forEach((v, index) => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = `${index + 1}. ${v}`;
+            startVideoSelect.appendChild(opt);
+          });
+        }
+      } catch (e) {
+        statusDiv.className = 'validation-status text-red-500';
+        statusDiv.innerHTML = '❌ Gagal membaca: ' + e.message;
+        btnUpload.disabled = true;
+      }
+    }
+
+    // --- ALGORITHM EXECUTION (SSE MERGE) ---
+    async function startPermutationMerge() {
+      if (mergeRunning) return;
+      
+      const folder = document.getElementById('folder-input').value;
+      if (!folder) return alert('Silakan pilih folder sumber!');
+
+      const soundInput = document.getElementById('sound-file');
+      const soundFile = soundInput.files[0];
+
+      mergeRunning = true;
+      document.getElementById('btn-merge').disabled = true;
+      document.getElementById('btn-merge').textContent = '⏳ Sedang Memproses Merger...';
+
+      // Setup UI logs and progress bar
+      const progressWrap = document.getElementById('merge-progress-wrap');
+      const progressBar = document.getElementById('merge-progress-bar');
+      const progressLabel = document.getElementById('merge-progress-label');
+      const progressPct = document.getElementById('merge-progress-pct');
+      const logsWrap = document.getElementById('merge-logs-container');
+      const logsPre = document.getElementById('merge-logs');
+
+      progressWrap.style.display = 'block';
+      logsWrap.style.display = 'block';
+      logsPre.textContent = '🚀 Memulai program permutasi video kelompok kelipatan 4...\n';
+      progressBar.style.width = '0%';
+      progressLabel.textContent = 'Menghubungkan ke server...';
+      progressPct.textContent = '0%';
+
+      // Form body
+      const formData = new FormData();
+      formData.append('folder', folder);
+      if (soundFile) {
+        formData.append('sound', soundFile);
+      }
+
+      try {
+        const response = await fetch('/api/merge-upload/merge', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!response.ok || !response.body) {
+          const err = await response.json().catch(() => ({}));
+          throw new Error(err.error || 'Server error, status: ' + response.status);
+        }
+
+        // Handle SSE stream manually
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            
+            const eventLine = line.split('\n').find(l => l.startsWith('event: '));
+            const dataLine = line.split('\n').find(l => l.startsWith('data: '));
+            if (!dataLine) continue;
+
+            const eventName = eventLine ? eventLine.slice(7) : 'message';
+            let data;
+            try { data = JSON.parse(dataLine.slice(6)); } catch { continue; }
+
+            if (eventName === 'progress') {
+              const pct = Math.round((data.current / data.total) * 100);
+              progressBar.style.width = pct + '%';
+              progressPct.textContent = pct + '%';
+              progressLabel.textContent = `Proses: ${data.current} / ${data.total} merge`;
+              
+              logsPre.textContent += `[${data.current}/${data.total}] ${data.message}\n`;
+              logsPre.scrollTop = logsPre.scrollHeight;
+            }
+
+            if (eventName === 'done') {
+              progressBar.style.width = '100%';
+              progressPct.textContent = '100%';
+              progressLabel.textContent = 'Merger Selesai!';
+              
+              logsPre.textContent += `\n✅ BERHASIL MERGE! ${data.successCount} sukses, ${data.failCount} gagal.\n`;
+              if (data.errors && data.errors.length > 0) {
+                logsPre.textContent += `❌ Errors:\n${data.errors.join('\n')}\n`;
+              }
+              logsPre.scrollTop = logsPre.scrollHeight;
+
+              alert(`Sukses menggabungkan ${data.successCount} video permutations! Folder grup generated.`);
+              
+              // Reset file selection
+              soundInput.value = '';
+              
+              // Automatically set parent path for uploading if successful
+              document.getElementById('upload-parent-folder').value = folder;
+              await scanSubfolders();
+              
+              // Pre-select the first generated group folder in the dropdown if available
+              if (data.generatedFolders && data.generatedFolders.length > 0) {
+                const uploadSelect = document.getElementById('upload-folder-select');
+                uploadSelect.value = data.generatedFolders[0].path;
+                validateUploadFolder();
+              }
+              
+              // Re-validate the input folder (it should be empty now!)
+              validateFolder();
+              autoSaveConfig();
+            }
+
+            if (eventName === 'error') {
+              logsPre.textContent += `❌ Gagal: ${data.error}\n`;
+              logsPre.scrollTop = logsPre.scrollHeight;
+              alert('Error: ' + data.error);
+            }
+          }
+        }
+
+      } catch (e) {
+        logsPre.textContent += `❌ Fatal Error: ${e.message}\n`;
+        alert('Gagal merger: ' + e.message);
+      } finally {
+        mergeRunning = false;
+        document.getElementById('btn-merge').disabled = false;
+        document.getElementById('btn-merge').textContent = '⚡ Jalankan Permutasi Video (P(n,2) + n)';
+      }
+    }
+
+    // --- TIKTOK UPLOAD CLIENT (SSE LOGS) ---
+    async function startTikTokUpload() {
+      if (uploadRunning) return;
+
+      const videoFolder = document.getElementById('upload-folder-select').value;
+      const stateFile = document.getElementById('state-select').value;
+      const startFromVideo = document.getElementById('start-video').value;
+
+      if (!videoFolder) return alert('Pilih folder hasil merge terlebih dahulu!');
+      if (!stateFile) return alert('Pilih akun TikTok (Storage State) terlebih dahulu!');
+
+      uploadRunning = true;
+      document.getElementById('btn-upload').style.display = 'none';
+      document.getElementById('btn-stop-upload').style.display = 'block';
+
+      const logsWrap = document.getElementById('upload-logs-container');
+      const logsPre = document.getElementById('upload-logs');
+      logsWrap.style.display = 'block';
+      logsPre.textContent = '🚀 Menginisialisasi multi-video stealth upload scheduler...\n';
+
+      // Save config once before upload
+      await autoSaveConfig();
+
+      // Start upload SSE logging listener
+      logsPre.textContent += '⏳ Membuka stream log upload dari Playwright...\n';
+      listenToUploadLogs();
+
+      // Submit start command to server
+      try {
+        const body = {
+          videoFolder,
+          startFromVideo,
+          description: document.getElementById('description').value,
+          hashtags: document.getElementById('hashtags').value,
+          addProduct: document.getElementById('chk-product').checked,
+          productNameRadio: document.getElementById('product-name-radio').value,
+          productTitle: document.getElementById('product-title').value,
+          productDescription: document.getElementById('product-desc').value,
+          skipSwitches: document.getElementById('chk-switches').checked,
+          headless: document.getElementById('chk-headless').checked,
+          scheduleDate: document.getElementById('schedule-date').value,
+          scheduleTime: document.getElementById('schedule-time').value,
+          intervalMinutes: parseInt(document.getElementById('interval-minutes').value) || 60,
+          stateFile,
+          deleteAfterUpload: document.getElementById('chk-delete-after').checked
+        };
+
+        const res = await fetch('/api/merge-upload/upload/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        
+        if (!data.success) {
+          throw new Error(data.error || 'Server menolak memulai upload');
+        }
+        
+        logsPre.textContent += '✅ Uploader sukses diluncurkan di background!\n';
+        logsPre.scrollTop = logsPre.scrollHeight;
+
+      } catch (e) {
+        logsPre.textContent += `❌ Gagal memulai upload: ${e.message}\n`;
+        logsPre.scrollTop = logsPre.scrollHeight;
+        stopTikTokUpload();
+      }
+    }
+
+    function listenToUploadLogs() {
+      if (sseSource) {
+        sseSource.close();
+      }
+      
+      const logsPre = document.getElementById('upload-logs');
+      sseSource = new EventSource('/api/tiktok/logs');
+
+      sseSource.onmessage = (event) => {
+        const logLine = event.data;
+        logsPre.textContent += `${logLine}\n`;
+        logsPre.scrollTop = logsPre.scrollHeight;
+
+        if (logLine.includes('===== UPLOAD PROCESS FINISHED =====') || logLine.includes('Fatal:')) {
+          uploadFinished();
+        }
+      };
+
+      sseSource.onerror = (e) => {
+        console.error('SSE Error:', e);
+        logsPre.textContent += `⚠ Stream logs terputus. Menghubungkan kembali...\n`;
+        logsPre.scrollTop = logsPre.scrollHeight;
+      };
+    }
+
+    async function stopTikTokUpload() {
+      const logsPre = document.getElementById('upload-logs');
+      logsPre.textContent += `⛔ Mengirim perintah stop ke server...\n`;
+      logsPre.scrollTop = logsPre.scrollHeight;
+
+      try {
+        await fetch('/api/tiktok/stop', { method: 'POST' });
+        logsPre.textContent += `🛑 Uploader dihentikan oleh user.\n`;
+        logsPre.scrollTop = logsPre.scrollHeight;
+      } catch (e) {
+        console.error('Gagal stop uploader:', e);
+      } finally {
+        uploadFinished();
+      }
+    }
+
+    function uploadFinished() {
+      uploadRunning = false;
+      document.getElementById('btn-upload').style.display = 'block';
+      document.getElementById('btn-stop-upload').style.display = 'none';
+      if (sseSource) {
+        sseSource.close();
+        sseSource = null;
+      }
+      // Re-validate dropdown to check if the group folder was deleted
+      setTimeout(async () => {
+        await scanSubfolders();
+        validateUploadFolder();
+      }, 3000);
+    }
+  </script>
+</body>
+</html>
