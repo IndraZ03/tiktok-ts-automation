@@ -2,6 +2,8 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { execa } from 'execa';
+import ffmpegPath from 'ffmpeg-static';
 let activeBrowser = null;
 let activeContext = null;
 let isRunning = false;
@@ -38,6 +40,34 @@ async function waitAndLog(page, log, ms, reason) {
     log(`⏳ Menunggu ${ms / 1000}s (${reason})...`);
     await page.waitForTimeout(ms);
 }
+async function isVideoValid(videoPath, log) {
+    try {
+        if (!fs.existsSync(videoPath)) {
+            return false;
+        }
+        const stat = fs.statSync(videoPath);
+        if (stat.size === 0) {
+            log(`❌ File video berukuran 0 bytes: ${path.basename(videoPath)}`);
+            return false;
+        }
+        if (!ffmpegPath) {
+            log(`⚠ ffmpeg-static tidak tersedia, melewati verifikasi FFmpeg untuk ${path.basename(videoPath)}`);
+            return true;
+        }
+        await execa(ffmpegPath, [
+            '-v', 'error',
+            '-i', videoPath,
+            '-t', '1',
+            '-f', 'null',
+            '-'
+        ], { windowsHide: true });
+        return true;
+    }
+    catch (err) {
+        log(`❌ Verifikasi FFmpeg gagal untuk ${path.basename(videoPath)}: ${err.message}`);
+        return false;
+    }
+}
 export async function runUpload(config, log) {
     isRunning = true;
     const stateFilePath = path.join(config.statesDir, config.stateFile);
@@ -49,6 +79,13 @@ export async function runUpload(config, log) {
     const videoPath = path.join(config.videoFolder, config.startFromVideo);
     if (!fs.existsSync(videoPath)) {
         log('❌ Video tidak ditemukan: ' + videoPath);
+        isRunning = false;
+        return;
+    }
+    // ── Verify video file integrity ──
+    const isValid = await isVideoValid(videoPath, log);
+    if (!isValid) {
+        log(`❌ File video rusak/corrupt: ${config.startFromVideo}`);
         isRunning = false;
         return;
     }
@@ -102,13 +139,34 @@ export async function runUpload(config, log) {
         log('📤 STEP 1: Upload video...');
         // Try multiple strategies to find file input
         let uploaded = false;
+        // Helper to verify if upload editor has appeared (meaning upload started successfully)
+        const verifyUploadStarted = async () => {
+            log('⏳ Memverifikasi transisi ke halaman edit (layar detail)...');
+            try {
+                await page.locator('.public-DraftEditor-content, div[role="textbox"][contenteditable="true"]')
+                    .first()
+                    .waitFor({ state: 'visible', timeout: 15000 });
+                return true;
+            }
+            catch {
+                return false;
+            }
+        };
         // Strategy A: Direct file input
         try {
-            const fileInput = page.locator('input[type="file"]').first();
+            let fileInput = page.locator('input[type="file"][accept*="video"]').first();
+            if (await fileInput.count() === 0) {
+                fileInput = page.locator('input[type="file"]').first();
+            }
             await fileInput.waitFor({ state: 'attached', timeout: 10000 });
             await fileInput.setInputFiles(videoPath);
-            log('✓ Video diupload via input[type=file]');
-            uploaded = true;
+            
+            if (await verifyUploadStarted()) {
+                log('✓ Video diupload via input[type=file] (Terverifikasi)');
+                uploaded = true;
+            } else {
+                log('⚠ input[type=file] diisi tapi tidak ada transisi ke halaman edit');
+            }
         }
         catch {
             log('⚠ input[type=file] langsung gagal, coba strategi lain...');
@@ -121,8 +179,13 @@ export async function runUpload(config, log) {
                     page.locator('button').filter({ hasText: /Select video|Select file|Pilih video/i }).first().click(),
                 ]);
                 await fileChooser.setFiles(videoPath);
-                log('✓ Video diupload via file chooser');
-                uploaded = true;
+                
+                if (await verifyUploadStarted()) {
+                    log('✓ Video diupload via file chooser (Terverifikasi)');
+                    uploaded = true;
+                } else {
+                    log('⚠ File chooser digunakan tapi tidak ada transisi ke halaman edit');
+                }
             }
             catch {
                 log('⚠ File chooser juga gagal');
@@ -143,8 +206,13 @@ export async function runUpload(config, log) {
                     const el = inputHandle.asElement();
                     if (el) {
                         await el.setInputFiles(videoPath);
-                        log('✓ Video diupload via JS injection');
-                        uploaded = true;
+                        
+                        if (await verifyUploadStarted()) {
+                            log('✓ Video diupload via JS injection (Terverifikasi)');
+                            uploaded = true;
+                        } else {
+                            log('⚠ JS injection digunakan tapi tidak ada transisi ke halaman edit');
+                        }
                     }
                 }
             }
@@ -155,7 +223,7 @@ export async function runUpload(config, log) {
             }
         }
         if (!uploaded) {
-            log('❌ Gagal menemukan elemen upload');
+            log('❌ Gagal menemukan elemen upload atau verifikasi upload gagal');
             isRunning = false;
             return;
         }
