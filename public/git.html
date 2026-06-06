@@ -275,7 +275,7 @@
         const data = await res.json();
         if (data.success) {
           updateAutopullUI(data.enabled);
-          log(data.enabled ? '🟢 Auto Pull DIAKTIFKAN. Server akan mengecek update setiap 20 detik.' : '⚪ Auto Pull DINONAKTIFKAN.');
+          log(data.enabled ? '🟢 Auto Pull DIAKTIFKAN. Server akan mengecek update setiap 5 jam.' : '⚪ Auto Pull DINONAKTIFKAN.');
         }
       } catch (err) {
         log('❌ Gagal mengubah status Auto Pull: ' + err.message, true);

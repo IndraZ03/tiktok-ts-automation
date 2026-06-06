@@ -2710,7 +2710,7 @@ function startAutopullPolling() {
         runRestartScript();
       }
     });
-  }, 20000); // Check every 20 seconds
+  }, 5 * 60 * 60 * 1000); // Check every 5 hours
 }
 
 function stopAutopullPolling() {
