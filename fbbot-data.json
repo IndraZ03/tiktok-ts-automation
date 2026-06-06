@@ -1,0 +1,12 @@
+{
+  "states": {
+    "facebook-state-test_user.json": {
+      "ytLinks": [],
+      "description": "FOLLOW BUAT TAU UPDATENYA",
+      "scheduleDate": "2026-06-16",
+      "scheduleTime": "01:00",
+      "intervalMinutes": 300,
+      "headless": false
+    }
+  }
+}

@@ -3,6 +3,10 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 let activeBrowsers = [];
 let isRunning = false;
 let stats = { success: 0, failed: 0, saved: 0 };
@@ -10,6 +14,9 @@ let browserProgress = [];
 export function getGrokIsRunning() { return isRunning; }
 export function getGrokStats() { return { ...stats }; }
 export function getBrowserProgress() { return browserProgress.map(b => ({ ...b })); }
+let grokRateLimits = {};
+export function getGrokRateLimits() { return { ...grokRateLimits }; }
+export function clearGrokRateLimit(stateFile) { delete grokRateLimits[stateFile]; }
 export async function stopGrokGenerator() {
     isRunning = false;
     for (const b of activeBrowsers) {
@@ -19,6 +26,90 @@ export async function stopGrokGenerator() {
         catch { }
     }
     activeBrowsers = [];
+}
+// ── Video Merger and Lock Queue ──
+let mergeLockPromise = Promise.resolve();
+async function acquireMergeLock() {
+    let release = () => { };
+    const nextLock = new Promise((resolve) => {
+        release = resolve;
+    });
+    const currentLock = mergeLockPromise;
+    mergeLockPromise = currentLock.then(() => nextLock).catch(() => nextLock);
+    await currentLock;
+    return release;
+}
+async function checkAndMergeVideos(downloadDir, audioFolder, log) {
+    const release = await acquireMergeLock();
+    try {
+        const rawDir = path.join(downloadDir, 'raw');
+        if (!fs.existsSync(rawDir)) {
+            fs.mkdirSync(rawDir, { recursive: true });
+        }
+        // 1. Retrieve all .mp4 files in rawDir sorted by modification time (oldest first)
+        let files = fs.readdirSync(rawDir)
+            .filter(f => f.endsWith('.mp4'))
+            .map(f => {
+            const p = path.join(rawDir, f);
+            return { name: f, path: p, mtime: fs.statSync(p).mtimeMs };
+        })
+            .sort((a, b) => a.mtime - b.mtime);
+        // 2. Loop and merge pairs
+        while (files.length >= 2) {
+            const pair = files.splice(0, 2);
+            const [v1, v2] = pair;
+            log(`[MERGER] Menggabungkan raw video: ${v1.name} dan ${v2.name}`);
+            // 3. Pick random audio file from audio/audioFolder
+            let pickedAudioPath = undefined;
+            if (audioFolder) {
+                const audioDir = path.join(__dirname, 'audio', audioFolder);
+                if (fs.existsSync(audioDir)) {
+                    const audioExts = ['.mp3', '.wav'];
+                    const audioFiles = fs.readdirSync(audioDir)
+                        .filter(f => audioExts.includes(path.extname(f).toLowerCase()));
+                    if (audioFiles.length > 0) {
+                        const pick = audioFiles[Math.floor(Math.random() * audioFiles.length)];
+                        pickedAudioPath = path.join(audioDir, pick);
+                        log(`[MERGER] Audio terpilih: ${pick}`);
+                    }
+                    else {
+                        log(`[MERGER] Peringatan: Tidak ada file audio (.mp3/.wav) di ${audioDir}`);
+                    }
+                }
+                else {
+                    log(`[MERGER] Peringatan: Folder audio tidak ada: ${audioDir}`);
+                }
+            }
+            const mergedFname = `grok_merged_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
+            const finalOutputPath = path.join(downloadDir, mergedFname);
+            try {
+                log(`[MERGER] Memulai merge ke ${mergedFname}...`);
+                await mergeVideosCopyWithOptionalAudio([v1.path, v2.path], finalOutputPath, pickedAudioPath, { tempDir: path.join(__dirname, '_tmp_uploads') });
+                // Increment stats.saved on successful merge
+                stats.saved++;
+                log(`[MERGER] Berhasil menggabungkan video! Tersimpan ke ${mergedFname}`);
+                // Delete raw source files
+                try {
+                    fs.unlinkSync(v1.path);
+                }
+                catch { }
+                try {
+                    fs.unlinkSync(v2.path);
+                }
+                catch { }
+            }
+            catch (err) {
+                log(`[MERGER] Gagal menggabungkan video: ${err.message}`);
+                break;
+            }
+        }
+    }
+    catch (err) {
+        log(`[MERGER] Error di checkAndMergeVideos: ${err.message}`);
+    }
+    finally {
+        release();
+    }
 }
 // ── Helpers ──
 async function waitAndLog(page, log, ms, reason) {
@@ -60,17 +151,13 @@ function imageToBase64(filepath) {
     const buf = fs.readFileSync(filepath);
     return buf.toString('base64');
 }
-// ── Read the grok_autoV2.js script once ──
-let grokScript = null;
+// ── Read the grok_autoV2.js script (always fresh, no cache) ──
 function getGrokScript(baseDir) {
-    if (grokScript)
-        return grokScript;
     const scriptPath = path.join(baseDir, 'grok_autoV2.js');
     if (!fs.existsSync(scriptPath)) {
         throw new Error('grok_autoV2.js not found at: ' + scriptPath);
     }
-    grokScript = fs.readFileSync(scriptPath, 'utf-8');
-    return grokScript;
+    return fs.readFileSync(scriptPath, 'utf-8');
 }
 // ════════════════════════════════════════════════════════════
 //  ORCHESTRATOR — N browsers, 1 state, videos split evenly
@@ -79,6 +166,7 @@ export async function runGrokGenerator(config, log, baseDir) {
     isRunning = true;
     stats = { success: 0, failed: 0, saved: 0 };
     activeBrowsers = [];
+    delete grokRateLimits[config.stateFile];
     const stateFilePath = path.join(config.statesDir, config.stateFile);
     if (!fs.existsSync(stateFilePath)) {
         log('❌ State file tidak ditemukan: ' + stateFilePath);
@@ -96,11 +184,12 @@ export async function runGrokGenerator(config, log, baseDir) {
         return;
     }
     const stateName = config.stateFile.replace('grok-state-', '').replace('.json', '');
-    const stateDownloadDir = path.join(config.downloadDir, stateName);
+    const stateDownloadDir = config.customDownloadDir || path.join(config.downloadDir, stateName);
     if (!fs.existsSync(stateDownloadDir))
         fs.mkdirSync(stateDownloadDir, { recursive: true });
     const total = Math.max(1, config.totalVideos || 1);
-    const numBrowsers = Math.min(total, 5); // auto: 1 browser per video, max 5
+    // Limit to 1 browser to ensure maximum stability, avoiding session conflicts and rate limits on the same Grok account.
+    const numBrowsers = Math.min(total, 1);
     // Distribute evenly
     const perBrowser = [];
     const base = Math.floor(total / numBrowsers);
@@ -209,6 +298,12 @@ async function runBrowserWorker(idx, count, config, stateFilePath, downloadDir, 
                     const st = await page.evaluate(() => window.__grokGetState());
                     if (st && st.progress >= 0)
                         bp.progress = st.progress;
+                    if (st && st.status === 'rate_limited') {
+                        grokRateLimits[config.stateFile] = {
+                            availableAt: st.availableAt || null,
+                            detectedAt: Date.now()
+                        };
+                    }
                 }
                 catch { }
             }, 2500);
@@ -231,7 +326,13 @@ async function runBrowserWorker(idx, count, config, stateFilePath, downloadDir, 
                 log(`${tag} ✅ Generate done! videoUrl: ${result.videoUrl || 'NONE'} | keys: ${Object.keys(result).join(',')}`);
                 const ext = config.mode.toLowerCase() === 'image' ? '.png' : '.mp4';
                 const fname = `grok_${Date.now()}_b${idx}_${i + 1}${ext}`;
-                const savePath = path.join(downloadDir, fname);
+                const isVideo = ext === '.mp4';
+                const useMerge = !!(config.merge && isVideo);
+                const targetDir = useMerge ? path.join(downloadDir, 'raw') : downloadDir;
+                if (useMerge && !fs.existsSync(targetDir)) {
+                    fs.mkdirSync(targetDir, { recursive: true });
+                }
+                const savePath = path.join(targetDir, fname);
                 log(`${tag} 📂 savePath: ${savePath}`);
                 let saved = false;
                 // Strategy A: fetch videoUrl with credentials from page context
@@ -380,9 +481,15 @@ async function runBrowserWorker(idx, count, config, stateFilePath, downloadDir, 
                     }
                 }
                 if (saved) {
-                    stats.saved++;
                     log(`${tag} 📥 ${fname}`);
-                    bp.message = `Saved #${i + 1}`;
+                    if (useMerge) {
+                        bp.message = `Saved raw #${i + 1}`;
+                        await checkAndMergeVideos(downloadDir, config.audioFolder, log);
+                    }
+                    else {
+                        stats.saved++;
+                        bp.message = `Saved #${i + 1}`;
+                    }
                 }
                 else {
                     log(`${tag} ⚠ DL gagal #${i + 1}`);
@@ -390,7 +497,12 @@ async function runBrowserWorker(idx, count, config, stateFilePath, downloadDir, 
                 }
             }
             else if (result?.status === 'rate_limited') {
-                log(`${tag} 🚫 Rate limited! Menghentikan semua proses...`);
+                const resetTime = result?.availableAt || null;
+                grokRateLimits[config.stateFile] = {
+                    availableAt: resetTime,
+                    detectedAt: Date.now()
+                };
+                log(`${tag} 🚫 Rate limited! Menghentikan semua proses... ${resetTime ? 'Tersedia kembali pukul ' + resetTime : ''}`);
                 stats.failed++;
                 bp.message = 'Rate limited!';
                 stopGrokGenerator();

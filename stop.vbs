@@ -4,4 +4,4 @@ Set objFSO = CreateObject("Scripting.FileSystemObject")
 Set objFile = objFSO.GetFile(strPath)
 strFolder = objFSO.GetParentFolderName(objFile)
 WshShell.CurrentDirectory = strFolder
-WshShell.Run "cmd.exe /c start.bat", 0, True
+WshShell.Run "cmd.exe /c stop.bat", 0, False

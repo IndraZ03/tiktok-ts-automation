@@ -27,6 +27,12 @@
       <a href="/merge-upload" class="bg-emerald-100 hover:bg-emerald-200 text-emerald-700 px-4 py-2 rounded-xl text-sm font-semibold transition">
         ⚡ Merge & Upload
       </a>
+      <a href="/fb" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-4 py-2 rounded-xl text-sm font-semibold transition">
+        🎬 FB Reels Bot
+      </a>
+      <a href="/git" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-semibold transition border border-slate-300">
+        🛠️ Git & System
+      </a>
     </div>
   </div>
 
@@ -36,12 +42,28 @@
 
     <div class="mb-10 border-b pb-8">
       <h2 class="text-xl font-semibold mb-4 text-gray-800">➕ Buat State Login Baru</h2>
-      <div class="flex gap-3">
-        <input id="tiktok-state-name" type="text" placeholder="Masukkan nama state (contoh: akun1)" 
-               class="flex-1 border border-gray-300 rounded-2xl px-5 py-4 focus:outline-none focus:border-pink-500 text-lg">
-        <button onclick="startLogin('tiktok')" class="bg-pink-600 hover:bg-pink-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap">
-          🚀 Buka Browser
-        </button>
+      <div class="flex flex-col gap-4">
+        <div class="flex gap-3">
+          <input id="tiktok-state-name" type="text" placeholder="Masukkan nama state (contoh: akun1)" 
+                 class="flex-1 border border-gray-300 rounded-2xl px-5 py-4 focus:outline-none focus:border-pink-500 text-lg">
+          <button onclick="startLogin('tiktok')" class="bg-pink-600 hover:bg-pink-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
+            🚀 Buka Browser
+          </button>
+        </div>
+        
+        <div class="flex justify-center">
+          <button onclick="togglePasteArea('tiktok')" class="text-pink-600 hover:text-pink-700 font-semibold flex items-center gap-2 transition duration-200">
+            📋 <span id="tiktok-toggle-text">Atau Paste Cookies (Tanpa Browser)</span>
+          </button>
+        </div>
+
+        <div id="tiktok-paste-container" class="hidden transition-all duration-300 ease-in-out p-5 bg-pink-50 rounded-2xl border border-pink-200 mt-2 space-y-4">
+          <textarea id="tiktok-cookies-text" rows="8" placeholder='Paste JSON cookies di sini...' 
+                    class="w-full p-4 border border-pink-200 rounded-xl focus:outline-none focus:border-pink-500 font-mono text-sm bg-white"></textarea>
+          <button onclick="saveCookies('tiktok')" class="w-full bg-pink-600 hover:bg-pink-700 text-white py-3.5 rounded-xl font-bold transition duration-200 active:scale-[0.99] shadow-md flex items-center justify-center gap-2">
+            💾 Simpan State Cookies
+          </button>
+        </div>
       </div>
     </div>
 
@@ -67,12 +89,28 @@
 
     <div class="mb-10 border-b border-gray-700 pb-8">
       <h2 class="text-xl font-semibold mb-4">➕ Buat State Login Baru</h2>
-      <div class="flex gap-3">
-        <input id="grok-state-name" type="text" placeholder="Masukkan nama state (contoh: grok_premium)" 
-               class="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500 text-lg text-white">
-        <button onclick="startLogin('grok')" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap">
-          🚀 Buka Browser
-        </button>
+      <div class="flex flex-col gap-4">
+        <div class="flex gap-3">
+          <input id="grok-state-name" type="text" placeholder="Masukkan nama state (contoh: grok_premium)" 
+                 class="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500 text-lg text-white">
+          <button onclick="startLogin('grok')" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
+            🚀 Buka Browser
+          </button>
+        </div>
+
+        <div class="flex justify-center">
+          <button onclick="togglePasteArea('grok')" class="text-blue-400 hover:text-blue-300 font-semibold flex items-center gap-2 transition duration-200">
+            📋 <span id="grok-toggle-text">Atau Paste Cookies (Tanpa Browser)</span>
+          </button>
+        </div>
+
+        <div id="grok-paste-container" class="hidden transition-all duration-300 ease-in-out p-5 bg-gray-800 rounded-2xl border border-gray-700 mt-2 space-y-4">
+          <textarea id="grok-cookies-text" rows="8" placeholder='Paste JSON cookies di sini...' 
+                    class="w-full p-4 border border-gray-700 rounded-xl focus:outline-none focus:border-blue-500 font-mono text-sm bg-gray-950 text-gray-100"></textarea>
+          <button onclick="saveCookies('grok')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3.5 rounded-xl font-bold transition duration-200 active:scale-[0.99] shadow-md flex items-center justify-center gap-2">
+            💾 Simpan State Cookies
+          </button>
+        </div>
       </div>
     </div>
 
@@ -138,6 +176,49 @@
             </div>
           </div>`;
       }).join('');
+    }
+
+    function togglePasteArea(platform) {
+      const container = document.getElementById(`${platform}-paste-container`);
+      const toggleText = document.getElementById(`${platform}-toggle-text`);
+      if (container.classList.contains('hidden')) {
+        container.classList.remove('hidden');
+        toggleText.innerText = 'Tutup Panel Paste Cookies';
+      } else {
+        container.classList.add('hidden');
+        toggleText.innerText = 'Atau Paste Cookies (Tanpa Browser)';
+      }
+    }
+
+    async function saveCookies(platform) {
+      const name = document.getElementById(`${platform}-state-name`).value.trim();
+      const cookiesText = document.getElementById(`${platform}-cookies-text`).value.trim();
+
+      if (!name) return alert('❌ Masukkan nama state dulu!');
+      if (!cookiesText) return alert('❌ Masukkan/paste cookies dulu!');
+
+      try {
+        const res = await fetch('/api/cookies/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, cookiesText, platform })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ ' + data.message);
+          document.getElementById(`${platform}-cookies-text`).value = '';
+          document.getElementById(`${platform}-state-name`).value = '';
+          const container = document.getElementById(`${platform}-paste-container`);
+          container.classList.add('hidden');
+          const toggleText = document.getElementById(`${platform}-toggle-text`);
+          toggleText.innerText = 'Atau Paste Cookies (Tanpa Browser)';
+          loadStates(platform);
+        } else {
+          alert('❌ ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan: ' + err.message);
+      }
     }
 
     async function startLoginWithState(filename, platform) {

@@ -96,7 +96,8 @@ async function uploadSingleVideo(
   config: UploadConfig,
   scheduleDate: string,
   scheduleTime: string,
-  log: LogFn
+  log: LogFn,
+  videoIndex?: number
 ): Promise<boolean> {
   // ── STEP 1: Navigate to upload page ──
   log('📄 Navigasi ke TikTok Studio Upload...');
@@ -299,9 +300,11 @@ async function uploadSingleVideo(
     await page.waitForTimeout(300);
 
     // Type description
-    if (config.description) {
-      await page.keyboard.type(config.description, { delay: 30 });
-      log(`✓ Deskripsi diketik: "${config.description.substring(0, 50)}..."`);
+    const prefix = videoIndex ? `[${videoIndex}] ` : '';
+    const finalDesc = `${prefix}${config.description || ''}`;
+    if (finalDesc) {
+      await page.keyboard.type(finalDesc, { delay: 30 });
+      log(`✓ Deskripsi diketik: "${finalDesc.substring(0, 50)}..."`);
     }
 
     // Type hashtags
@@ -1049,7 +1052,8 @@ export async function runUpload(
           config,
           schedDate,
           schedTime,
-          log
+          log,
+          uploadIndex + 1
         );
 
         if (success) {

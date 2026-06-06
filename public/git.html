@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>System & Git Control Panel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Inter', sans-serif;
+    }
+    .terminal-font {
+      font-family: 'Fira Code', monospace;
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen p-6 sm:p-10 flex flex-col justify-between selection:bg-indigo-500 selection:text-white">
+
+  <!-- Header & Nav -->
+  <div class="max-w-4xl w-full mx-auto space-y-6">
+    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center bg-slate-900/50 border border-slate-800 rounded-3xl p-4 gap-4">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">⚡</span>
+        <span class="font-bold text-slate-200">Navigasi Bot Utama</span>
+      </div>
+      <div class="flex flex-wrap gap-2">
+        <a href="/tiktok" class="hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition border border-transparent hover:border-slate-700">
+          🎬 TikTok
+        </a>
+        <a href="/grok" class="hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition border border-transparent hover:border-slate-700">
+          🧠 Grok
+        </a>
+        <a href="/ytbot" class="hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition border border-transparent hover:border-slate-700">
+          🤖 YT Bot
+        </a>
+        <a href="/fb" class="hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition border border-transparent hover:border-slate-700">
+          🎬 FB Bot
+        </a>
+        <a href="/" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-1.5 rounded-xl text-xs sm:text-sm font-semibold transition shadow-lg shadow-indigo-500/20">
+          ⚙️ StorageState
+        </a>
+      </div>
+    </div>
+
+    <!-- Title -->
+    <div class="text-center py-6">
+      <h1 class="text-4xl font-extrabold tracking-tight bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400 bg-clip-text text-transparent">
+        🛠️ System & Git Control Panel
+      </h1>
+      <p class="text-slate-400 mt-2 text-sm sm:text-base">
+        Kelola repository Git dan restart server secara remote dengan mudah
+      </p>
+    </div>
+
+    <!-- Main Grid -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <!-- Git Control Card -->
+      <div class="glass-card rounded-3xl p-6 flex flex-col justify-between space-y-6">
+        <div>
+          <div class="flex items-center gap-3 mb-4">
+            <div class="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-2xl">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2"></path>
+              </svg>
+            </div>
+            <h2 class="text-xl font-bold text-slate-200">Git Repository Control</h2>
+          </div>
+          <p class="text-slate-400 text-sm leading-relaxed">
+            Tarik pembaruan kode terbaru dari remote repository GitHub ke server lokal ini secara instan.
+          </p>
+
+          <!-- Current status info -->
+          <div id="git-meta" class="mt-4 p-4 bg-slate-950/50 rounded-2xl border border-slate-800 space-y-2 text-xs">
+            <div class="flex justify-between">
+              <span class="text-slate-500">Last Commit:</span>
+              <span id="last-commit" class="text-slate-300 font-semibold italic">Loading...</span>
+            </div>
+            <div class="flex justify-between">
+              <span class="text-slate-500">Repository Status:</span>
+              <span id="repo-status" class="text-slate-300 font-semibold">Loading...</span>
+            </div>
+          </div>
+        </div>
+
+        <button onclick="runGitPull()" id="btn-pull" class="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-semibold py-3.5 px-6 rounded-2xl transition duration-200 active:scale-[0.98] shadow-lg shadow-indigo-500/10 flex items-center justify-center gap-2">
+          <span>⬇️ Run Git Pull</span>
+        </button>
+      </div>
+
+      <!-- Server Control Card -->
+      <div class="glass-card rounded-3xl p-6 flex flex-col justify-between space-y-6">
+        <div>
+          <div class="flex items-center gap-3 mb-4">
+            <div class="p-2.5 bg-rose-500/10 text-rose-400 rounded-2xl">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+              </svg>
+            </div>
+            <h2 class="text-xl font-bold text-slate-200">Web Server Management</h2>
+          </div>
+          <p class="text-slate-400 text-sm leading-relaxed">
+            Mulai ulang server secara otomatis. Proses ini akan menghentikan server saat ini dan meluncurkan ulang di latar belakang.
+          </p>
+
+          <div class="mt-4 p-4 bg-rose-950/10 border border-rose-500/10 text-rose-300/80 rounded-2xl text-xs space-y-1">
+            <p class="font-semibold flex items-center gap-1.5 text-rose-400">
+              ⚠️ Peringatan
+            </p>
+            <p>Koneksi web akan terputus selama beberapa detik saat proses restart sedang berjalan.</p>
+          </div>
+        </div>
+
+        <button onclick="confirmRestart()" id="btn-restart" class="w-full bg-rose-600 hover:bg-rose-700 text-white font-semibold py-3.5 px-6 rounded-2xl transition duration-200 active:scale-[0.98] shadow-lg shadow-rose-600/10 flex items-center justify-center gap-2">
+          <span>🔄 Restart Web Server</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Terminal Log Output -->
+    <div class="glass-card rounded-3xl p-6 space-y-4">
+      <div class="flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <span class="w-3 h-3 rounded-full bg-red-500"></span>
+          <span class="w-3 h-3 rounded-full bg-yellow-500"></span>
+          <span class="w-3 h-3 rounded-full bg-green-500"></span>
+          <span class="text-sm font-semibold text-slate-400 ml-2">Console Output Log</span>
+        </div>
+        <button onclick="copyLog()" class="text-xs text-slate-400 hover:text-white transition py-1 px-3 bg-slate-800 rounded-lg hover:bg-slate-700">
+          📋 Salin Log
+        </button>
+      </div>
+      <div class="w-full bg-slate-950 rounded-2xl p-4 border border-slate-900">
+        <pre id="terminal-output" class="terminal-font text-xs sm:text-sm text-green-400/90 overflow-x-auto min-h-[150px] max-h-[300px] whitespace-pre-wrap">Menunggu perintah...</pre>
+      </div>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="text-center text-xs text-slate-600 py-6 mt-10">
+    &copy; 2026 TikTok Auto-Uploader &bull; Designed with &hearts;
+  </div>
+
+  <script>
+    const logEl = document.getElementById('terminal-output');
+    const commitEl = document.getElementById('last-commit');
+    const statusEl = document.getElementById('repo-status');
+
+    function log(message, isError = false) {
+      const time = new Date().toLocaleTimeString();
+      const color = isError ? 'text-red-400' : 'text-green-400';
+      logEl.innerHTML += `\n<span class="text-slate-600">[${time}]</span> <span class="${color}">${message}</span>`;
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    async function loadGitMeta() {
+      try {
+        const res = await fetch('/api/git/status', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          commitEl.innerText = data.lastCommit || 'Unknown';
+          statusEl.innerText = data.status || 'Clean';
+        } else {
+          commitEl.innerText = 'Gagal memuat info';
+          statusEl.innerText = 'Gagal memuat status';
+        }
+      } catch (err) {
+        commitEl.innerText = 'Error koneksi';
+        statusEl.innerText = 'Error koneksi';
+      }
+    }
+
+    async function runGitPull() {
+      const btn = document.getElementById('btn-pull');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      log('Running git pull...');
+
+      try {
+        const res = await fetch('/api/git/pull', { method: 'POST' });
+        const data = await res.json();
+        
+        if (data.success) {
+          log('✅ Git Pull Selesai:\n' + data.output);
+          loadGitMeta();
+        } else {
+          log('❌ Git Pull Gagal:\n' + data.error, true);
+        }
+      } catch (err) {
+        log('❌ Terjadi kesalahan jaringan: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+        btn.classList.remove('opacity-50', 'cursor-not-allowed');
+      }
+    }
+
+    async function confirmRestart() {
+      if (!confirm('Apakah Anda yakin ingin me-restart web server sekarang?\nKoneksi browser akan terputus sementara.')) {
+        return;
+      }
+      
+      const btn = document.getElementById('btn-restart');
+      btn.disabled = true;
+      btn.classList.add('opacity-50', 'cursor-not-allowed');
+      log('Mengirim sinyal restart ke server...');
+
+      try {
+        const res = await fetch('/api/git/restart', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          log('🔄 Sinyal restart berhasil dikirim. Server akan mati dan hidup kembali dalam 2 detik.');
+          log('Mencoba menyambung kembali secara otomatis...');
+          
+          // Poll the status after 5 seconds
+          setTimeout(pollServerStatus, 5000);
+        } else {
+          log('❌ Gagal me-restart server: ' + data.error, true);
+          btn.disabled = false;
+          btn.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+      } catch (err) {
+        log('🔄 Server sedang dimatikan untuk direstart. Mencoba menyambung kembali...', false);
+        setTimeout(pollServerStatus, 4000);
+      }
+    }
+
+    async function pollServerStatus() {
+      log('Menghubungkan kembali ke server...');
+      try {
+        const res = await fetch('/api/git/status', { method: 'POST' });
+        if (res.ok) {
+          log('✅ Server kembali ONLINE!');
+          const btn = document.getElementById('btn-restart');
+          btn.disabled = false;
+          btn.classList.remove('opacity-50', 'cursor-not-allowed');
+          loadGitMeta();
+        } else {
+          setTimeout(pollServerStatus, 2000);
+        }
+      } catch (e) {
+        setTimeout(pollServerStatus, 2000);
+      }
+    }
+
+    async function copyLog() {
+      await navigator.clipboard.writeText(logEl.innerText);
+      alert('✅ Log berhasil disalin!');
+    }
+
+    window.onload = () => {
+      loadGitMeta();
+    };
+  </script>
+</body>
+</html>
