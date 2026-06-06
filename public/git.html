@@ -88,9 +88,14 @@
           </div>
         </div>
 
-        <button onclick="runGitPull()" id="btn-pull" class="w-full bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-semibold py-3.5 px-6 rounded-2xl transition duration-200 active:scale-[0.98] shadow-lg shadow-indigo-500/10 flex items-center justify-center gap-2">
-          <span>⬇️ Run Git Pull</span>
-        </button>
+        <div class="flex flex-col sm:flex-row gap-3">
+          <button onclick="runGitPull()" id="btn-pull" class="flex-1 bg-gradient-to-r from-indigo-500 to-indigo-600 hover:from-indigo-600 hover:to-indigo-700 text-white font-semibold py-3.5 px-4 rounded-2xl transition duration-200 active:scale-[0.98] shadow-lg shadow-indigo-500/10 flex items-center justify-center gap-2 text-sm">
+            <span>⬇️ Run Git Pull</span>
+          </button>
+          <button onclick="toggleAutopull()" id="btn-autopull" class="flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3.5 px-4 rounded-2xl transition duration-200 active:scale-[0.98] border border-slate-700 flex items-center justify-center gap-2 text-sm">
+            <span id="autopull-status">⚪ Auto Pull: OFF</span>
+          </button>
+        </div>
       </div>
 
       <!-- Server Control Card -->
@@ -252,8 +257,48 @@
       alert('✅ Log berhasil disalin!');
     }
 
+    async function loadAutopullStatus() {
+      try {
+        const res = await fetch('/api/git/autopull/status');
+        const data = await res.json();
+        updateAutopullUI(data.enabled);
+      } catch (err) {
+        console.error('Error loading autopull status:', err);
+      }
+    }
+
+    async function toggleAutopull() {
+      const btn = document.getElementById('btn-autopull');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/git/autopull/toggle', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          updateAutopullUI(data.enabled);
+          log(data.enabled ? '🟢 Auto Pull DIAKTIFKAN. Server akan mengecek update setiap 20 detik.' : '⚪ Auto Pull DINONAKTIFKAN.');
+        }
+      } catch (err) {
+        log('❌ Gagal mengubah status Auto Pull: ' + err.message, true);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function updateAutopullUI(enabled) {
+      const btn = document.getElementById('btn-autopull');
+      const statusSpan = document.getElementById('autopull-status');
+      if (enabled) {
+        btn.className = 'flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold py-3.5 px-4 rounded-2xl transition duration-200 active:scale-[0.98] shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2 text-sm';
+        statusSpan.innerHTML = '🟢 Auto Pull: AKTIF';
+      } else {
+        btn.className = 'flex-1 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold py-3.5 px-4 rounded-2xl transition duration-200 active:scale-[0.98] border border-slate-700 flex items-center justify-center gap-2 text-sm';
+        statusSpan.innerHTML = '⚪ Auto Pull: OFF';
+      }
+    }
+
     window.onload = () => {
       loadGitMeta();
+      loadAutopullStatus();
     };
   </script>
 </body>

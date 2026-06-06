@@ -36,6 +36,20 @@
     </div>
   </div>
 
+  <!-- Auto Pull Status Card -->
+  <div class="max-w-3xl mx-auto bg-white shadow-md rounded-2xl p-5 border border-gray-200 flex justify-between items-center">
+    <div class="flex items-center gap-3">
+      <span class="text-2xl">🔄</span>
+      <div>
+        <div class="font-bold text-gray-800 text-lg">Auto Pull (Auto Update & Restart)</div>
+        <div class="text-xs text-gray-500 mt-0.5">Mengecek pembaruan kode secara otomatis dari GitHub setiap 20 detik</div>
+      </div>
+    </div>
+    <button id="btn-autopull-home" onclick="toggleAutopullHome()" class="px-5 py-2.5 rounded-xl font-semibold transition text-sm flex items-center gap-2 select-none">
+      <span id="autopull-status-home">Loading...</span>
+    </button>
+  </div>
+
   <!-- ================= TIKTOK SECTION ================= -->
   <div class="max-w-3xl mx-auto bg-white shadow-2xl rounded-3xl p-8 border-t-8 border-pink-500">
     <h1 class="text-3xl font-bold mb-8 text-center text-gray-800">🎥 TikTok StorageState Manager</h1>
@@ -275,9 +289,48 @@
       alert('✅ Command codegen sudah dicopy!\nPaste di terminal sekarang.');
     }
 
+    async function loadAutopullStatus() {
+      try {
+        const res = await fetch('/api/git/autopull/status');
+        const data = await res.json();
+        updateAutopullUI(data.enabled);
+      } catch (err) {
+        console.error('Error loading autopull status:', err);
+      }
+    }
+
+    async function toggleAutopullHome() {
+      const btn = document.getElementById('btn-autopull-home');
+      btn.disabled = true;
+      try {
+        const res = await fetch('/api/git/autopull/toggle', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          updateAutopullUI(data.enabled);
+        }
+      } catch (err) {
+        alert('❌ Gagal mengubah status Auto Pull: ' + err.message);
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    function updateAutopullUI(enabled) {
+      const btn = document.getElementById('btn-autopull-home');
+      const statusSpan = document.getElementById('autopull-status-home');
+      if (enabled) {
+        btn.className = 'bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-semibold transition text-sm flex items-center gap-2 select-none';
+        statusSpan.innerHTML = '🟢 Auto Pull: AKTIF';
+      } else {
+        btn.className = 'bg-gray-200 hover:bg-gray-300 text-gray-700 px-5 py-2.5 rounded-xl font-semibold transition text-sm flex items-center gap-2 select-none border border-gray-300';
+        statusSpan.innerHTML = '⚪ Auto Pull: OFF';
+      }
+    }
+
     function loadAll() {
       loadStates('tiktok');
       loadStates('grok');
+      loadAutopullStatus();
     }
 
     // Refresh daftar state setiap 30 detik
