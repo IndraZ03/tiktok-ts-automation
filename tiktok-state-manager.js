@@ -3134,6 +3134,72 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
         grokbotBroadcastQueue();
     });
 });
+
+// ── IMPORT CADANGAN: Move backup videos to main stock ──
+app.post('/api/grokbot/import-cadangan', async (req, res) => {
+    const { stateFile } = req.body;
+    if (!stateFile)
+        return res.status(400).json({ error: 'stateFile diperlukan' });
+    const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+    const stateDownloadDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+    const cadanganDir = path.join(stateDownloadDir, 'cadangan');
+    if (!fs.existsSync(cadanganDir)) {
+        return res.status(400).json({ error: `Folder cadangan tidak ditemukan: ${cadanganDir}` });
+    }
+    const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm', '.png', '.jpg', '.jpeg', '.webp'];
+    const cadanganMarksFile = path.join(cadanganDir, '.uploaded.json');
+    let cadanganMarks = {};
+    try {
+        cadanganMarks = JSON.parse(fs.readFileSync(cadanganMarksFile, 'utf-8'));
+    }
+    catch { }
+    const allCadanganVideos = fs.readdirSync(cadanganDir)
+        .filter(f => exts.includes(path.extname(f).toLowerCase()))
+        .sort();
+    const pendingCadanganVideos = allCadanganVideos.filter(v => !cadanganMarks[v]);
+    if (pendingCadanganVideos.length === 0) {
+        return res.status(400).json({ error: 'Tidak ada video cadangan yang tersedia untuk diimpor!' });
+    }
+    if (!fs.existsSync(stateDownloadDir)) {
+        fs.mkdirSync(stateDownloadDir, { recursive: true });
+    }
+    const marksFile = path.join(stateDownloadDir, '.uploaded.json');
+    let marks = {};
+    try {
+        marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8'));
+    }
+    catch { }
+    let movedCount = 0;
+    let marksChanged = false;
+    for (const file of pendingCadanganVideos) {
+        const src = path.join(cadanganDir, file);
+        const dest = path.join(stateDownloadDir, file);
+        try {
+            fs.renameSync(src, dest);
+            cadanganMarks[file] = true;
+            if (marks[file]) {
+                delete marks[file];
+                marksChanged = true;
+            }
+            movedCount++;
+        }
+        catch (e) {
+            grokbotLog(`⚠ Gagal memindahkan ${file}: ${e.message}`);
+        }
+    }
+    try {
+        fs.writeFileSync(cadanganMarksFile, JSON.stringify(cadanganMarks, null, 2));
+        if (marksChanged) {
+            fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
+        }
+    }
+    catch (e) {
+        grokbotLog(`⚠ Gagal memperbarui tanda upload: ${e.message}`);
+    }
+    grokbotLog(`🚚 [Manual Import] Berhasil memindahkan ${movedCount} video dari stok cadangan ke stok utama untuk ${tiktokStateName}`);
+    res.json({ success: true, message: `Berhasil mengimpor ${movedCount} video dari stok cadangan ke stok utama.` });
+});
+
 // ── JADWALKAN SAJA: Skip generation, use existing utama stock ──
 app.post('/api/grokbot/schedule-only', async (req, res) => {
     if (grokbotRunning)

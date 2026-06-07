@@ -98,6 +98,17 @@
       box-shadow: 0 10px 20px -10px rgba(59, 130, 246, 0.5);
     }
 
+    .gradient-btn-yellow {
+      background: linear-gradient(135deg, #d97706, #b45309);
+      transition: all 0.3s ease;
+    }
+    .gradient-btn-yellow:hover {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      transform: translateY(-1px);
+      box-shadow: 0 10px 20px -10px rgba(245, 158, 11, 0.5);
+    }
+
+
     @keyframes shimmer {
       0% { background-position: 0 0; }
       100% { background-position: 1.5rem 0; }
@@ -659,7 +670,7 @@
           </div>
 
           <!-- Bottom Actions inside card config -->
-          <div class="grid grid-cols-2 sm:grid-cols-5 gap-3">
+          <div class="grid grid-cols-2 sm:grid-cols-6 gap-3">
             <button onclick="generateUtama('${fn}')"
                     class="gradient-btn-blue text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
               📥 Generate Utama
@@ -667,6 +678,10 @@
             <button onclick="generateCadangan('${fn}')"
                     class="gradient-btn-green text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
               🟢 Generate Cadangan
+            </button>
+            <button onclick="importCadangan('${fn}')"
+                    class="gradient-btn-yellow text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
+              🚚 Impor Cadangan
             </button>
             <button onclick="mergeOnly('${fn}')"
                     class="bg-gray-800 hover:bg-fuchsia-900/40 border border-fuchsia-800/30 hover:border-fuchsia-500/50 text-fuchsia-300 py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 transition-all">
@@ -677,7 +692,7 @@
               📤 Jadwalkan Saja
             </button>
             <button onclick="scheduleState('${fn}')"
-                    class="gradient-btn text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 col-span-2 sm:col-span-1">
+                    class="gradient-btn text-white py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5">
               🚀 Jadwalkan & Upload
             </button>
           </div>
@@ -818,6 +833,26 @@
       } catch (e) {
         addLog('❌ Request Error: ' + e.message);
         setBusy(false);
+      }
+    }
+
+    async function importCadangan(fn) {
+      addLog(`⚙️ Memulai Impor Cadangan ke Stok Utama untuk state: ${getStateName(fn)}...`);
+      try {
+        const res = await fetch('/api/grokbot/import-cadangan', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFile: fn })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLog(`✓ ${data.message}`);
+          loadStateStock(fn);
+        } else {
+          addLog('❌ Gagal impor: ' + (data.error || ''));
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
       }
     }
 
