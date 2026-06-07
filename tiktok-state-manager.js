@@ -1492,9 +1492,111 @@ app.post('/api/grok/prompts/save', (req, res) => {
     const { name, prompt } = req.body;
     if (!name || !prompt)
         return res.status(400).json({ error: 'name dan prompt diperlukan' });
-    const filename = name.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json';
+    const filename = name.endsWith('.json') ? name : (name.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
     fs.writeFileSync(path.join(PROMPT_DIR, filename), JSON.stringify({ prompt }, null, 2));
     res.json({ success: true, filename });
+});
+
+// List files inside a bahan folder
+app.get('/api/grok/bahan/:folderName', (req, res) => {
+    const { folderName } = req.params;
+    const targetDir = path.join(BAHAN_DIR, folderName);
+    if (!fs.existsSync(targetDir)) {
+        return res.status(404).json({ error: 'Folder tidak ditemukan' });
+    }
+    try {
+        const files = fs.readdirSync(targetDir).filter(f => {
+            const p = path.join(targetDir, f);
+            return fs.statSync(p).isFile();
+        });
+        res.json({ files });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a specific file inside a bahan folder
+app.delete('/api/grok/bahan/:folderName/:fileName', (req, res) => {
+    const { folderName, fileName } = req.params;
+    const filePath = path.join(BAHAN_DIR, folderName, fileName);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File tidak ditemukan' });
+    }
+    try {
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: `Berhasil menghapus ${fileName}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a whole bahan folder (recursive)
+app.delete('/api/grok/bahan/:folderName', (req, res) => {
+    const { folderName } = req.params;
+    const targetDir = path.join(BAHAN_DIR, folderName);
+    if (!fs.existsSync(targetDir)) {
+        return res.status(404).json({ error: 'Folder tidak ditemukan' });
+    }
+    try {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+        res.json({ success: true, message: `Berhasil menghapus folder ${folderName}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create a new bahan folder
+app.post('/api/grok/bahan/create-folder', (req, res) => {
+    const { folderName } = req.body;
+    if (!folderName)
+        return res.status(400).json({ error: 'Nama folder diperlukan' });
+    const cleanFolderName = folderName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const targetDir = path.join(BAHAN_DIR, cleanFolderName);
+    if (fs.existsSync(targetDir)) {
+        return res.status(400).json({ error: 'Folder sudah ada' });
+    }
+    try {
+        fs.mkdirSync(targetDir, { recursive: true });
+        res.json({ success: true, message: `Berhasil membuat folder ${cleanFolderName}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Read a specific prompt file content
+app.get('/api/grok/prompts/:filename', (req, res) => {
+    const { filename } = req.params;
+    const filePath = path.join(PROMPT_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Prompt tidak ditemukan' });
+    }
+    try {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        res.json({ success: true, prompt: data.prompt });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete a specific prompt file
+app.delete('/api/grok/prompts/:filename', (req, res) => {
+    const { filename } = req.params;
+    const filePath = path.join(PROMPT_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Prompt tidak ditemukan' });
+    }
+    try {
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: `Berhasil menghapus prompt ${filename}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
 });
 // Grok SSE logs
 const grokSseClients = [];

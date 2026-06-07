@@ -134,12 +134,52 @@
     }
   </style>
 </head>
-<body class="min-h-screen relative overflow-x-hidden">
+<body class="min-h-screen relative overflow-x-hidden flex bg-[#030712] text-[#f3f4f6]">
   <!-- Glowing Background Orbs -->
-  <div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-purple-900/10 blur-[120px] pointer-events-none"></div>
-  <div class="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-pink-900/10 blur-[120px] pointer-events-none"></div>
+  <div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-purple-900/5 blur-[120px] pointer-events-none"></div>
+  <div class="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-pink-900/5 blur-[120px] pointer-events-none"></div>
 
-  <div class="max-w-7xl mx-auto p-6 relative z-10">
+  <!-- Sidebar -->
+  <div class="w-20 min-h-screen bg-gray-950/80 border-r border-gray-800/80 flex flex-col items-center py-8 justify-between z-30 sticky top-0 backdrop-blur-xl shrink-0">
+     <!-- Top Logo -->
+     <div class="flex flex-col items-center gap-6 w-full">
+       <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center font-extrabold text-white text-xl shadow-lg shadow-pink-500/25">
+         🤖
+       </div>
+       
+       <!-- Navigation Menu -->
+       <div class="flex flex-col gap-4 w-full px-2">
+         <!-- Nav Button: Dashboard -->
+         <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-pink-400 bg-pink-500/10 border border-pink-500/20 transition-all duration-300 group">
+           <span class="text-xl">📊</span>
+           <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Dash</span>
+         </button>
+         <!-- Nav Button: Sesi -->
+         <button onclick="switchTab('states')" id="nav-states" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-purple-300 hover:bg-purple-500/5 hover:border-purple-500/10 transition-all duration-300 group">
+           <span class="text-xl">🔑</span>
+           <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Sesi</span>
+         </button>
+         <!-- Nav Button: Bahan -->
+         <button onclick="switchTab('bahan')" id="nav-bahan" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-indigo-300 hover:bg-indigo-500/5 hover:border-indigo-500/10 transition-all duration-300 group">
+           <span class="text-xl">📁</span>
+           <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Bahan</span>
+         </button>
+         <!-- Nav Button: Prompt -->
+         <button onclick="switchTab('prompts')" id="nav-prompts" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-fuchsia-300 hover:bg-fuchsia-500/5 hover:border-fuchsia-500/10 transition-all duration-300 group">
+           <span class="text-xl">📝</span>
+           <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Prompt</span>
+         </button>
+       </div>
+     </div>
+
+     <!-- Footer Home button -->
+     <a href="/" class="w-10 h-10 rounded-xl bg-gray-900 border border-gray-800 flex items-center justify-center text-gray-400 hover:text-white transition-all duration-300 hover:bg-gray-800" title="State Manager Home">
+       🏠
+     </a>
+  </div>
+
+  <!-- Main Content Layout (Flex-1) -->
+  <div class="flex-grow min-w-0 p-6 relative z-10 flex flex-col">
     <!-- Header -->
     <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
       <div>
@@ -159,21 +199,26 @@
       </div>
     </div>
 
-    <!-- State Selector -->
-    <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 mb-8 shadow-xl relative z-20">
-      <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-purple-300">
-        <span>🔑</span> Pilih TikTok State (Login Session)
-      </h2>
-      <p class="text-gray-400 text-xs mb-4">Setiap state TikTok yang Anda pilih di sini akan memunculkan satu kartu konfigurasi mandiri di bawah.</p>
-      <div class="multiselect-dropdown" id="state-dropdown">
-        <button onclick="toggleDropdown()" type="button"
-                class="w-full bg-gray-950/80 border border-gray-800 hover:border-pink-500/50 rounded-2xl px-5 py-4 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-pink-500/20 transition-all duration-300">
-          <span id="dropdown-label" class="text-gray-400 truncate font-medium">-- Pilih State (bisa pilih banyak) --</span>
-          <span class="text-gray-500 flex-shrink-0 ml-2">▾</span>
-        </button>
-        <div class="multiselect-menu" id="dropdown-menu"></div>
-      </div>
-    </div>
+    <!-- Active Tab Contents Container -->
+    <div class="flex-1">
+      
+      <!-- TAB 1: DASHBOARD -->
+      <div id="tab-dashboard" class="tab-content space-y-8">
+        <!-- State Selector -->
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl relative z-20">
+          <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-purple-300">
+            <span>🔑</span> Pilih TikTok State (Login Session)
+          </h2>
+          <p class="text-gray-400 text-xs mb-4">Setiap state TikTok yang Anda pilih di sini akan memunculkan satu kartu konfigurasi mandiri di bawah.</p>
+          <div class="multiselect-dropdown" id="state-dropdown">
+            <button onclick="toggleDropdown()" type="button"
+                    class="w-full bg-gray-950/80 border border-gray-800 hover:border-pink-500/50 rounded-2xl px-5 py-4 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-pink-500/20 transition-all duration-300">
+              <span id="dropdown-label" class="text-gray-400 truncate font-medium">-- Pilih State (bisa pilih banyak) --</span>
+              <span class="text-gray-500 flex-shrink-0 ml-2">▾</span>
+            </button>
+            <div class="multiselect-menu" id="dropdown-menu"></div>
+          </div>
+        </div>
 
     <!-- Rate Limit Banner Container -->
     <div id="grok-rate-limit-container" class="mb-8 hidden"></div>
@@ -295,6 +340,224 @@
           <div id="live-log" class="flex-1 overflow-y-auto bg-gray-950/80 border border-gray-900 rounded-2xl p-4 space-y-1 select-text"></div>
         </div>
       </div>
+      
+      <!-- TAB 2: SESI MANAGER -->
+      <div id="tab-states" class="tab-content hidden space-y-6">
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
+          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent flex items-center gap-2">
+            <span>🔑</span> Manajemen Sesi & Login (StorageState)
+          </h2>
+          <p class="text-gray-400 text-sm">Tambahkan akun TikTok atau Grok premium Anda menggunakan metode Buka Browser (Playwright) atau Paste Cookies JSON secara langsung.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <!-- TikTok States Column -->
+          <div class="glass-panel rounded-3xl p-6 border border-pink-500/20 shadow-xl space-y-6">
+            <h3 class="text-xl font-bold text-pink-400 flex items-center gap-2 border-b border-gray-800 pb-3">
+              <span>🎬</span> TikTok Sesi Manager
+            </h3>
+            
+            <div class="space-y-4 bg-gray-950/40 p-5 rounded-2xl border border-gray-900">
+              <h4 class="text-sm font-bold text-gray-300">➕ Buat Sesi Login Baru</h4>
+              <div class="space-y-3">
+                <input id="tiktok-state-name-tab" type="text" placeholder="Masukkan nama state (contoh: akun_utama)" 
+                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:border-pink-500 text-sm font-semibold text-white">
+                
+                <div class="grid grid-cols-2 gap-3">
+                  <button onclick="startLoginTab('tiktok')" class="bg-pink-600 hover:bg-pink-700 text-white py-3 rounded-xl font-bold text-xs transition duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
+                    🚀 Buka Browser
+                  </button>
+                  <button onclick="togglePasteAreaTab('tiktok')" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 py-3 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
+                    📋 Paste Cookies
+                  </button>
+                </div>
+
+                <div id="tiktok-paste-container-tab" class="hidden p-4 bg-pink-950/20 rounded-xl border border-pink-900/30 space-y-3">
+                  <textarea id="tiktok-cookies-text-tab" rows="6" placeholder='Paste JSON cookies di sini...' 
+                            class="w-full p-3 border border-pink-900/40 rounded-xl focus:outline-none focus:border-pink-500 font-mono text-xs bg-gray-950 text-gray-200 resize-none"></textarea>
+                  <button onclick="saveCookiesTab('tiktok')" class="w-full bg-pink-600 hover:bg-pink-700 text-white py-2.5 rounded-xl font-bold text-xs transition duration-200 active:scale-[0.99] shadow-md flex items-center justify-center gap-1.5">
+                    💾 Simpan State Cookies
+                  </button>
+                </div>
+              </div>
+
+              <div id="tiktok-in-progress-tab" class="hidden p-4 bg-yellow-950/20 border border-yellow-800/30 rounded-xl space-y-3">
+                <p class="text-yellow-400 text-xs font-semibold">
+                  ✅ Browser terbuka! Login manual di jendela browser, lalu klik tombol di bawah untuk menyimpan session.
+                </p>
+                <button onclick="saveLoginTab('tiktok')" class="w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                  ✅ Sudah Login - Simpan Sesi
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <h4 class="text-sm font-bold text-gray-300">📋 Daftar Sesi TikTok</h4>
+              <div id="tiktok-state-list-tab" class="space-y-3 max-h-[400px] overflow-y-auto pr-1"></div>
+            </div>
+          </div>
+
+          <!-- Grok States Column -->
+          <div class="glass-panel rounded-3xl p-6 border border-blue-500/20 shadow-xl space-y-6">
+            <h3 class="text-xl font-bold text-blue-400 flex items-center gap-2 border-b border-gray-800 pb-3">
+              <span>🧠</span> Grok Sesi Manager
+            </h3>
+
+            <div class="space-y-4 bg-gray-950/40 p-5 rounded-2xl border border-gray-900">
+              <h4 class="text-sm font-bold text-gray-300">➕ Buat Sesi Login Baru</h4>
+              <div class="space-y-3">
+                <input id="grok-state-name-tab" type="text" placeholder="Masukkan nama state (contoh: grok_premium)" 
+                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm font-semibold text-white">
+                
+                <div class="grid grid-cols-2 gap-3">
+                  <button onclick="startLoginTab('grok')" class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-xs transition duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
+                    🚀 Buka Browser
+                  </button>
+                  <button onclick="togglePasteAreaTab('grok')" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 py-3 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
+                    📋 Paste Cookies
+                  </button>
+                </div>
+
+                <div id="grok-paste-container-tab" class="hidden p-4 bg-blue-950/20 rounded-xl border border-blue-900/30 space-y-3">
+                  <textarea id="grok-cookies-text-tab" rows="6" placeholder='Paste JSON cookies di sini...' 
+                            class="w-full p-3 border border-blue-900/40 rounded-xl focus:outline-none focus:border-blue-500 font-mono text-xs bg-gray-950 text-gray-200 resize-none"></textarea>
+                  <button onclick="saveCookiesTab('grok')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold text-xs transition duration-200 active:scale-[0.99] shadow-md flex items-center justify-center gap-1.5">
+                    💾 Simpan State Cookies
+                  </button>
+                </div>
+              </div>
+
+              <div id="grok-in-progress-tab" class="hidden p-4 bg-yellow-950/20 border border-yellow-800/30 rounded-xl space-y-3">
+                <p class="text-yellow-400 text-xs font-semibold">
+                  ✅ Browser terbuka! Login manual di jendela browser, lalu klik tombol di bawah untuk menyimpan session.
+                </p>
+                <button onclick="saveLoginTab('grok')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
+                  ✅ Sudah Login - Simpan Sesi
+                </button>
+              </div>
+            </div>
+
+            <div class="space-y-3">
+              <h4 class="text-sm font-bold text-gray-300">📋 Daftar Sesi Grok</h4>
+              <div id="grok-state-list-tab" class="space-y-3 max-h-[400px] overflow-y-auto pr-1"></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 3: BAHAN MANAGER -->
+      <div id="tab-bahan" class="tab-content hidden space-y-6">
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
+          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2">
+            <span>📁</span> Manajemen Bahan & Media
+          </h2>
+          <p class="text-gray-400 text-sm">Kelola folder bahan dan upload media (gambar/video) yang digunakan sebagai latar belakang generasi video Grokbot.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+          <!-- Left Column: Folders List (1/4 width) -->
+          <div class="lg:col-span-1 glass-panel rounded-3xl p-5 border border-gray-800/80 shadow-xl space-y-4">
+            <h3 class="text-sm font-extrabold uppercase tracking-widest text-indigo-400 mb-2">Folders</h3>
+            
+            <!-- Create Folder Input -->
+            <div class="space-y-2">
+              <input id="new-bahan-folder-name" type="text" placeholder="Folder baru..." 
+                     class="w-full bg-gray-950 border border-gray-805 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-indigo-500">
+              <button onclick="createBahanFolder()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
+                <span>➕</span> Buat Folder
+              </button>
+            </div>
+
+            <div id="bahan-folders-list" class="space-y-1.5 max-h-[400px] overflow-y-auto pr-1">
+              <!-- Load folders dynamically here -->
+            </div>
+          </div>
+
+          <!-- Right Column: Folder Files Details (3/4 width) -->
+          <div class="lg:col-span-3 glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl min-h-[500px] flex flex-col">
+            <div id="bahan-folder-detail-header" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-4 mb-4">
+              <div>
+                <h3 id="active-bahan-folder-title" class="text-xl font-bold text-indigo-300">Pilih Folder Bahan</h3>
+                <p id="active-bahan-folder-subtitle" class="text-xs text-gray-500">Silakan pilih folder di sebelah kiri untuk melihat isinya.</p>
+              </div>
+              
+              <!-- Upload Form -->
+              <div id="bahan-upload-container" class="hidden flex items-center gap-2">
+                <input type="file" id="bahan-files-input" multiple accept="image/*,video/*" class="hidden" onchange="uploadBahanFiles()">
+                <button onclick="document.getElementById('bahan-files-input').click()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                  <span>📤</span> Upload Gambar/Video
+                </button>
+                <button onclick="deleteActiveBahanFolder()" class="bg-red-955/40 hover:bg-red-900/30 border border-red-900/50 text-red-400 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                  <span>🗑️</span> Hapus Folder
+                </button>
+              </div>
+            </div>
+
+            <!-- Grid of Files inside Folder -->
+            <div id="bahan-files-grid" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4 flex-1 overflow-y-auto max-h-[600px] pr-1">
+              <div class="col-span-full text-center text-gray-500 py-20 italic">Belum ada folder bahan terpilih</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TAB 4: PROMPT MANAGER -->
+      <div id="tab-prompts" class="tab-content hidden space-y-6">
+        <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
+          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-fuchsia-500 bg-clip-text text-transparent flex items-center gap-2">
+            <span>📝</span> Manajemen Prompt Grok
+          </h2>
+          <p class="text-gray-400 text-sm">Tambah, edit, dan kelola template perintah (prompt) JSON yang digunakan oleh Grok AI untuk memproses konten video.</p>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
+          <!-- Left Column: Prompts List (1/4 width) -->
+          <div class="lg:col-span-1 glass-panel rounded-3xl p-5 border border-gray-800/80 shadow-xl space-y-4">
+            <div class="flex items-center justify-between mb-2">
+              <h3 class="text-sm font-extrabold uppercase tracking-widest text-fuchsia-400">Prompts</h3>
+              <button onclick="newPrompt()" class="bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1">
+                <span>➕</span> Tambah
+              </button>
+            </div>
+
+            <div id="prompts-list" class="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
+              <!-- Load prompt files dynamically here -->
+            </div>
+          </div>
+
+          <!-- Right Column: Edit / Create Area (3/4 width) -->
+          <div class="lg:col-span-3 glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl flex flex-col min-h-[500px]">
+            <h3 id="prompt-editor-title" class="text-xl font-bold text-fuchsia-300 border-b border-gray-800 pb-4 mb-4 flex items-center gap-2">
+              <span>✍️</span> Edit / Buat Prompt Baru
+            </h3>
+
+            <div class="space-y-4 flex-1 flex flex-col justify-between">
+              <div class="space-y-4">
+                <div>
+                  <label class="text-xs text-gray-400 font-bold block mb-1">Nama File Prompt (tanpa .json)</label>
+                  <input id="prompt-name-input" type="text" placeholder="Masukkan nama (misal: quotes_cinta)" 
+                         class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-fuchsia-500">
+                </div>
+                <div class="flex-1 flex flex-col">
+                  <label class="text-xs text-gray-400 font-bold block mb-1">Isi Prompt / Instruksi</label>
+                  <textarea id="prompt-text-input" rows="12" placeholder="Tuliskan detail instruksi/prompt Grok di sini..." 
+                            class="w-full flex-1 bg-gray-950 border border-gray-800 rounded-xl p-4 font-mono text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 resize-none"></textarea>
+                </div>
+              </div>
+
+              <div class="flex justify-end gap-3 pt-4 border-t border-gray-800 mt-4">
+                <button id="btn-delete-prompt" onclick="deleteActivePrompt()" class="hidden bg-red-950/40 hover:bg-red-900/30 border border-red-900/50 text-red-400 px-6 py-3 rounded-xl text-xs font-bold transition">
+                  🗑️ Hapus Prompt
+                </button>
+                <button onclick="saveActivePrompt()" class="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white px-8 py-3 rounded-xl text-xs font-bold transition shadow-lg shadow-pink-500/20 active:scale-95">
+                  💾 Simpan Prompt
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -1284,8 +1547,571 @@
       }
     }
 
+      document.getElementById('live-log').innerHTML = ''; 
+    }
+
     // ═══════════════════════════════════════
-    //  LOGGER HELPERS
+    //  TAB & COMPONENT SWITCHING
+    // ═══════════════════════════════════════
+    let activeTab = 'dashboard';
+    function switchTab(tabId) {
+      activeTab = tabId;
+      
+      // Hide all tab contents
+      document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+      
+      // Show active tab content
+      document.getElementById(`tab-${tabId}`).classList.remove('hidden');
+      
+      // Reset navigation button active states
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.remove('active', 'text-pink-400', 'bg-pink-500/10', 'border-pink-500/20');
+        el.classList.add('text-gray-400', 'border-transparent');
+      });
+      
+      // Set active nav item
+      const activeNav = document.getElementById(`nav-${tabId}`);
+      if (activeNav) {
+        activeNav.classList.remove('text-gray-400', 'border-transparent');
+        activeNav.classList.add('active', 'text-pink-400', 'bg-pink-500/10', 'border-pink-500/20');
+      }
+
+      // Load tab specific data
+      if (tabId === 'states') {
+        loadStatesTab('tiktok');
+        loadStatesTab('grok');
+      } else if (tabId === 'bahan') {
+        loadBahanFoldersTab();
+      } else if (tabId === 'prompts') {
+        loadPromptsTab();
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  TAB 2: SESI & STATE MANAGER
+    // ═══════════════════════════════════════
+    async function loadStatesTab(platform) {
+      try {
+        const res = await fetch(`/api/states?platform=${platform}`);
+        const states = await res.json();
+        const list = document.getElementById(`${platform}-state-list-tab`);
+
+        if (states.length === 0) {
+          list.innerHTML = `<p class="text-gray-500 italic text-center py-6 text-xs">Belum ada state ${platform} tersimpan</p>`;
+          return;
+        }
+
+        list.innerHTML = states.map(s => {
+          let badge = '';
+          if (s.expiry.status === 'safe') {
+             badge = `<span class="px-2.5 py-1 text-[10px] font-bold bg-green-950/40 border border-green-800 text-green-400 rounded-lg">🟢 Aman (${s.expiry.daysLeft} hari)</span>`;
+          } else if (s.expiry.status === 'warning') {
+             badge = `<span class="px-2.5 py-1 text-[10px] font-bold bg-yellow-950/40 border border-yellow-800 text-yellow-400 rounded-lg">🟡 Warning (${s.expiry.daysLeft} hari)</span>`;
+          } else if (s.expiry.status === 'expired') {
+             badge = `<span class="px-2.5 py-1 text-[10px] font-bold bg-red-950/40 border border-red-800 text-red-400 rounded-lg">🔴 Expired</span>`;
+          } else {
+             badge = `<span class="px-2.5 py-1 text-[10px] font-bold bg-gray-950/40 border border-gray-800 text-gray-400 rounded-lg">⏳ Unknown</span>`;
+          }
+
+          const btnTheme = platform === 'grok' ? 'gradient-btn-blue' : 'gradient-btn';
+
+          return `
+            <div class="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <div class="font-bold text-sm text-gray-200">${escHtml(s.filename)}</div>
+                <div class="text-[10px] text-gray-500 mt-0.5">${s.expiry.expiresAt ? 'Expired: ' + s.expiry.expiresAt : 'Expiry tidak terdeteksi'}</div>
+              </div>
+              <div class="flex flex-wrap items-center gap-2">
+                ${badge}
+                <button onclick="startLoginWithStateTab('${s.filename}', '${platform}')" class="${btnTheme} text-white text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 shadow">
+                  🌐 Buka
+                </button>
+                <button onclick="copyCodegenTab('${s.filename}', '${platform}')" class="bg-purple-950/60 hover:bg-purple-900 border border-purple-800/40 text-purple-300 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
+                  📋 Command
+                </button>
+                <button onclick="deleteStateTab('${s.filename}', '${platform}')" class="bg-red-955/60 hover:bg-red-900/60 border border-red-900/40 text-red-400 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
+                  🗑️ Hapus
+                </button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (e) {
+        console.error('Failed to load states list:', e);
+      }
+    }
+
+    async function startLoginTab(platform) {
+      const nameInput = document.getElementById(`${platform}-state-name-tab`);
+      const name = nameInput ? nameInput.value.trim() : '';
+      if (!name) return alert('❌ Masukkan nama state dulu!');
+
+      try {
+        const res = await fetch('/api/start-login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, platform })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById(`${platform}-in-progress-tab`).classList.remove('hidden');
+          addLog(`✓ Browser login ${platform} dibuka untuk sesi: ${name}`);
+        } else {
+          alert('❌ ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan: ' + err.message);
+      }
+    }
+
+    async function saveLoginTab(platform) {
+      try {
+        const res = await fetch('/api/save-login', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ ' + data.message);
+          addLog(`✓ Berhasil menyimpan sesi login ${platform}`);
+          document.getElementById(`${platform}-in-progress-tab`).classList.add('hidden');
+          const nameInput = document.getElementById(`${platform}-state-name-tab`);
+          if (nameInput) nameInput.value = '';
+          loadStatesTab(platform);
+          preloadOptions();
+          loadTikTokStates();
+        } else {
+          alert('❌ ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan: ' + err.message);
+      }
+    }
+
+    function togglePasteAreaTab(platform) {
+      const container = document.getElementById(`${platform}-paste-container-tab`);
+      if (container) container.classList.toggle('hidden');
+    }
+
+    async function saveCookiesTab(platform) {
+      const nameInput = document.getElementById(`${platform}-state-name-tab`);
+      const cookiesInput = document.getElementById(`${platform}-cookies-text-tab`);
+      const name = nameInput ? nameInput.value.trim() : '';
+      const cookiesText = cookiesInput ? cookiesInput.value.trim() : '';
+
+      if (!name) return alert('❌ Masukkan nama state dulu!');
+      if (!cookiesText) return alert('❌ Masukkan/paste cookies dulu!');
+
+      try {
+        const res = await fetch('/api/cookies/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, cookiesText, platform })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ ' + data.message);
+          addLog(`✓ Berhasil menyimpan cookies untuk sesi ${platform}: ${name}`);
+          if (cookiesInput) cookiesInput.value = '';
+          if (nameInput) nameInput.value = '';
+          const container = document.getElementById(`${platform}-paste-container-tab`);
+          if (container) container.classList.add('hidden');
+          loadStatesTab(platform);
+          preloadOptions();
+          loadTikTokStates();
+        } else {
+          alert('❌ ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan: ' + err.message);
+      }
+    }
+
+    async function startLoginWithStateTab(filename, platform) {
+      try {
+        const res = await fetch('/api/start-login-with-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, platform })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById(`${platform}-in-progress-tab`).classList.remove('hidden');
+          addLog(`✓ Browser login ${platform} dibuka dengan state: ${filename}`);
+        } else {
+          alert('❌ ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan: ' + err.message);
+      }
+    }
+
+    async function copyCodegenTab(filename, platform) {
+      try {
+        const res = await fetch(`/api/codegen-command?filename=${filename}&platform=${platform}`);
+        const data = await res.json();
+        await navigator.clipboard.writeText(data.command);
+        alert('✅ Command codegen berhasil disalin ke clipboard!');
+      } catch (err) {
+        alert('❌ Gagal menyalin command: ' + err.message);
+      }
+    }
+
+    async function deleteStateTab(filename, platform) {
+      if (!confirm(`Apakah Anda yakin ingin menghapus sesi "${filename}"?`)) return;
+      try {
+        const res = await fetch('/api/delete-state', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, platform })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLog(`✓ Sesi ${platform} "${filename}" berhasil dihapus`);
+          loadStatesTab(platform);
+          preloadOptions();
+          loadTikTokStates();
+        } else {
+          alert('❌ Gagal menghapus: ' + (data.error || ''));
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  TAB 3: MANAJEMEN BAHAN
+    // ═══════════════════════════════════════
+    let activeBahanFolder = '';
+    async function loadBahanFoldersTab() {
+      try {
+        const res = await fetch('/api/grok/bahan');
+        const data = await res.json();
+        const list = document.getElementById('bahan-folders-list');
+        const folders = data.folders || [];
+
+        if (folders.length === 0) {
+          list.innerHTML = `<p class="text-gray-500 italic text-center py-4 text-xs">Belum ada folder bahan</p>`;
+          activeBahanFolder = '';
+          document.getElementById('active-bahan-folder-title').textContent = 'Pilih Folder Bahan';
+          document.getElementById('active-bahan-folder-subtitle').textContent = 'Silakan pilih folder di sebelah kiri untuk melihat isinya.';
+          document.getElementById('bahan-upload-container').classList.add('hidden');
+          document.getElementById('bahan-files-grid').innerHTML = '<div class="col-span-full text-center text-gray-500 py-20 italic">Belum ada folder bahan terpilih</div>';
+          return;
+        }
+
+        list.innerHTML = folders.map(f => {
+          const activeClass = f === activeBahanFolder 
+            ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 font-bold' 
+            : 'border-transparent text-gray-400 hover:bg-gray-900/60 hover:text-gray-200';
+          return `
+            <div onclick="selectBahanFolder('${escHtml(f)}')" class="px-3.5 py-3 rounded-xl border text-xs cursor-pointer transition flex items-center justify-between ${activeClass}">
+              <span class="truncate">📁 ${escHtml(f)}</span>
+            </div>`;
+        }).join('');
+
+        if (activeBahanFolder && !folders.includes(activeBahanFolder)) {
+          activeBahanFolder = '';
+        }
+
+        if (activeBahanFolder) {
+          selectBahanFolder(activeBahanFolder);
+        }
+      } catch (e) {
+        console.error('Failed to load bahan folders:', e);
+      }
+    }
+
+    async function selectBahanFolder(folderName) {
+      activeBahanFolder = folderName;
+      
+      document.querySelectorAll('#bahan-folders-list > div').forEach(el => {
+        if (el.textContent.includes(folderName)) {
+          el.className = el.className.replace(/border-transparent|text-gray-400/g, '').trim() + ' bg-indigo-500/10 border-indigo-500/30 text-indigo-300 font-bold';
+        } else {
+          el.className = el.className.replace(/bg-indigo-500\/10|border-indigo-500\/30|text-indigo-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
+        }
+      });
+
+      document.getElementById('active-bahan-folder-title').textContent = `📁 ${folderName}`;
+      document.getElementById('active-bahan-folder-subtitle').textContent = `Menampilkan media di dalam bahan/${folderName}/`;
+      document.getElementById('bahan-upload-container').classList.remove('hidden');
+
+      const grid = document.getElementById('bahan-files-grid');
+      grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-10 animate-pulse">Memuat media...</div>';
+
+      try {
+        const res = await fetch(`/api/grok/bahan/${encodeURIComponent(folderName)}`);
+        const data = await res.json();
+        const files = data.files || [];
+
+        if (files.length === 0) {
+          grid.innerHTML = `<div class="col-span-full text-center text-gray-500 py-20 italic">Folder ini kosong. Silakan upload file baru.</div>`;
+          return;
+        }
+
+        grid.innerHTML = files.map(file => {
+          const isImage = /\.(jpg|jpeg|png|webp|gif)$/i.test(file);
+          const mediaUrl = `/bahan/${encodeURIComponent(folderName)}/${encodeURIComponent(file)}`;
+          
+          let previewHtml = '';
+          if (isImage) {
+            previewHtml = `<img src="${mediaUrl}" class="w-full h-24 object-cover rounded-lg" alt="${escHtml(file)}">`;
+          } else {
+            previewHtml = `
+              <div class="w-full h-24 bg-gray-900 rounded-lg flex flex-col items-center justify-center text-2xl relative border border-gray-800">
+                🎥
+                <span class="text-[9px] font-bold text-gray-500 uppercase mt-1">${escHtml(file.split('.').pop())}</span>
+              </div>`;
+          }
+
+          return `
+            <div class="group relative bg-gray-950/60 border border-gray-900 hover:border-indigo-500/40 p-2.5 rounded-2xl flex flex-col justify-between transition duration-200">
+              ${previewHtml}
+              <div class="text-[10px] font-semibold text-gray-400 mt-2 truncate w-full" title="${escHtml(file)}">${escHtml(file)}</div>
+              
+              <!-- Hover Overlay Actions -->
+              <div class="absolute inset-0 bg-gray-950/80 rounded-2xl opacity-0 group-hover:opacity-100 transition duration-200 flex items-center justify-center gap-2 p-2">
+                <button onclick="deleteBahanFile('${escHtml(folderName)}', '${escHtml(file)}')" class="bg-red-600/20 hover:bg-red-600 border border-red-500/30 hover:border-red-500 text-red-200 hover:text-white px-2.5 py-1.5 rounded-xl text-[10px] font-bold transition flex items-center gap-1">
+                  🗑️ Hapus
+                </button>
+              </div>
+            </div>`;
+        }).join('');
+      } catch (err) {
+        grid.innerHTML = `<div class="col-span-full text-center text-red-400 py-10 font-semibold">Gagal memuat isi folder: ${err.message}</div>`;
+      }
+    }
+
+    async function deleteBahanFile(folderName, fileName) {
+      if (!confirm(`Hapus file "${fileName}"?`)) return;
+      try {
+        const res = await fetch(`/api/grok/bahan/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (data.success) {
+          selectBahanFolder(folderName);
+        } else {
+          alert('❌ Gagal menghapus file: ' + (data.error || ''));
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    async function deleteActiveBahanFolder() {
+      if (!activeBahanFolder) return;
+      if (!confirm(`HAPUS SELURUH FOLDER "${activeBahanFolder}" beserta semua file di dalamnya?`)) return;
+      
+      try {
+        const res = await fetch(`/api/grok/bahan/${encodeURIComponent(activeBahanFolder)}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (data.success) {
+          activeBahanFolder = '';
+          loadBahanFoldersTab();
+          preloadOptions();
+        } else {
+          alert('❌ Gagal menghapus folder: ' + (data.error || ''));
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    async function createBahanFolder() {
+      const input = document.getElementById('new-bahan-folder-name');
+      const name = input ? input.value.trim() : '';
+      if (!name) return alert('Masukkan nama folder baru!');
+
+      try {
+        const res = await fetch('/api/grok/bahan/create-folder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ folderName: name })
+        });
+        const data = await res.json();
+        if (data.success) {
+          if (input) input.value = '';
+          activeBahanFolder = name.replace(/[^a-zA-Z0-9_-]/g, '_');
+          loadBahanFoldersTab();
+          preloadOptions();
+        } else {
+          alert('❌ Gagal: ' + (data.error || ''));
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    async function uploadBahanFiles() {
+      if (!activeBahanFolder) return;
+      const fileInput = document.getElementById('bahan-files-input');
+      if (!fileInput || fileInput.files.length === 0) return;
+
+      const files = fileInput.files;
+      const formData = new FormData();
+      formData.append('folderName', activeBahanFolder);
+      for (let i = 0; i < files.length; i++) {
+        formData.append('images', files[i]);
+      }
+
+      const grid = document.getElementById('bahan-files-grid');
+      grid.innerHTML = `<div class="col-span-full text-center text-indigo-400 py-20 font-bold animate-pulse">Sedang mengupload ${files.length} file...</div>`;
+
+      try {
+        const res = await fetch('/api/grok/bahan/upload', {
+          method: 'POST',
+          body: formData
+        });
+        const data = await res.json();
+        if (data.success) {
+          fileInput.value = '';
+          selectBahanFolder(activeBahanFolder);
+        } else {
+          alert('❌ Gagal mengupload: ' + (data.error || ''));
+          selectBahanFolder(activeBahanFolder);
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+        selectBahanFolder(activeBahanFolder);
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  TAB 4: MANAJEMEN PROMPT
+    // ═══════════════════════════════════════
+    let activePromptFile = '';
+    async function loadPromptsTab() {
+      try {
+        const res = await fetch('/api/grok/prompts');
+        const data = await res.json();
+        const list = document.getElementById('prompts-list');
+        const files = data.files || [];
+
+        if (files.length === 0) {
+          list.innerHTML = `<p class="text-gray-500 italic text-center py-4 text-xs">Belum ada file prompt</p>`;
+          newPrompt();
+          return;
+        }
+
+        list.innerHTML = files.map(file => {
+          const activeClass = file === activePromptFile
+            ? 'bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-300 font-bold'
+            : 'border-transparent text-gray-400 hover:bg-gray-900/60 hover:text-gray-200';
+          const nameDisplay = file.replace('.json', '');
+          return `
+            <div onclick="selectPrompt('${escHtml(file)}')" class="px-3.5 py-3 rounded-xl border text-xs cursor-pointer transition flex items-center justify-between ${activeClass}">
+              <span class="truncate">📝 ${escHtml(nameDisplay)}</span>
+            </div>`;
+        }).join('');
+
+        if (activePromptFile && !files.includes(activePromptFile)) {
+          activePromptFile = '';
+        }
+
+        if (activePromptFile) {
+          selectPrompt(activePromptFile);
+        } else {
+          selectPrompt(files[0]);
+        }
+      } catch (e) {
+        console.error('Failed to load prompts list:', e);
+      }
+    }
+
+    async function selectPrompt(filename) {
+      activePromptFile = filename;
+      
+      document.querySelectorAll('#prompts-list > div').forEach(el => {
+        if (el.textContent.includes(filename.replace('.json', ''))) {
+          el.className = el.className.replace(/border-transparent|text-gray-400/g, '').trim() + ' bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-300 font-bold';
+        } else {
+          el.className = el.className.replace(/bg-fuchsia-500\/10|border-fuchsia-500\/30|text-fuchsia-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
+        }
+      });
+
+      document.getElementById('prompt-editor-title').innerHTML = `<span>✍️</span> Edit Prompt: <span class="text-white ml-1 font-extrabold">${filename.replace('.json', '')}</span>`;
+      document.getElementById('btn-delete-prompt').classList.remove('hidden');
+
+      try {
+        const res = await fetch(`/api/grok/prompts/${encodeURIComponent(filename)}`);
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('prompt-name-input').value = filename.replace('.json', '');
+          document.getElementById('prompt-name-input').disabled = true;
+          document.getElementById('prompt-text-input').value = data.prompt;
+        } else {
+          alert('❌ Gagal memuat prompt: ' + (data.error || ''));
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    function newPrompt() {
+      activePromptFile = '';
+      document.getElementById('prompt-editor-title').innerHTML = `<span>✍️</span> Buat Prompt Baru`;
+      document.getElementById('btn-delete-prompt').classList.add('hidden');
+      document.getElementById('prompt-name-input').value = '';
+      document.getElementById('prompt-name-input').disabled = false;
+      document.getElementById('prompt-text-input').value = '';
+      
+      document.querySelectorAll('#prompts-list > div').forEach(el => {
+        el.className = el.className.replace(/bg-fuchsia-500\/10|border-fuchsia-500\/30|text-fuchsia-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
+      });
+    }
+
+    async function saveActivePrompt() {
+      const nameInput = document.getElementById('prompt-name-input');
+      const textInput = document.getElementById('prompt-text-input');
+      let name = nameInput ? nameInput.value.trim() : '';
+      const prompt = textInput ? textInput.value.trim() : '';
+
+      if (!name) return alert('Masukkan nama file prompt!');
+      if (!prompt) return alert('Isi prompt tidak boleh kosong!');
+
+      try {
+        const res = await fetch('/api/grok/prompts/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, prompt })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ Prompt berhasil disimpan!');
+          activePromptFile = data.filename;
+          loadPromptsTab();
+          preloadOptions();
+        } else {
+          alert('❌ Gagal menyimpan: ' + (data.error || ''));
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    async function deleteActivePrompt() {
+      if (!activePromptFile) return;
+      if (!confirm(`Hapus prompt "${activePromptFile.replace('.json', '')}"?`)) return;
+
+      try {
+        const res = await fetch(`/api/grok/prompts/${encodeURIComponent(activePromptFile)}`, {
+          method: 'DELETE'
+        });
+        const data = await res.json();
+        if (data.success) {
+          activePromptFile = '';
+          loadPromptsTab();
+          preloadOptions();
+        } else {
+          alert('❌ Gagal menghapus prompt: ' + (data.error || ''));
+        }
+      } catch (err) {
+        alert('❌ Error: ' + err.message);
+      }
+    }
+
+    // ═══════════════════════════════════════
+    //  GLOBAL HELPERS
     // ═══════════════════════════════════════
     function addLog(msg) {
       const el = document.getElementById('live-log');
