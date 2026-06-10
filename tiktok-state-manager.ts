@@ -1772,6 +1772,7 @@ app.post('/api/grok/start', async (req: Request, res: Response) => {
     return res.status(400).json({ success: false, error: 'Jumlah video harus genap jika memilih merge ya!' });
   }
 
+  const data = loadGrokbotData();
   const config = {
     stateFile: req.body.stateFile,
     statesDir: GROK_STATES_DIR,
@@ -1788,6 +1789,7 @@ app.post('/api/grok/start', async (req: Request, res: Response) => {
     totalVideos: totalVideos,
     merge: merge,
     audioFolder: req.body.audioFolder || '',
+    parallelBrowsers: req.body.parallelBrowsers || data.globalConfig?.parallelBrowsers || 1,
   };
 
   res.json({ success: true, message: 'Generate dimulai' });
@@ -3061,6 +3063,9 @@ interface GrokbotStateConfig {
 
 interface GrokbotData {
   states: Record<string, GrokbotStateConfig>;
+  globalConfig?: {
+    parallelBrowsers?: number;
+  };
 }
 
 function loadGrokbotData(): GrokbotData {
@@ -3178,6 +3183,19 @@ app.post('/api/grokbot/config/save', (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/grokbot/global-config/save', (req, res) => {
+  const { parallelBrowsers } = req.body;
+  const data = loadGrokbotData();
+  if (!data.globalConfig) {
+    data.globalConfig = {};
+  }
+  if (parallelBrowsers !== undefined) {
+    data.globalConfig.parallelBrowsers = Math.max(1, parseInt(parallelBrowsers) || 1);
+  }
+  saveGrokbotData(data);
+  res.json({ success: true });
+});
+
 app.get('/api/grokbot/stock', (req, res) => {
   const stateFile = req.query.stateFile || req.query.state;
   if (!stateFile || typeof stateFile !== 'string') return res.status(400).json({ error: 'stateFile atau state diperlukan' });
@@ -3277,6 +3295,7 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
     totalVideos: totalRawToGenerate,
     merge: mergeEnabled,
     audioFolder: cfg.audioFolder || '',
+    parallelBrowsers: data.globalConfig?.parallelBrowsers || 1,
   };
   
   const poll = setInterval(() => {
@@ -3364,6 +3383,7 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
     totalVideos: 60, // 30 merged videos require 60 raw
     merge: true,
     audioFolder: cfg.audioFolder || '',
+    parallelBrowsers: data.globalConfig?.parallelBrowsers || 1,
   };
   
   const poll = setInterval(() => {
@@ -3814,6 +3834,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
         totalVideos: totalRawToGenerate,
         merge: mergeEnabled,
         audioFolder: cfg.audioFolder || '',
+        parallelBrowsers: data.globalConfig?.parallelBrowsers || 1,
       };
 
       const poll = setInterval(() => {
@@ -4124,6 +4145,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       totalVideos: totalRawToGenerate,
       merge: mergeEnabled,
       audioFolder: cfg.audioFolder || '',
+      parallelBrowsers: loadGrokbotData().globalConfig?.parallelBrowsers || 1,
     };
 
     const poll = setInterval(() => {
@@ -4200,6 +4222,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       totalVideos: totalRawToGenerate,
       merge: mergeEnabled,
       audioFolder: cfg.audioFolder || '',
+      parallelBrowsers: loadGrokbotData().globalConfig?.parallelBrowsers || 1,
     };
 
     const poll = setInterval(() => {

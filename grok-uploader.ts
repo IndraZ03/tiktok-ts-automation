@@ -27,6 +27,7 @@ export interface GrokConfig {
   merge?: boolean;
   audioFolder?: string;
   customDownloadDir?: string;
+  parallelBrowsers?: number;
 }
 
 export interface GrokStats {
@@ -226,8 +227,8 @@ export async function runGrokGenerator(config: GrokConfig, log: LogFn, baseDir: 
   if (!fs.existsSync(stateDownloadDir)) fs.mkdirSync(stateDownloadDir, { recursive: true });
 
   const total = Math.max(1, config.totalVideos || 1);
-  // Limit to 1 browser to ensure maximum stability, avoiding session conflicts and rate limits on the same Grok account.
-  const numBrowsers = Math.min(total, 1);
+  // Limit browser count to config.parallelBrowsers (defaulting to 1 if not defined) to ensure optimal stability.
+  const numBrowsers = Math.min(total, config.parallelBrowsers || 1);
 
   // Distribute evenly
   const perBrowser: number[] = [];

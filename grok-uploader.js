@@ -188,8 +188,8 @@ export async function runGrokGenerator(config, log, baseDir) {
     if (!fs.existsSync(stateDownloadDir))
         fs.mkdirSync(stateDownloadDir, { recursive: true });
     const total = Math.max(1, config.totalVideos || 1);
-    // Limit to 1 browser to ensure maximum stability, avoiding session conflicts and rate limits on the same Grok account.
-    const numBrowsers = Math.min(total, 1);
+    // Limit to config.parallelBrowsers browser to ensure stability
+    const numBrowsers = Math.min(total, config.parallelBrowsers || 1);
     // Distribute evenly
     const perBrowser = [];
     const base = Math.floor(total / numBrowsers);
