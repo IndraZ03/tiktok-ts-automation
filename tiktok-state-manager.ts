@@ -2172,6 +2172,33 @@ async function ytbotRunState(stateFile: string): Promise<void> {
       break;
     }
 
+    // === ADAPTIVE SCHEDULE SHIFT ===
+    const now = new Date();
+    const currentSchedMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
+    if (!isNaN(currentSchedMs) && now.getTime() > currentSchedMs) {
+      const adjustedTime = new Date(now.getTime() + 45 * 60 * 1000);
+      const yyyy = adjustedTime.getFullYear();
+      const mm = String(adjustedTime.getMonth() + 1).padStart(2, '0');
+      const dd = String(adjustedTime.getDate()).padStart(2, '0');
+      const hh = String(adjustedTime.getHours()).padStart(2, '0');
+      const min = String(adjustedTime.getMinutes()).padStart(2, '0');
+      
+      schedDate = `${yyyy}-${mm}-${dd}`;
+      schedTime = `${hh}:${min}`;
+      
+      ytbotLog(`⚠️ [Jadwal Adaptif] Waktu sekarang melebihi schedule yang diset.`);
+      ytbotLog(`⚠️ [Jadwal Adaptif] Menyesuaikan schedule video pertama ke +45 menit: ${schedDate} ${schedTime}`);
+      
+      // Update config file to keep it persistent
+      const updData = loadYtbotData();
+      if (updData.states[stateFile]) {
+        updData.states[stateFile].scheduleDate = schedDate;
+        updData.states[stateFile].scheduleTime = schedTime;
+        saveYtbotData(updData);
+      }
+    }
+    // ===============================
+
     // 3. Take max 30 videos for this batch
     const batch = pendingVideos.slice(0, 30);
     const startFrom = batch[0];
