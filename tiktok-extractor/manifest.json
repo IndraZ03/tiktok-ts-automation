@@ -1,0 +1,21 @@
+{
+  "manifest_version": 3,
+  "name": "TikTok & Grok Cookie Extractor",
+  "version": "1.1",
+  "description": "Ambil cookies login TikTok dan Grok untuk otomatisasi",
+  "permissions": ["cookies", "tabs"],
+  "host_permissions": [
+    "*://*.tiktok.com/*",
+    "*://tiktok.com/*",
+    "*://*.grok.com/*",
+    "*://grok.com/*",
+    "<all_urls>"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "TikTok & Grok Cookie Extractor"
+  },
+  "background": {
+    "service_worker": "background.js"
+  }
+}

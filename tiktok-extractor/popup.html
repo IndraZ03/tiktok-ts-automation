@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cookie Extractor Pro</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-color: #0d0f17;
+      --card-bg: rgba(22, 26, 41, 0.7);
+      --border-color: rgba(255, 255, 255, 0.08);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --tiktok-color: #ff0050;
+      --tiktok-glow: rgba(255, 0, 80, 0.35);
+      --grok-color: #ffffff;
+      --grok-bg: #000000;
+      --grok-glow: rgba(255, 255, 255, 0.2);
+      --accent-active: var(--tiktok-color);
+      --shadow-active: var(--tiktok-glow);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      width: 420px;
+      background-color: var(--bg-color);
+      color: var(--text-main);
+      font-family: 'Inter', sans-serif;
+      padding: 20px;
+      overflow-x: hidden;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(255, 0, 80, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(37, 244, 238, 0.05) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 12px;
+    }
+
+    .logo-area {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .logo-icon {
+      font-size: 20px;
+    }
+
+    h1 {
+      font-size: 16px;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ffffff 0%, #a5b4fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      letter-spacing: -0.5px;
+    }
+
+    .version {
+      font-size: 10px;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 12px;
+      color: var(--text-muted);
+    }
+
+    /* Tabs Controller */
+    .tabs {
+      display: flex;
+      background: rgba(255, 255, 255, 0.04);
+      padding: 4px;
+      border-radius: 10px;
+      border: 1px solid var(--border-color);
+      position: relative;
+    }
+
+    .tab-btn {
+      flex: 1;
+      background: transparent;
+      border: none;
+      padding: 10px;
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border-radius: 8px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .tab-btn:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .tab-btn.active[data-tab="tiktok"] {
+      background: var(--tiktok-color);
+      color: white;
+      box-shadow: 0 4px 14px var(--tiktok-glow);
+    }
+
+    .tab-btn.active[data-tab="grok"] {
+      background: var(--grok-color);
+      color: var(--grok-bg);
+      box-shadow: 0 4px 14px var(--grok-glow);
+    }
+
+    /* Info card */
+    .info-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px;
+      backdrop-filter: blur(10px);
+      -webkit-backdrop-filter: blur(10px);
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+    }
+
+    .info-title {
+      font-size: 12px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-muted);
+      margin-bottom: 6px;
+      font-weight: 600;
+    }
+
+    .info-desc {
+      font-size: 13px;
+      line-height: 1.5;
+      color: #d1d5db;
+    }
+
+    /* Extract Button */
+    .action-btn {
+      width: 100%;
+      padding: 14px;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+      overflow: hidden;
+      outline: none;
+    }
+
+    .action-btn::after {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: -50%;
+      width: 200%;
+      height: 100%;
+      background: linear-gradient(
+        to right,
+        rgba(255, 255, 255, 0) 0%,
+        rgba(255, 255, 255, 0.15) 50%,
+        rgba(255, 255, 255, 0) 100%
+      );
+      transform: skewX(-25deg);
+      transition: 0.75s;
+      opacity: 0;
+    }
+
+    .action-btn:hover::after {
+      left: 125%;
+      opacity: 1;
+    }
+
+    /* TikTok button theme */
+    .action-btn.tiktok-theme {
+      background: linear-gradient(135deg, var(--tiktok-color) 0%, #d60043 100%);
+      color: white;
+      box-shadow: 0 4px 20px var(--tiktok-glow);
+    }
+
+    .action-btn.tiktok-theme:hover {
+      box-shadow: 0 6px 24px rgba(255, 0, 80, 0.5);
+      transform: translateY(-1px);
+    }
+
+    /* Grok button theme */
+    .action-btn.grok-theme {
+      background: linear-gradient(135deg, #1c1c1e 0%, #000000 100%);
+      color: white;
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.6);
+    }
+
+    .action-btn.grok-theme:hover {
+      border-color: rgba(255, 255, 255, 0.8);
+      box-shadow: 0 6px 24px rgba(255, 255, 255, 0.15);
+      transform: translateY(-1px);
+    }
+
+    .action-btn:active {
+      transform: translateY(1px);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+    }
+
+    /* Results layout */
+    .results-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 12px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-color);
+      width: fit-content;
+      transition: all 0.3s ease;
+    }
+
+    .status-badge.loading {
+      color: #f59e0b;
+      border-color: rgba(245, 158, 11, 0.2);
+      background: rgba(245, 158, 11, 0.05);
+    }
+
+    .status-badge.success {
+      color: #10b981;
+      border-color: rgba(16, 185, 129, 0.2);
+      background: rgba(16, 185, 129, 0.05);
+    }
+
+    .status-badge.error {
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.2);
+      background: rgba(239, 68, 68, 0.05);
+    }
+
+    pre {
+      background: #06070a;
+      border: 1px solid var(--border-color);
+      border-radius: 12px;
+      padding: 14px;
+      max-height: 220px;
+      overflow-y: auto;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      line-height: 1.6;
+      color: #9cdcfe;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    /* Custom Scrollbar */
+    pre::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    pre::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    pre::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+    }
+    pre::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-area">
+        <span class="logo-icon">🔑</span>
+        <h1>Cookie Extractor Pro</h1>
+      </div>
+      <span class="version">v1.1</span>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="tiktok">🎵 TikTok</button>
+      <button class="tab-btn" data-tab="grok">🤖 Grok AI</button>
+    </div>
+
+    <!-- Instructions / Context Area -->
+    <div class="info-card">
+      <div class="info-title" id="info-title">Status Deteksi</div>
+      <div class="info-desc" id="info-desc">Buka halaman TikTok yang sudah login untuk mengambil cookies.</div>
+    </div>
+
+    <!-- Action Button -->
+    <button id="extract" class="action-btn tiktok-theme">
+      <span>🔑</span> Ambil TikTok Cookies
+    </button>
+
+    <!-- Results Panel -->
+    <div class="results-container">
+      <div id="status" class="status-badge">Silakan klik tombol di atas</div>
+      <pre id="cookies">Hasil ekstraksi cookie JSON akan muncul di sini dan otomatis tersalin ke clipboard Anda.</pre>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

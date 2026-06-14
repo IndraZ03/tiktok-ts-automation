@@ -1,0 +1,1 @@
+console.log('TikTok & Grok Cookie Extractor background service worker running...');
