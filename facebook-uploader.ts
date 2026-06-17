@@ -52,14 +52,18 @@ async function isVideoValid(videoPath: string, log: LogFn): Promise<boolean> {
       return true;
     }
 
-    // Run a quick FFmpeg check
-    await execa(ffmpegPath, [
+    // Run a thorough FFmpeg check to decode the entire video file and catch any errors/corruption
+    const { stderr } = await execa(ffmpegPath, [
       '-v', 'error',
       '-i', videoPath,
-      '-t', '1',
       '-f', 'null',
       '-'
     ], { windowsHide: true });
+
+    if (stderr && stderr.trim().length > 0) {
+      log(`❌ Verifikasi FFmpeg mendeteksi error untuk ${path.basename(videoPath)}: ${stderr.trim()}`);
+      return false;
+    }
 
     return true;
   } catch (err: any) {

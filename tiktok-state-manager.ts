@@ -14,6 +14,7 @@ import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, ge
 import multer from 'multer';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
+import { startWAPolling, notifyScheduleStarted, sendWAMessage } from './whatsapp-service.js';
 import {
   loadLeonardoData,
   saveLeonardoData,
@@ -3570,6 +3571,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
   res.json({ success: true, message: `Jadwalkan ${batch.length} video utama tanpa generate` });
 
   grokbotLog(`📤 [Jadwalkan Saja] Mulai Upload ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
+  notifyScheduleStarted(`${schedDate} ${schedTime}`, endStr);
 
     const uploadConfig = {
       videoFolder: stateDownloadDir,
@@ -3941,6 +3943,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
     grokbotBroadcastProgress();
 
     grokbotLog(`📤 Mulai Upload batch: ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
+    notifyScheduleStarted(`${schedDate} ${schedTime}`, endStr);
 
     const uploadConfig = {
       videoFolder: stateDownloadDir,
@@ -4146,6 +4149,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
 
     const totalRawToGenerate = mergeEnabled ? (2 * neededUtama) : neededUtama;
     grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Utama: dibutuhkan ${neededUtama} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingUtama.length})`);
+    sendWAMessage(`🤖 [${tiktokStateName}] Mulai generate stok utama (dibutuhkan: ${neededUtama} video)...`);
     
     resetGrokbotProgress({
       currentState: tiktokStateName,
@@ -4208,9 +4212,11 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       grokbotProgress.merge = 100;
       grokbotBroadcastProgress();
       grokbotLog(`✓ Stok Utama untuk ${tiktokStateName} berhasil ditambahkan!`);
+      sendWAMessage(`🤖 [${tiktokStateName}] Selesai generate stok utama!`);
     } catch (err: any) {
       clearInterval(poll);
       grokbotLog(`❌ Gagal generate Utama untuk ${tiktokStateName}: ${err.message}`);
+      sendWAMessage(`❌ [${tiktokStateName}] Gagal generate Utama: ${err.message}`);
     }
   };
 
@@ -4223,6 +4229,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
 
     const totalRawToGenerate = mergeEnabled ? (2 * neededCadangan) : neededCadangan;
     grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Cadangan: dibutuhkan ${neededCadangan} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingCadangan.length})`);
+    sendWAMessage(`🤖 [${tiktokStateName}] Mulai generate stok cadangan (dibutuhkan: ${neededCadangan} video)...`);
     
     resetGrokbotProgress({
       currentState: tiktokStateName,
@@ -4285,9 +4292,11 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       grokbotProgress.merge = 100;
       grokbotBroadcastProgress();
       grokbotLog(`✓ Stok Cadangan untuk ${tiktokStateName} berhasil ditambahkan!`);
+      sendWAMessage(`🤖 [${tiktokStateName}] Selesai generate stok cadangan!`);
     } catch (err: any) {
       clearInterval(poll);
       grokbotLog(`❌ Gagal generate Cadangan untuk ${tiktokStateName}: ${err.message}`);
+      sendWAMessage(`❌ [${tiktokStateName}] Gagal generate Cadangan: ${err.message}`);
     }
   };
 
@@ -4495,6 +4504,7 @@ app.post('/api/grokbot/infinite-generate', async (req, res) => {
   grokbotRunning = true;
   grokbotQueue = [];
   res.json({ success: true, message: 'Infinite Generate dimulai' });
+  sendWAMessage("♾️ Infinite Generate dimulai!");
 
   try {
     await grokbotRunInfinite(stateFiles);
@@ -4505,6 +4515,7 @@ app.post('/api/grokbot/infinite-generate', async (req, res) => {
     resetGrokbotProgress();
     grokbotBroadcastProgress();
     grokbotLog('===== GROKBOT FINISHED =====');
+    sendWAMessage("♾️ Infinite Generate selesai!");
   }
 });
 
@@ -4949,6 +4960,7 @@ app.post('/api/leonardo/scan-folder', (req, res) => {
 // Jalankan server
 app.listen(PORT, () => {
   initAutopull();
+  startWAPolling();
   console.log(`🚀 State Manager berjalan di http://localhost:${PORT}`);
   console.log(`🎬 TikTok Auto Uploader: http://localhost:${PORT}/tiktok`);
   console.log(`🧠 Grok Imagine Generator: http://localhost:${PORT}/grok`);

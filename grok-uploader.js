@@ -188,7 +188,7 @@ export async function runGrokGenerator(config, log, baseDir) {
     if (!fs.existsSync(stateDownloadDir))
         fs.mkdirSync(stateDownloadDir, { recursive: true });
     const total = Math.max(1, config.totalVideos || 1);
-    // Limit to config.parallelBrowsers browser to ensure stability
+    // Limit browser count to config.parallelBrowsers (defaulting to 1 if not defined) to ensure optimal stability.
     const numBrowsers = Math.min(total, config.parallelBrowsers || 1);
     // Distribute evenly
     const perBrowser = [];
@@ -255,6 +255,10 @@ async function runBrowserWorker(idx, count, config, stateFilePath, downloadDir, 
         }
         log(`${tag} ✅ Ready`);
         for (let i = 0; i < count && isRunning; i++) {
+            if (grokRateLimits[config.stateFile]) {
+                log(`${tag} ℹ Rate limit terdeteksi di worker lain, menghentikan antrean prompt baru.`);
+                break;
+            }
             bp.current = i;
             bp.progress = 0;
             bp.message = `Generating ${i + 1}/${count}`;
@@ -502,10 +506,17 @@ async function runBrowserWorker(idx, count, config, stateFilePath, downloadDir, 
                     availableAt: resetTime,
                     detectedAt: Date.now()
                 };
-                log(`${tag} 🚫 Rate limited! Menghentikan semua proses... ${resetTime ? 'Tersedia kembali pukul ' + resetTime : ''}`);
+                log(`${tag} 🚫 Rate limited! Menghentikan antrean prompt baru... ${resetTime ? 'Tersedia kembali pukul ' + resetTime : ''}`);
                 stats.failed++;
                 bp.message = 'Rate limited!';
-                stopGrokGenerator();
+                try {
+                    await context.close();
+                }
+                catch { }
+                try {
+                    await browser.close();
+                }
+                catch { }
                 break;
             }
             else {

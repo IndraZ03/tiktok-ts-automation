@@ -302,6 +302,10 @@ async function runBrowserWorker(
     log(`${tag} ✅ Ready`);
 
     for (let i = 0; i < count && isRunning; i++) {
+      if (grokRateLimits[config.stateFile]) {
+        log(`${tag} ℹ Rate limit terdeteksi di worker lain, menghentikan antrean prompt baru.`);
+        break;
+      }
       bp.current = i; bp.progress = 0; bp.message = `Generating ${i + 1}/${count}`;
 
       const prompt = loadPromptFromFile(promptFilePath);
@@ -497,9 +501,10 @@ async function runBrowserWorker(
           availableAt: resetTime,
           detectedAt: Date.now()
         };
-        log(`${tag} 🚫 Rate limited! Menghentikan semua proses... ${resetTime ? 'Tersedia kembali pukul ' + resetTime : ''}`);
+        log(`${tag} 🚫 Rate limited! Menghentikan antrean prompt baru... ${resetTime ? 'Tersedia kembali pukul ' + resetTime : ''}`);
         stats.failed++; bp.message = 'Rate limited!';
-        stopGrokGenerator();
+        try { await context.close(); } catch {}
+        try { await browser.close(); } catch {}
         break;
       } else {
         log(`${tag} ❌ ${result?.error || 'unknown'}`); stats.failed++;

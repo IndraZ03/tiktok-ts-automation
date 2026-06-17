@@ -69,14 +69,18 @@ async function isVideoValid(videoPath: string, log: LogFn): Promise<boolean> {
       return true;
     }
 
-    // Run a quick FFmpeg check to decode the first 1 second of the video
-    await execa(ffmpegPath, [
+    // Run a thorough FFmpeg check to decode the entire video file and catch any errors/corruption
+    const { stderr } = await execa(ffmpegPath, [
       '-v', 'error',
       '-i', videoPath,
-      '-t', '1',
       '-f', 'null',
       '-'
     ], { windowsHide: true });
+
+    if (stderr && stderr.trim().length > 0) {
+      log(`❌ Verifikasi FFmpeg mendeteksi error untuk ${path.basename(videoPath)}: ${stderr.trim()}`);
+      return false;
+    }
 
     return true;
   } catch (err: any) {
@@ -85,6 +89,79 @@ async function isVideoValid(videoPath: string, log: LogFn): Promise<boolean> {
   }
 }
 
+async function detectUploadError(page: Page, log: LogFn): Promise<string | null> {
+  const errorKeywords = [
+    'tidak didukung',
+    'gagal',
+    'corrupt',
+    'rusak',
+    'invalid',
+    'unsupported',
+    'error',
+    'failed'
+  ];
+
+  const errorSelectors = [
+    'div[class*="toast"]',
+    'div[class*="modal"]',
+    'div[class*="dialog"]',
+    'div[class*="notification"]',
+    'div[class*="error"]',
+    'div[class*="Error"]',
+    'div[class*="Warning"]',
+    'div[class*="warning"]',
+    'span[class*="error"]',
+    'p[class*="error"]',
+    'div[role="alert"]',
+    '[data-e2e="upload-error"]'
+  ];
+
+  for (const selector of errorSelectors) {
+    try {
+      const elements = page.locator(selector);
+      const count = await elements.count();
+      for (let i = 0; i < count; i++) {
+        const el = elements.nth(i);
+        if (await el.isVisible().catch(() => false)) {
+          const text = (await el.textContent().catch(() => ''))?.toLowerCase().trim();
+          if (text) {
+            for (const keyword of errorKeywords) {
+              if (text.includes(keyword)) {
+                return text;
+              }
+            }
+          }
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Check page body text as fallback
+  try {
+    const pageText = (await page.locator('body').textContent().catch(() => ''))?.toLowerCase() || '';
+    const criticalErrors = [
+      'file format not supported',
+      'format file tidak didukung',
+      'file is corrupted',
+      'file rusak',
+      'failed to upload',
+      'gagal mengunggah',
+      'corrupted video',
+      'video rusak'
+    ];
+    for (const errStr of criticalErrors) {
+      if (pageText.includes(errStr)) {
+        return errStr;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
 
 // ═══════════════════════════════════════════════════════════
 //  UPLOAD SINGLE VIDEO
@@ -121,18 +198,40 @@ async function uploadSingleVideo(
   // ── STEP 2: Upload video file ──
   log('📤 STEP 1: Upload video...');
   let uploaded = false;
+  let hasCriticalUploadError = false;
+  let detectedErrorMsg = '';
 
   // Helper to verify if upload editor has appeared (meaning upload started successfully)
   const verifyUploadStarted = async (): Promise<boolean> => {
     log('⏳ Memverifikasi transisi ke halaman edit (layar detail)...');
-    try {
-      await page.locator('.public-DraftEditor-content, div[role="textbox"][contenteditable="true"]')
+    const startTime = Date.now();
+    const timeout = 15000;
+
+    while (Date.now() - startTime < timeout) {
+      if (!isRunning) return false;
+
+      // Check if editor is visible
+      const editorVisible = await page.locator('.public-DraftEditor-content, div[role="textbox"][contenteditable="true"]')
         .first()
-        .waitFor({ state: 'visible', timeout: 15000 });
-      return true;
-    } catch {
-      return false;
+        .isVisible()
+        .catch(() => false);
+
+      if (editorVisible) {
+        return true;
+      }
+
+      // Check for upload error
+      const uploadError = await detectUploadError(page, log);
+      if (uploadError) {
+        hasCriticalUploadError = true;
+        detectedErrorMsg = uploadError;
+        log(`❌ Terdeteksi error upload di halaman: "${uploadError}"`);
+        return false;
+      }
+
+      await page.waitForTimeout(500);
     }
+    return false;
   };
 
   // Strategy A: Direct file input
@@ -155,7 +254,7 @@ async function uploadSingleVideo(
   }
 
   // Strategy B: Click select button + file chooser
-  if (!uploaded) {
+  if (!uploaded && !hasCriticalUploadError) {
     try {
       const [fileChooser] = await Promise.all([
         page.waitForEvent('filechooser', { timeout: 10000 }),
@@ -175,7 +274,7 @@ async function uploadSingleVideo(
   }
 
   // Strategy C: JS injection
-  if (!uploaded) {
+  if (!uploaded && !hasCriticalUploadError) {
     try {
       const inputHandle = await page.evaluateHandle(() => {
         const inputs = document.querySelectorAll('input[type="file"]');
@@ -204,7 +303,11 @@ async function uploadSingleVideo(
   }
 
   if (!uploaded) {
-    log('❌ Gagal menemukan elemen upload atau verifikasi upload gagal');
+    if (hasCriticalUploadError) {
+      log(`❌ Upload gagal karena error kritis pada file/halaman: "${detectedErrorMsg}"`);
+    } else {
+      log('❌ Gagal menemukan elemen upload atau verifikasi upload gagal');
+    }
     return false;
   }
 

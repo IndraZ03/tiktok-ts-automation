@@ -13,6 +13,7 @@ import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, ge
 import multer from 'multer';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo } from './video-splitter.js';
+import { startWAPolling, notifyScheduleStarted, sendWAMessage } from './whatsapp-service.js';
 import { loadLeonardoData, saveLeonardoData, getFreshJWT, fetchCreditBalance, uploadInitImage, triggerKlingGenerate, checkGenerationStatus, fetchGenerationVideoUrl, downloadVideoToLocal } from './leonardo-helper.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -1464,6 +1465,111 @@ app.get('/api/grok/audio-folders', (req, res) => {
         .filter(f => fs.statSync(path.join(AUDIO_DIR, f)).isDirectory());
     res.json({ folders });
 });
+// Save prompt
+app.post('/api/grok/prompts/save', (req, res) => {
+    const { name, prompt } = req.body;
+    if (!name || !prompt)
+        return res.status(400).json({ error: 'name dan prompt diperlukan' });
+    const filename = name.endsWith('.json') ? name : (name.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
+    fs.writeFileSync(path.join(PROMPT_DIR, filename), JSON.stringify({ prompt }, null, 2));
+    res.json({ success: true, filename });
+});
+// List files inside a bahan folder
+app.get('/api/grok/bahan/:folderName', (req, res) => {
+    const { folderName } = req.params;
+    const targetDir = path.join(BAHAN_DIR, folderName);
+    if (!fs.existsSync(targetDir)) {
+        return res.status(404).json({ error: 'Folder tidak ditemukan' });
+    }
+    try {
+        const files = fs.readdirSync(targetDir).filter(f => {
+            const p = path.join(targetDir, f);
+            return fs.statSync(p).isFile();
+        });
+        res.json({ files });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// Delete a specific file inside a bahan folder
+app.delete('/api/grok/bahan/:folderName/:fileName', (req, res) => {
+    const { folderName, fileName } = req.params;
+    const filePath = path.join(BAHAN_DIR, folderName, fileName);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'File tidak ditemukan' });
+    }
+    try {
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: `Berhasil menghapus ${fileName}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// Delete a whole bahan folder (recursive)
+app.delete('/api/grok/bahan/:folderName', (req, res) => {
+    const { folderName } = req.params;
+    const targetDir = path.join(BAHAN_DIR, folderName);
+    if (!fs.existsSync(targetDir)) {
+        return res.status(404).json({ error: 'Folder tidak ditemukan' });
+    }
+    try {
+        fs.rmSync(targetDir, { recursive: true, force: true });
+        res.json({ success: true, message: `Berhasil menghapus folder ${folderName}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// Create a new bahan folder
+app.post('/api/grok/bahan/create-folder', (req, res) => {
+    const { folderName } = req.body;
+    if (!folderName)
+        return res.status(400).json({ error: 'Nama folder diperlukan' });
+    const cleanFolderName = folderName.replace(/[^a-zA-Z0-9_-]/g, '_');
+    const targetDir = path.join(BAHAN_DIR, cleanFolderName);
+    if (fs.existsSync(targetDir)) {
+        return res.status(400).json({ error: 'Folder sudah ada' });
+    }
+    try {
+        fs.mkdirSync(targetDir, { recursive: true });
+        res.json({ success: true, message: `Berhasil membuat folder ${cleanFolderName}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// Read a specific prompt file content
+app.get('/api/grok/prompts/:filename', (req, res) => {
+    const { filename } = req.params;
+    const filePath = path.join(PROMPT_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Prompt tidak ditemukan' });
+    }
+    try {
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        res.json({ success: true, prompt: data.prompt });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// Delete a specific prompt file
+app.delete('/api/grok/prompts/:filename', (req, res) => {
+    const { filename } = req.params;
+    const filePath = path.join(PROMPT_DIR, filename);
+    if (!fs.existsSync(filePath)) {
+        return res.status(404).json({ error: 'Prompt tidak ditemukan' });
+    }
+    try {
+        fs.unlinkSync(filePath);
+        res.json({ success: true, message: `Berhasil menghapus prompt ${filename}` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 // Upload bahan images
 app.post('/api/grok/bahan/upload', bahanUpload.array('images', 100), (req, res) => {
     const folderName = req.body.folderName;
@@ -1492,111 +1598,9 @@ app.post('/api/grok/prompts/save', (req, res) => {
     const { name, prompt } = req.body;
     if (!name || !prompt)
         return res.status(400).json({ error: 'name dan prompt diperlukan' });
-    const filename = name.endsWith('.json') ? name : (name.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json');
+    const filename = name.replace(/[^a-zA-Z0-9_-]/g, '_') + '.json';
     fs.writeFileSync(path.join(PROMPT_DIR, filename), JSON.stringify({ prompt }, null, 2));
     res.json({ success: true, filename });
-});
-
-// List files inside a bahan folder
-app.get('/api/grok/bahan/:folderName', (req, res) => {
-    const { folderName } = req.params;
-    const targetDir = path.join(BAHAN_DIR, folderName);
-    if (!fs.existsSync(targetDir)) {
-        return res.status(404).json({ error: 'Folder tidak ditemukan' });
-    }
-    try {
-        const files = fs.readdirSync(targetDir).filter(f => {
-            const p = path.join(targetDir, f);
-            return fs.statSync(p).isFile();
-        });
-        res.json({ files });
-    }
-    catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Delete a specific file inside a bahan folder
-app.delete('/api/grok/bahan/:folderName/:fileName', (req, res) => {
-    const { folderName, fileName } = req.params;
-    const filePath = path.join(BAHAN_DIR, folderName, fileName);
-    if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: 'File tidak ditemukan' });
-    }
-    try {
-        fs.unlinkSync(filePath);
-        res.json({ success: true, message: `Berhasil menghapus ${fileName}` });
-    }
-    catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Delete a whole bahan folder (recursive)
-app.delete('/api/grok/bahan/:folderName', (req, res) => {
-    const { folderName } = req.params;
-    const targetDir = path.join(BAHAN_DIR, folderName);
-    if (!fs.existsSync(targetDir)) {
-        return res.status(404).json({ error: 'Folder tidak ditemukan' });
-    }
-    try {
-        fs.rmSync(targetDir, { recursive: true, force: true });
-        res.json({ success: true, message: `Berhasil menghapus folder ${folderName}` });
-    }
-    catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Create a new bahan folder
-app.post('/api/grok/bahan/create-folder', (req, res) => {
-    const { folderName } = req.body;
-    if (!folderName)
-        return res.status(400).json({ error: 'Nama folder diperlukan' });
-    const cleanFolderName = folderName.replace(/[^a-zA-Z0-9_-]/g, '_');
-    const targetDir = path.join(BAHAN_DIR, cleanFolderName);
-    if (fs.existsSync(targetDir)) {
-        return res.status(400).json({ error: 'Folder sudah ada' });
-    }
-    try {
-        fs.mkdirSync(targetDir, { recursive: true });
-        res.json({ success: true, message: `Berhasil membuat folder ${cleanFolderName}` });
-    }
-    catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Read a specific prompt file content
-app.get('/api/grok/prompts/:filename', (req, res) => {
-    const { filename } = req.params;
-    const filePath = path.join(PROMPT_DIR, filename);
-    if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: 'Prompt tidak ditemukan' });
-    }
-    try {
-        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        res.json({ success: true, prompt: data.prompt });
-    }
-    catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Delete a specific prompt file
-app.delete('/api/grok/prompts/:filename', (req, res) => {
-    const { filename } = req.params;
-    const filePath = path.join(PROMPT_DIR, filename);
-    if (!fs.existsSync(filePath)) {
-        return res.status(404).json({ error: 'Prompt tidak ditemukan' });
-    }
-    try {
-        fs.unlinkSync(filePath);
-        res.json({ success: true, message: `Berhasil menghapus prompt ${filename}` });
-    }
-    catch (err) {
-        res.status(500).json({ error: err.message });
-    }
 });
 // Grok SSE logs
 const grokSseClients = [];
@@ -2037,6 +2041,29 @@ async function ytbotRunState(stateFile) {
             ytbotLog(`ℹ Tidak ada video untuk diupload di ${stateName}`);
             break;
         }
+        // === ADAPTIVE SCHEDULE SHIFT ===
+        const now = new Date();
+        const currentSchedMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
+        if (!isNaN(currentSchedMs) && now.getTime() > currentSchedMs) {
+            const adjustedTime = new Date(now.getTime() + 45 * 60 * 1000);
+            const yyyy = adjustedTime.getFullYear();
+            const mm = String(adjustedTime.getMonth() + 1).padStart(2, '0');
+            const dd = String(adjustedTime.getDate()).padStart(2, '0');
+            const hh = String(adjustedTime.getHours()).padStart(2, '0');
+            const min = String(adjustedTime.getMinutes()).padStart(2, '0');
+            schedDate = `${yyyy}-${mm}-${dd}`;
+            schedTime = `${hh}:${min}`;
+            ytbotLog(`⚠️ [Jadwal Adaptif] Waktu sekarang melebihi schedule yang diset.`);
+            ytbotLog(`⚠️ [Jadwal Adaptif] Menyesuaikan schedule video pertama ke +45 menit: ${schedDate} ${schedTime}`);
+            // Update config file to keep it persistent
+            const updData = loadYtbotData();
+            if (updData.states[stateFile]) {
+                updData.states[stateFile].scheduleDate = schedDate;
+                updData.states[stateFile].scheduleTime = schedTime;
+                saveYtbotData(updData);
+            }
+        }
+        // ===============================
         // 3. Take max 30 videos for this batch
         const batch = pendingVideos.slice(0, 30);
         const startFrom = batch[0];
@@ -2512,7 +2539,6 @@ app.post('/api/facebook/cookies/save', (req, res) => {
         res.status(400).json({ error: 'Gagal memproses cookies: ' + err.message });
     }
 });
-
 // Save manually entered cookies (universal route)
 app.post('/api/cookies/save', (req, res) => {
     const { name, cookiesText, platform = 'tiktok' } = req.body;
@@ -2569,6 +2595,7 @@ app.post('/api/cookies/save', (req, res) => {
         }
         const storageStateData = {
             cookies: cookiesArray.map((c) => {
+                // Expiry parsing
                 let expires = -1;
                 if (c.expires !== undefined) {
                     if (typeof c.expires === 'number') {
@@ -2590,6 +2617,7 @@ app.post('/api/cookies/save', (req, res) => {
                             expires = Math.floor(parsed / 1000);
                     }
                 }
+                // sameSite mapping
                 let sameSite = 'Lax';
                 if (c.sameSite) {
                     const lower = String(c.sameSite).toLowerCase();
@@ -2620,7 +2648,6 @@ app.post('/api/cookies/save', (req, res) => {
         res.status(400).json({ error: 'Gagal memproses cookies: ' + err.message });
     }
 });
-
 // Autopull feature persistence and logic
 const AUTOPULL_CONFIG_FILE = path.join(__dirname, 'autopull-config.json');
 let autopullInterval = null;
@@ -2647,11 +2674,11 @@ function runRestartScript() {
     try {
         const restartBatPath = path.join(__dirname, 'restart.bat');
         const scriptContent = `@echo off
-timeout /t 2 /nobreak
+ping 127.0.0.1 -n 3 > nul
 for /f "tokens=5" %%a in ('netstat -aon ^| findstr :5000 ^| findstr LISTENING') do (
     taskkill /f /pid %%a
 )
-wscript.exe start.vbs
+wscript.exe "%~dp0start.vbs"
 `;
         fs.writeFileSync(restartBatPath, scriptContent);
         // Spawn detached restart process
@@ -2677,11 +2704,11 @@ function startAutopullPolling() {
                 return;
             }
             if (!stdout.includes('Already up to date.')) {
-                console.log('[AUTOPULL] New updates found and pulled! Restarting server......');
+                console.log('[AUTOPULL] New updates found and pulled! Restarting server...');
                 runRestartScript();
             }
         });
-    }, 20000); // Check every 20 seconds
+    }, 5 * 60 * 60 * 1000); // Check every 5 hours
 }
 function stopAutopullPolling() {
     if (autopullInterval) {
@@ -2699,7 +2726,6 @@ function initAutopull() {
         console.log('⚪ [AUTOPULL] Auto pull is disabled.');
     }
 }
-
 // Git and Server Restart endpoints
 app.get('/git', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'git.html'));
@@ -2748,7 +2774,6 @@ app.post('/api/git/autopull/toggle', (req, res) => {
     }
     res.json({ success: true, enabled: config.enabled });
 });
-
 // Delete state for platform
 app.post('/api/delete-state', (req, res) => {
     const { filename, platform } = req.body;
@@ -3252,7 +3277,6 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
         grokbotBroadcastQueue();
     });
 });
-
 // ── IMPORT CADANGAN: Move backup videos to main stock ──
 app.post('/api/grokbot/import-cadangan', async (req, res) => {
     const { stateFile } = req.body;
@@ -3317,7 +3341,6 @@ app.post('/api/grokbot/import-cadangan', async (req, res) => {
     grokbotLog(`🚚 [Manual Import] Berhasil memindahkan ${movedCount} video dari stok cadangan ke stok utama untuk ${tiktokStateName}`);
     res.json({ success: true, message: `Berhasil mengimpor ${movedCount} video dari stok cadangan ke stok utama.` });
 });
-
 // ── JADWALKAN SAJA: Skip generation, use existing utama stock ──
 app.post('/api/grokbot/schedule-only', async (req, res) => {
     if (grokbotRunning)
@@ -3364,6 +3387,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
     grokbotBroadcastProgress();
     res.json({ success: true, message: `Jadwalkan ${batch.length} video utama tanpa generate` });
     grokbotLog(`📤 [Jadwalkan Saja] Mulai Upload ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
+    notifyScheduleStarted(`${schedDate} ${schedTime}`, endStr);
     const uploadConfig = {
         videoFolder: stateDownloadDir,
         startFromVideo: startFrom,
@@ -3721,6 +3745,7 @@ async function grokbotRunState(stateFile) {
         grokbotProgress.uploadTotal = batch.length;
         grokbotBroadcastProgress();
         grokbotLog(`📤 Mulai Upload batch: ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
+        notifyScheduleStarted(`${schedDate} ${schedTime}`, endStr);
         const uploadConfig = {
             videoFolder: stateDownloadDir,
             startFromVideo: startFrom,
@@ -3904,6 +3929,7 @@ async function grokbotRunInfinite(stateFiles) {
         const mergeEnabled = cfg.merge !== false;
         const totalRawToGenerate = mergeEnabled ? (2 * neededUtama) : neededUtama;
         grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Utama: dibutuhkan ${neededUtama} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingUtama.length})`);
+        sendWAMessage(`🤖 [${tiktokStateName}] Mulai generate stok utama (dibutuhkan: ${neededUtama} video)...`);
         resetGrokbotProgress({
             currentState: tiktokStateName,
             mergeTotal: mergeEnabled ? neededUtama : 0,
@@ -3967,10 +3993,12 @@ async function grokbotRunInfinite(stateFiles) {
             grokbotProgress.merge = 100;
             grokbotBroadcastProgress();
             grokbotLog(`✓ Stok Utama untuk ${tiktokStateName} berhasil ditambahkan!`);
+            sendWAMessage(`🤖 [${tiktokStateName}] Selesai generate stok utama!`);
         }
         catch (err) {
             clearInterval(poll);
             grokbotLog(`❌ Gagal generate Utama untuk ${tiktokStateName}: ${err.message}`);
+            sendWAMessage(`❌ [${tiktokStateName}] Gagal generate Utama: ${err.message}`);
         }
     };
     const runCadanganGen = async (targetState) => {
@@ -3981,6 +4009,7 @@ async function grokbotRunInfinite(stateFiles) {
         const mergeEnabled = cfg.merge !== false;
         const totalRawToGenerate = mergeEnabled ? (2 * neededCadangan) : neededCadangan;
         grokbotLog(`🚀 [${tiktokStateName}] Generate Stok Cadangan: dibutuhkan ${neededCadangan} video (raw: ${totalRawToGenerate}) (Stok saat ini: ${pendingCadangan.length})`);
+        sendWAMessage(`🤖 [${tiktokStateName}] Mulai generate stok cadangan (dibutuhkan: ${neededCadangan} video)...`);
         resetGrokbotProgress({
             currentState: tiktokStateName,
             mergeTotal: mergeEnabled ? neededCadangan : 0,
@@ -4044,10 +4073,12 @@ async function grokbotRunInfinite(stateFiles) {
             grokbotProgress.merge = 100;
             grokbotBroadcastProgress();
             grokbotLog(`✓ Stok Cadangan untuk ${tiktokStateName} berhasil ditambahkan!`);
+            sendWAMessage(`🤖 [${tiktokStateName}] Selesai generate stok cadangan!`);
         }
         catch (err) {
             clearInterval(poll);
             grokbotLog(`❌ Gagal generate Cadangan untuk ${tiktokStateName}: ${err.message}`);
+            sendWAMessage(`❌ [${tiktokStateName}] Gagal generate Cadangan: ${err.message}`);
         }
     };
     while (grokbotRunning) {
@@ -4239,6 +4270,7 @@ app.post('/api/grokbot/infinite-generate', async (req, res) => {
     grokbotRunning = true;
     grokbotQueue = [];
     res.json({ success: true, message: 'Infinite Generate dimulai' });
+    sendWAMessage("♾️ Infinite Generate dimulai!");
     try {
         await grokbotRunInfinite(stateFiles);
     }
@@ -4250,6 +4282,7 @@ app.post('/api/grokbot/infinite-generate', async (req, res) => {
         resetGrokbotProgress();
         grokbotBroadcastProgress();
         grokbotLog('===== GROKBOT FINISHED =====');
+        sendWAMessage("♾️ Infinite Generate selesai!");
     }
 });
 app.get('/api/grokbot/status', (req, res) => {
@@ -4643,6 +4676,7 @@ app.post('/api/leonardo/scan-folder', (req, res) => {
 // Jalankan server
 app.listen(PORT, () => {
     initAutopull();
+    startWAPolling();
     console.log(`🚀 State Manager berjalan di http://localhost:${PORT}`);
     console.log(`🎬 TikTok Auto Uploader: http://localhost:${PORT}/tiktok`);
     console.log(`🧠 Grok Imagine Generator: http://localhost:${PORT}/grok`);
