@@ -28,9 +28,9 @@ export async function sendWAMessage(msg) {
         console.error(`Error sending WA message: ${e.message}`);
     }
 }
-export function notifyScheduleStarted(firstUploadTime, lastUploadTime) {
+export function notifyScheduleStarted(firstUploadTime, lastUploadTime, stateName) {
     // 1. Send the WhatsApp message
-    const msg = `🚀 Schedule Baru Dimulai!\n📅 Upload Pertama: ${firstUploadTime}\n📅 Upload Terakhir: ${lastUploadTime}`;
+    const msg = `🚀 Schedule Baru Dimulai!\n🔑 State: ${stateName}\n📅 Upload Pertama: ${firstUploadTime}\n📅 Upload Terakhir: ${lastUploadTime}`;
     sendWAMessage(msg);
     // 2. Calculate reminderTime (5 hours before lastUploadTime)
     let reminderTime = "";
@@ -52,7 +52,8 @@ export function notifyScheduleStarted(firstUploadTime, lastUploadTime) {
         firstUploadTime,
         lastUploadTime,
         reminderTime,
-        reminderSent: false
+        reminderSent: false,
+        stateName
     };
     try {
         fs.writeFileSync(file, JSON.stringify(data, null, 2));
@@ -60,6 +61,13 @@ export function notifyScheduleStarted(firstUploadTime, lastUploadTime) {
     catch (e) {
         console.error("Error writing schedule info:", e);
     }
+}
+export function notifyScheduleFinished(stateName, success, totalUploaded, error) {
+    let msg = `✅ Schedule Selesai!\n🔑 State: ${stateName}\n📊 Total Video Terupload: ${totalUploaded}`;
+    if (!success) {
+        msg = `⚠️ Schedule Berhenti dengan Status Error!\n🔑 State: ${stateName}\n📊 Total Video Terupload: ${totalUploaded}\n❌ Error: ${error || 'Unknown Error'}`;
+    }
+    sendWAMessage(msg);
 }
 export function startWAPolling() {
     // Start checkReminders every 1 minute
@@ -75,7 +83,7 @@ export function startWAPolling() {
                 if (now >= reminderTimeMs) {
                     const lastUploadMs = new Date(data.lastUploadTime.trim().replace(' ', 'T') + ':00').getTime();
                     if (now < lastUploadMs) {
-                        sendWAMessage("⚠️ Peringatan: Schedule anda hampir habis! (Sisa kurang dari 5 jam)");
+                        sendWAMessage(`⚠️ Peringatan: Schedule untuk state ${data.stateName || 'unknown'} anda hampir habis! (Sisa kurang dari 5 jam)`);
                     }
                     data.reminderSent = true;
                     fs.writeFileSync(file, JSON.stringify(data, null, 2));
@@ -101,31 +109,37 @@ export function startWAPolling() {
                 if (data && data.receiptId) {
                     const receiptId = data.receiptId;
                     const body = data.body;
-                    if (body && body.typeWebhook === 'incomingMessageReceived') {
-                        const chatId = body.senderData?.chatId;
-                        const messageData = body.messageData;
-                        if (chatId === TARGET_GROUP && messageData && messageData.typeMessage === 'textMessage') {
-                            const text = messageData.textMessageData?.textMessage?.trim();
-                            if (text === '/list_schedule') {
-                                const scheduleFile = './whatsapp-schedule-info.json';
-                                if (!fs.existsSync(scheduleFile)) {
-                                    await sendWAMessage("Belum ada schedule yang terdaftar.");
+                    if (body) {
+                        console.log(`[WA_POLL] Webhook type: ${body.typeWebhook}`);
+                        if (body.typeWebhook === 'incomingMessageReceived') {
+                            const chatId = body.senderData?.chatId;
+                            const messageData = body.messageData;
+                            console.log(`[WA_POLL] Msg from: ${chatId}, type: ${messageData?.typeMessage}`);
+                            
+                            if (chatId === TARGET_GROUP && messageData && messageData.typeMessage === 'textMessage') {
+                                const text = messageData.textMessageData?.textMessage?.trim();
+                                console.log(`[WA_POLL] Message text: "${text}"`);
+                                if (text === '/list_schedule') {
+                                    const scheduleFile = './whatsapp-schedule-info.json';
+                                    if (!fs.existsSync(scheduleFile)) {
+                                        await sendWAMessage("Belum ada schedule yang terdaftar.");
+                                    }
+                                    else {
+                                        try {
+                                            const sData = JSON.parse(fs.readFileSync(scheduleFile, 'utf-8'));
+                                            const msg = `📋 Informasi Schedule Terakhir:\n- State: ${sData.stateName || 'Tidak diketahui'}\n- Mulai: ${sData.firstUploadTime}\n- Selesai: ${sData.lastUploadTime}`;
+                                            await sendWAMessage(msg);
+                                        }
+                                        catch {
+                                            await sendWAMessage("Gagal membaca informasi schedule.");
+                                        }
+                                    }
                                 }
-                                else {
+                                else if (text === '/list_grok') {
                                     try {
-                                        const sData = JSON.parse(fs.readFileSync(scheduleFile, 'utf-8'));
-                                        const msg = `📋 Informasi Schedule Terakhir:\n- Mulai: ${sData.firstUploadTime}\n- Selesai: ${sData.lastUploadTime}`;
-                                        await sendWAMessage(msg);
-                                    }
-                                    catch {
-                                        await sendWAMessage("Gagal membaca informasi schedule.");
-                                    }
-                                }
-                            }
-                            else if (text === '/list_grok') {
-                                try {
-                                    const rateLimits = getGrokRateLimits();
-                                    const keys = Object.keys(rateLimits);
+                                        const rateLimits = getGrokRateLimits();
+                                        const keys = Object.keys(rateLimits);
+                                        console.log(`[WA_POLL] keys length: ${keys.length}`);
                                     if (keys.length === 0) {
                                         await sendWAMessage("🤖 Status Grok: Available");
                                     }
@@ -145,6 +159,7 @@ export function startWAPolling() {
                                 }
                             }
                         }
+                    }
                     }
                     // Delete notification to acknowledge
                     const urlDelete = `${API_URL}/waInstance${ID_INSTANCE}/deleteNotification/${API_TOKEN}/${receiptId}`;
