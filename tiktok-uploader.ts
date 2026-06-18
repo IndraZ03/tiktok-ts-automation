@@ -21,6 +21,7 @@ export interface UploadConfig {
   intervalMinutes?: number; // interval in minutes between video schedules
   stateFile: string;      // filename in tiktok-states/
   statesDir: string;
+  threeUploadsPerHour?: boolean;
 }
 
 type LogFn = (msg: string) => void;
@@ -1059,7 +1060,7 @@ export async function runUpload(
   }
 
   // ── Calculate base schedule time ──
-  const intervalMinutes = config.intervalMinutes || 60;
+  const intervalMinutes = config.threeUploadsPerHour ? (config.intervalMinutes || 300) : (config.intervalMinutes || 60);
   const intervalMs = intervalMinutes * 60 * 1000;
   let baseSchedule: Date;
   try {
@@ -1070,12 +1071,22 @@ export async function runUpload(
     baseSchedule = new Date(Date.now() + 3600000);
   }
 
+  if (config.threeUploadsPerHour) {
+    baseSchedule.setMinutes(0);
+    baseSchedule.setSeconds(0);
+    baseSchedule.setMilliseconds(0);
+  }
+
   log('🚀 ═══════════════════════════════════════════');
   log(`🚀 Memulai upload ${videosToUpload.length} video TikTok`);
   log(`📁 Folder: ${config.videoFolder}`);
   log(`🔑 State: ${config.stateFile}`);
   log(`⏰ Schedule pertama: ${config.scheduleDate} ${config.scheduleTime}`);
-  log(`⏱ Interval: ${intervalMinutes} menit (${Math.floor(intervalMinutes / 60)}j ${intervalMinutes % 60}m)`);
+  if (config.threeUploadsPerHour) {
+    log(`⏰ Mode Interval Tetap: 3 upload per jam, jeda antar-jam ${intervalMinutes} menit`);
+  } else {
+    log(`⏱ Interval: ${intervalMinutes} menit (${Math.floor(intervalMinutes / 60)}j ${intervalMinutes % 60}m)`);
+  }
   log(`📋 Total video: ${videosFromStart.length} | Sudah upload: ${videosFromStart.length - videosToUpload.length} | Akan upload: ${videosToUpload.length}`);
   log('🚀 ═══════════════════════════════════════════');
 
@@ -1109,6 +1120,9 @@ export async function runUpload(
     let successCount = 0;
     let failCount = 0;
 
+    let currentBatchMinutes: number[] = [];
+    let lastBatchIndex = -1;
+
     for (const videoFile of videosToUpload) {
       if (!isRunning) {
         log('⛔ Upload dihentikan oleh user');
@@ -1116,7 +1130,32 @@ export async function runUpload(
       }
 
       // ── Calculate schedule for this video ──
-      const videoSchedule = new Date(baseSchedule.getTime() + uploadIndex * intervalMs);
+      let videoSchedule: Date;
+      if (config.threeUploadsPerHour) {
+        const batchIndex = Math.floor(uploadIndex / 3);
+        const subIndex = uploadIndex % 3;
+
+        if (batchIndex !== lastBatchIndex) {
+          const possible: number[] = [];
+          for (let m = 0; m < 60; m += 5) {
+            possible.push(m);
+          }
+          currentBatchMinutes = [];
+          while (currentBatchMinutes.length < 3 && possible.length > 0) {
+            const randIdx = Math.floor(Math.random() * possible.length);
+            currentBatchMinutes.push(possible.splice(randIdx, 1)[0]);
+          }
+          currentBatchMinutes.sort((a, b) => a - b);
+          lastBatchIndex = batchIndex;
+        }
+
+        const cycleMs = (60 + intervalMinutes) * 60000;
+        videoSchedule = new Date(baseSchedule.getTime() + batchIndex * cycleMs);
+        videoSchedule.setMinutes(currentBatchMinutes[subIndex]);
+      } else {
+        videoSchedule = new Date(baseSchedule.getTime() + uploadIndex * intervalMs);
+      }
+
       const schedDate = `${videoSchedule.getFullYear()}-${String(videoSchedule.getMonth() + 1).padStart(2, '0')}-${String(videoSchedule.getDate()).padStart(2, '0')}`;
       const schedTime = `${String(videoSchedule.getHours()).padStart(2, '0')}:${String(videoSchedule.getMinutes()).padStart(2, '0')}`;
 

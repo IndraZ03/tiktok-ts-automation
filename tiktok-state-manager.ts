@@ -3087,6 +3087,7 @@ interface GrokbotStateConfig {
   productTitle?: string;
   productDescription?: string;
   headless?: boolean;
+  threeUploadsPerHour?: boolean;
 }
 
 interface GrokbotData {
@@ -3553,12 +3554,26 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
 
   const schedDate = cfg.scheduleDate || new Date().toISOString().split('T')[0];
   const schedTime = cfg.scheduleTime || new Date().toTimeString().slice(0, 5);
-  const intervalMin = cfg.intervalMinutes || 60;
+  const intervalMin = cfg.threeUploadsPerHour ? (cfg.intervalMinutes || 300) : (cfg.intervalMinutes || 60);
   const batch = pendingUtamaVideos.slice(0, 30);
   const startFrom = batch[0];
 
-  const batchStartMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
-  const batchEndMs = batchStartMs + (batch.length - 1) * intervalMin * 60000;
+  let batchStartMs: number;
+  let batchEndMs: number;
+  if (cfg.threeUploadsPerHour) {
+    const baseSchedule = new Date(`${schedDate}T${schedTime}:00`);
+    baseSchedule.setMinutes(0);
+    baseSchedule.setSeconds(0);
+    baseSchedule.setMilliseconds(0);
+    batchStartMs = baseSchedule.getTime();
+
+    const cycleMs = (60 + intervalMin) * 60000;
+    const lastBatchIndex = Math.floor((batch.length - 1) / 3);
+    batchEndMs = batchStartMs + lastBatchIndex * cycleMs + 60 * 60000;
+  } else {
+    batchStartMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
+    batchEndMs = batchStartMs + (batch.length - 1) * intervalMin * 60000;
+  }
   const endDate = new Date(batchEndMs);
   const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')} ${String(endDate.getHours()).padStart(2,'0')}:${String(endDate.getMinutes()).padStart(2,'0')}`;
 
@@ -3589,6 +3604,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
       intervalMinutes: intervalMin,
       stateFile: stateFile,
       statesDir: STATES_DIR,
+      threeUploadsPerHour: !!cfg.threeUploadsPerHour,
     };
 
   let uploadedCount = 0;
@@ -3778,7 +3794,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
 
   let schedDate = cfg.scheduleDate;
   let schedTime = cfg.scheduleTime;
-  const intervalMin = cfg.intervalMinutes || 60;
+  const intervalMin = cfg.threeUploadsPerHour ? (cfg.intervalMinutes || 300) : (cfg.intervalMinutes || 60);
   const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
 
   let totalUploadedThisSession = 0;
@@ -3938,8 +3954,22 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       const batch = pendingUtamaVideos.slice(0, 30);
       const startFrom = batch[0];
 
-      const batchStartMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
-      const batchEndMs = batchStartMs + (batch.length - 1) * intervalMin * 60000;
+      let batchStartMs: number;
+      let batchEndMs: number;
+      if (cfg.threeUploadsPerHour) {
+        const baseSchedule = new Date(`${schedDate}T${schedTime}:00`);
+        baseSchedule.setMinutes(0);
+        baseSchedule.setSeconds(0);
+        baseSchedule.setMilliseconds(0);
+        batchStartMs = baseSchedule.getTime();
+
+        const cycleMs = (60 + intervalMin) * 60000;
+        const lastBatchIndex = Math.floor((batch.length - 1) / 3);
+        batchEndMs = batchStartMs + lastBatchIndex * cycleMs + 60 * 60000;
+      } else {
+        batchStartMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
+        batchEndMs = batchStartMs + (batch.length - 1) * intervalMin * 60000;
+      }
       const endDate = new Date(batchEndMs);
       const endStr = `${endDate.getFullYear()}-${String(endDate.getMonth()+1).padStart(2,'0')}-${String(endDate.getDate()).padStart(2,'0')} ${String(endDate.getHours()).padStart(2,'0')}:${String(endDate.getMinutes()).padStart(2,'0')}`;
 
@@ -3975,6 +4005,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
         intervalMinutes: intervalMin,
         stateFile: stateFile,
         statesDir: STATES_DIR,
+        threeUploadsPerHour: !!cfg.threeUploadsPerHour,
       };
 
       let uploadedCount = 0;

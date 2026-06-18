@@ -115,7 +115,6 @@ export function startWAPolling() {
                             const chatId = body.senderData?.chatId;
                             const messageData = body.messageData;
                             console.log(`[WA_POLL] Msg from: ${chatId}, type: ${messageData?.typeMessage}`);
-                            
                             if (chatId === TARGET_GROUP && messageData && messageData.typeMessage === 'textMessage') {
                                 const text = messageData.textMessageData?.textMessage?.trim();
                                 console.log(`[WA_POLL] Message text: "${text}"`);
@@ -140,26 +139,26 @@ export function startWAPolling() {
                                         const rateLimits = getGrokRateLimits();
                                         const keys = Object.keys(rateLimits);
                                         console.log(`[WA_POLL] keys length: ${keys.length}`);
-                                    if (keys.length === 0) {
-                                        await sendWAMessage("🤖 Status Grok: Available");
-                                    }
-                                    else {
-                                        let msg = "🤖 Status Grok Rate Limit:\n";
-                                        for (const key of keys) {
-                                            const limit = rateLimits[key];
-                                            const name = key.replace('grok-state-', '').replace('.json', '');
-                                            const avail = limit.availableAt || "tidak diketahui";
-                                            msg += `- State ${name}: Limit sampai ${avail}\n`;
+                                        if (keys.length === 0) {
+                                            await sendWAMessage("🤖 Status Grok: Available");
                                         }
-                                        await sendWAMessage(msg);
+                                        else {
+                                            let msg = "🤖 Status Grok Rate Limit:\n";
+                                            for (const key of keys) {
+                                                const limit = rateLimits[key];
+                                                const name = key.replace('grok-state-', '').replace('.json', '');
+                                                const avail = limit.availableAt || "tidak diketahui";
+                                                msg += `- State ${name}: Limit sampai ${avail}\n`;
+                                            }
+                                            await sendWAMessage(msg);
+                                        }
                                     }
-                                }
-                                catch (e) {
-                                    await sendWAMessage(`Gagal mengambil status Grok: ${e.message}`);
+                                    catch (e) {
+                                        await sendWAMessage(`Gagal mengambil status Grok: ${e.message}`);
+                                    }
                                 }
                             }
                         }
-                    }
                     }
                     // Delete notification to acknowledge
                     const urlDelete = `${API_URL}/waInstance${ID_INSTANCE}/deleteNotification/${API_TOKEN}/${receiptId}`;
