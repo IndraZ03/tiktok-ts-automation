@@ -583,6 +583,7 @@
     let eventSource = null;
     let dropdownOpen = false;
     let stockPollInterval = null;
+    let currentWaitInfo = null;
 
     // ═══════════════════════════════════════
     //  ONLOAD INIT
@@ -741,7 +742,7 @@
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
           scheduleTime: '', intervalMinutes: 60,
           addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
-          headless: true
+          headless: true, threeUploadsPerHour: false
         };
 
         // Preload stock badges
@@ -909,6 +910,15 @@
                     </label>
                   </div>
 
+                  <!-- Three Uploads Per Hour Option -->
+                  <div class="mt-2">
+                    <label class="flex items-center gap-2 cursor-pointer">
+                      <input id="chk-threeUploads-${fn}" type="checkbox" class="w-4 h-4 accent-pink-500"
+                             ${cfg.threeUploadsPerHour ? 'checked' : ''}>
+                      <span class="text-xs text-gray-300 font-semibold">⏰ Interval Tetap (3x upload/jam, jeda 5 jam)</span>
+                    </label>
+                  </div>
+
                   <div class="grid grid-cols-3 gap-2">
                     <div class="col-span-1">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Sched Date</label>
@@ -1034,6 +1044,7 @@
         productTitle: document.getElementById(`productTitle-${fn}`)?.value || '',
         productDescription: document.getElementById(`productDescription-${fn}`)?.value || '',
         headless: document.getElementById(`chk-headless-${fn}`)?.checked || false,
+        threeUploadsPerHour: document.getElementById(`chk-threeUploads-${fn}`)?.checked || false,
       };
 
       try {
@@ -1266,14 +1277,28 @@
         document.getElementById('btn-infinite-generate').disabled = busy;
       }
       document.getElementById('btn-stop').disabled = !busy;
+      if (!busy) {
+        document.getElementById('overall-progress-card').classList.add('hidden');
+        updateStatusBadge(false, false, null);
+      }
+    }
+
+    function updateStatusBadge(running, infiniteGenRunning, waitInfo) {
       const badge = document.getElementById('status-badge');
-      if (busy) {
-        badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-green-500 running-pulse"></span> 🟢 Running`;
-        badge.className = 'text-xs px-3.5 py-2 rounded-full bg-green-950/40 border border-green-800 text-green-400 font-semibold flex items-center gap-2';
+      if (running || infiniteGenRunning) {
+        if (waitInfo) {
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-yellow-500 running-pulse"></span> ⏳ Wait Limit`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-yellow-950/40 border border-yellow-800 text-yellow-400 font-semibold flex items-center gap-2';
+        } else if (running) {
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-green-500 running-pulse"></span> 🟢 Generating`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-green-950/40 border border-green-800 text-green-400 font-semibold flex items-center gap-2';
+        } else {
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-indigo-500 running-pulse"></span> ♾️ Checking Stock`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-indigo-950/40 border border-indigo-800 text-indigo-400 font-semibold flex items-center gap-2';
+        }
       } else {
         badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-gray-500"></span> ⏸ Idle`;
         badge.className = 'text-xs px-3.5 py-2 rounded-full bg-gray-800 border border-gray-700 text-gray-400 font-semibold flex items-center gap-2';
-        document.getElementById('overall-progress-card').classList.add('hidden');
       }
     }
 
@@ -1286,11 +1311,23 @@
       eventSource.onmessage = (e) => {
         addLog(e.data);
         
-        if (e.data.includes('GROKBOT FINISHED') || e.data.includes('GROKBOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED')) {
+        if (e.data.includes('GROKBOT FINISHED') || e.data.includes('GROKBOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED') || e.data.includes('INFINITE GENERATE FINISHED')) {
+          currentWaitInfo = null;
           setBusy(false);
           loadConfigs().then(() => {
             selectedStates.forEach(fn => loadStateStock(fn));
           });
+        }
+        
+        if (e.data.startsWith('[INFINITE_WAIT]:')) {
+          try {
+            const waitStr = e.data.substring('[INFINITE_WAIT]:'.length);
+            currentWaitInfo = waitStr === 'null' ? null : JSON.parse(waitStr);
+            fetch('/api/grokbot/status').then(res => res.json()).then(data => {
+              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo);
+              if (data.queue) renderQueue(data.queue);
+            });
+          } catch {}
         }
         
         if (e.data.startsWith('[QUEUE_UPDATE]:')) {
@@ -1320,9 +1357,12 @@
       try {
         const res = await fetch('/api/grokbot/status');
         const data = await res.json();
-        if (data.running) {
-          setBusy(true);
+        currentWaitInfo = data.infiniteGenWaitInfo;
+        const active = data.running || data.infiniteGenRunning;
+        setBusy(active);
+        if (active) {
           connectSSE();
+          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo);
         }
         if (data.queue) renderQueue(data.queue);
         if (data.progress) updateProgressUI(data.progress);
@@ -1336,20 +1376,46 @@
     function renderQueue(queue) {
       const container = document.getElementById('queue-container');
       if (!queue || queue.length === 0) {
-        container.innerHTML = '<div class="text-sm text-gray-500 text-center py-6">Belum ada antrian aktif</div>';
-        return;
+        if (currentWaitInfo) {
+          // Keep showing container even with empty queue list to display wait card
+        } else {
+          container.innerHTML = '<div class="text-sm text-gray-500 text-center py-6">Belum ada antrian aktif</div>';
+          return;
+        }
       }
-      container.innerHTML = queue.map(q => `
-        <div class="flex items-center justify-between px-4 py-3 rounded-2xl bg-gray-950/60 border border-gray-900">
-          <div class="flex items-center gap-2.5">
-            <span class="w-2.5 h-2.5 rounded-full ${q.active ? 'bg-green-500 running-pulse' : 'bg-gray-600'}"></span>
-            <span class="text-sm font-bold text-gray-200">${escHtml(q.stateName)}</span>
+      
+      let html = '';
+      if (currentWaitInfo) {
+        html += `
+          <div class="bg-red-950/40 border border-red-900/50 rounded-2xl p-4 mb-3 space-y-2">
+            <div class="flex items-center gap-2 font-bold text-xs text-red-400">
+              <span class="w-2 h-2 rounded-full bg-red-500 running-pulse"></span>
+              <span>Grok Rate Limit Wait</span>
+            </div>
+            <div class="text-xs text-gray-300 space-y-1">
+              <div>⏰ Tersedia: <span class="font-semibold text-gray-100">${escHtml(currentWaitInfo.rateLimitTime)}</span></div>
+              <div>🔄 Mulai lagi: <span class="font-semibold text-gray-100">${escHtml(currentWaitInfo.resumeTime)}</span></div>
+              <div>🎯 Target state: <span class="font-bold text-pink-400">${escHtml(currentWaitInfo.targetState)}</span></div>
+            </div>
           </div>
-          <div class="text-xs text-gray-400 font-semibold">
-            ${q.videoCount} video · ${q.scheduleStart || '?'} → ${q.scheduleEnd || '?'}
+        `;
+      }
+      
+      if (queue && queue.length > 0) {
+        html += queue.map(q => `
+          <div class="flex items-center justify-between px-4 py-3 rounded-2xl bg-gray-950/60 border border-gray-900">
+            <div class="flex items-center gap-2.5">
+              <span class="w-2.5 h-2.5 rounded-full ${q.active ? 'bg-green-500 running-pulse' : 'bg-gray-600'}"></span>
+              <span class="text-sm font-bold text-gray-200">${escHtml(q.stateName)}</span>
+            </div>
+            <div class="text-xs text-gray-400 font-semibold">
+              ${q.videoCount} video · ${q.scheduleStart || '?'} → ${q.scheduleEnd || '?'}
+            </div>
           </div>
-        </div>
-      `).join('');
+        `).join('');
+      }
+      
+      container.innerHTML = html;
     }
 
     // ═══════════════════════════════════════
