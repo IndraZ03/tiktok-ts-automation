@@ -4133,6 +4133,32 @@ app.post('/api/grokbot/full-auto', async (req, res) => {
   }
 });
 
+function getRateLimitExpiryDate(availableAt: string, detectedAt: number): Date | null {
+  if (!availableAt) return null;
+  const clean = availableAt.replace(/wib|wita|wit/gi, '').replace(/\./g, ':').trim();
+  const match = clean.match(/^([0-9]{1,2}):([0-9]{2})(?:\s*(AM|PM|am|pm))?$/i);
+  if (!match) return null;
+
+  let hours = parseInt(match[1]);
+  const minutes = parseInt(match[2]);
+  const ampm = match[3];
+
+  if (ampm) {
+    const isPm = ampm.toLowerCase() === 'pm';
+    if (isPm && hours < 12) hours += 12;
+    if (!isPm && hours === 12) hours = 0;
+  }
+
+  const expiry = new Date(detectedAt);
+  expiry.setHours(hours, minutes, 0, 0);
+
+  // If target time is before detection time, it rolled over past midnight
+  if (expiry.getTime() < detectedAt) {
+    expiry.setDate(expiry.getDate() + 1);
+  }
+  return expiry;
+}
+
 function parseAvailableAt(availableAt: string): number {
   if (!availableAt) return 15 * 60 * 1000; // default 15 mins fallback
 
@@ -4236,9 +4262,19 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       let rateLimitAvailableAt = '';
       const rateLimits = getGrokRateLimits();
       if (rateLimits[grokState]) {
-        isRateLimited = true;
-        rateLimitAvailableAt = rateLimits[grokState].availableAt || 'tidak diketahui';
-        rateLimitDelayMs = parseAvailableAt(rateLimitAvailableAt);
+        const resetStr = rateLimits[grokState].availableAt;
+        const detectedAt = rateLimits[grokState].detectedAt || Date.now();
+        const expiry = resetStr ? getRateLimitExpiryDate(resetStr, detectedAt) : null;
+        
+        if (expiry && Date.now() >= expiry.getTime()) {
+          // Expiration passed, clear it
+          clearGrokRateLimit(grokState);
+          grokbotLog(`⚡ [${tiktokStateName}] Rate limit sudah berakhir (tersedia sejak pukul ${resetStr}). Membersihkan status rate limit.`);
+        } else {
+          isRateLimited = true;
+          rateLimitAvailableAt = resetStr || 'tidak diketahui';
+          rateLimitDelayMs = expiry ? Math.max(0, expiry.getTime() - Date.now()) : (15 * 60 * 1000);
+        }
       }
 
       statesInfo.push({ stateFile: sf, stateName: tiktokStateName, grokState, cfg, pendingUtama, pendingCadangan, neededUtama, neededCadangan, totalStock, needsStock, isRateLimited, rateLimitDelayMs, rateLimitAvailableAt });
