@@ -1139,6 +1139,19 @@ export async function runUpload(config, log, onVideoUploaded) {
             if (!fs.existsSync(videoPath)) {
                 log(`⚠ File video tidak ditemukan: ${videoPath}, skip...`);
                 log(`[VIDEO_SKIPPED]:${videoFile}`);
+                try {
+                    let m = {};
+                    try {
+                        m = JSON.parse(fs.readFileSync(marksFile, 'utf-8'));
+                    }
+                    catch { }
+                    m[videoFile] = true;
+                    fs.writeFileSync(marksFile, JSON.stringify(m, null, 2));
+                    log(`✓ Menandai file tidak ditemukan sebagai terproses: ${videoFile}`);
+                }
+                catch (e) {
+                    log(`⚠ Gagal menandai video tidak ditemukan: ${e.message}`);
+                }
                 failCount++;
                 uploadIndex++;
                 continue;
@@ -1148,6 +1161,28 @@ export async function runUpload(config, log, onVideoUploaded) {
             if (!isValid) {
                 log(`❌ File video rusak/corrupt: ${videoFile}, skip...`);
                 log(`[VIDEO_SKIPPED]:${videoFile}`);
+                try {
+                    if (fs.existsSync(videoPath)) {
+                        fs.unlinkSync(videoPath);
+                        log(`🗑️ Berhasil menghapus file corrupt: ${videoFile}`);
+                    }
+                }
+                catch (e) {
+                    log(`⚠ Gagal menghapus file corrupt ${videoFile}: ${e.message}`);
+                }
+                try {
+                    let m = {};
+                    try {
+                        m = JSON.parse(fs.readFileSync(marksFile, 'utf-8'));
+                    }
+                    catch { }
+                    m[videoFile] = true;
+                    fs.writeFileSync(marksFile, JSON.stringify(m, null, 2));
+                    log(`✓ Menandai file corrupt sebagai terproses: ${videoFile}`);
+                }
+                catch (e) {
+                    log(`⚠ Gagal menandai video corrupt: ${e.message}`);
+                }
                 failCount++;
                 uploadIndex++;
                 continue;
