@@ -3088,12 +3088,19 @@ interface GrokbotStateConfig {
   productDescription?: string;
   headless?: boolean;
   threeUploadsPerHour?: boolean;
+  lastUploadDate?: string;
+  lastUploadTime?: string;
 }
 
 interface GrokbotData {
   states: Record<string, GrokbotStateConfig>;
   globalConfig?: {
     parallelBrowsers?: number;
+    fullAuto?: {
+      enableCustomScheduler?: boolean;
+      customIntervalHours?: number;
+      customUploadCount?: number;
+    };
   };
 }
 
@@ -3113,6 +3120,7 @@ function saveGrokbotData(data: GrokbotData) {
 const grokbotSseClients: Response[] = [];
 let grokbotRunning = false;
 let infiniteGenRunning = false;
+let grokbotFullAutoRunning = false;
 let infiniteGenWaitInfo: { rateLimitTime: string; resumeTime: string; targetState: string } | null = null;
 let grokbotQueue: Array<{ stateName: string; stateFile: string; videoCount: number; scheduleStart: string; scheduleEnd: string; active: boolean }> = [];
 let grokbotProgress: {
@@ -3227,6 +3235,21 @@ app.post('/api/grokbot/global-config/save', (req, res) => {
   res.json({ success: true });
 });
 
+app.post('/api/grokbot/full-auto-settings/save', (req, res) => {
+  const { enableCustomScheduler, customIntervalHours, customUploadCount } = req.body;
+  const data = loadGrokbotData();
+  if (!data.globalConfig) {
+    data.globalConfig = {};
+  }
+  data.globalConfig.fullAuto = {
+    enableCustomScheduler: !!enableCustomScheduler,
+    customIntervalHours: Math.max(1, parseInt(customIntervalHours) || 10),
+    customUploadCount: Math.max(1, parseInt(customUploadCount) || 5)
+  };
+  saveGrokbotData(data);
+  res.json({ success: true });
+});
+
 app.get('/api/grokbot/stock', (req, res) => {
   const stateFile = req.query.stateFile || req.query.state;
   if (!stateFile || typeof stateFile !== 'string') return res.status(400).json({ error: 'stateFile atau state diperlukan' });
@@ -3266,7 +3289,7 @@ app.get('/api/grokbot/stock', (req, res) => {
 });
 
 app.post('/api/grokbot/generate-utama', async (req, res) => {
-  if (grokbotRunning || infiniteGenRunning) return res.status(400).json({ error: 'Grokbot sedang berjalan!' });
+  if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning) return res.status(400).json({ error: 'Grokbot sedang berjalan!' });
   const { stateFile } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
   
@@ -3372,7 +3395,7 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
 });
 
 app.post('/api/grokbot/generate-cadangan', async (req, res) => {
-  if (grokbotRunning || infiniteGenRunning) return res.status(400).json({ error: 'Grokbot sedang berjalan!' });
+  if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning) return res.status(400).json({ error: 'Grokbot sedang berjalan!' });
   const { stateFile } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
   
@@ -3525,7 +3548,7 @@ app.post('/api/grokbot/import-cadangan', async (req, res) => {
 
 // ── JADWALKAN SAJA: Skip generation, use existing utama stock ──
 app.post('/api/grokbot/schedule-only', async (req, res) => {
-  if (grokbotRunning || infiniteGenRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
+  if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
   const { stateFile } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
 
@@ -3656,7 +3679,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
 
 // ── MERGE SAJA: Merge raw videos without generating new ones ──
 app.post('/api/grokbot/merge-only', async (req, res) => {
-  if (grokbotRunning || infiniteGenRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
+  if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
   const { stateFile } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
 
@@ -3769,7 +3792,7 @@ app.post('/api/grokbot/merge-only', async (req, res) => {
 });
 
 // ── GROKBOT ORCHESTRATION LOOP ──
-async function grokbotRunState(stateFile: string): Promise<void> {
+async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<void> {
   if (!grokbotRunning) return;
   const data = loadGrokbotData();
   const cfg = data.states[stateFile];
@@ -3855,7 +3878,15 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       }
 
       // 3. If still under 30 videos, generate via Grok
-      if (needed > 0) {
+      if (isFullAuto) {
+        if (pendingUtamaVideos.length === 0) {
+          grokbotLog(`❌ [Full Auto] Stok Utama dan Cadangan habis untuk ${tiktokStateName}.`);
+          success = false;
+          lastError = "Stok Utama dan Cadangan habis";
+          break; // Exit loop
+        }
+        grokbotLog(`ℹ [Full Auto] Menggunakan stok yang tersedia: ${pendingUtamaVideos.length} video.`);
+      } else if (needed > 0) {
         grokbotLog(`ℹ Stok utama kurang ${needed} video. Memulai auto-generate via Grok...`);
         if (!cfg.grokState) {
           grokbotLog(`❌ Gagal: Grok State belum diatur untuk TikTok state ${tiktokStateName}`);
@@ -3952,13 +3983,23 @@ async function grokbotRunState(stateFile: string): Promise<void> {
         break;
       }
 
-      // 4. Batch 30 videos
-      const batch = pendingUtamaVideos.slice(0, 30);
+      const globalConfig = loadGrokbotData().globalConfig;
+      const isCustom = isFullAuto && globalConfig?.fullAuto?.enableCustomScheduler;
+      const customUploadCount = globalConfig?.fullAuto?.customUploadCount || 5;
+      const customIntervalHours = globalConfig?.fullAuto?.customIntervalHours || 10;
+
+      // 4. Batch videos
+      const batchSize = isCustom ? customUploadCount : 30;
+      const batch = pendingUtamaVideos.slice(0, batchSize);
       const startFrom = batch[0];
 
       let batchStartMs: number;
       let batchEndMs: number;
-      if (cfg.threeUploadsPerHour) {
+      if (isCustom) {
+        batchStartMs = new Date(`${schedDate}T${schedTime}:00`).getTime();
+        // Custom scheduling happens within a 1-hour window
+        batchEndMs = batchStartMs + 60 * 60000;
+      } else if (cfg.threeUploadsPerHour) {
         const baseSchedule = new Date(`${schedDate}T${schedTime}:00`);
         baseSchedule.setMinutes(0);
         baseSchedule.setSeconds(0);
@@ -4008,6 +4049,9 @@ async function grokbotRunState(stateFile: string): Promise<void> {
         stateFile: stateFile,
         statesDir: STATES_DIR,
         threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+        enableCustomScheduler: isCustom,
+        customIntervalHours: customIntervalHours,
+        customUploadCount: customUploadCount
       };
 
       let uploadedCount = 0;
@@ -4048,15 +4092,35 @@ async function grokbotRunState(stateFile: string): Promise<void> {
       if (!grokbotRunning) break;
 
       // 5. Calculate rolling schedule for subsequent loops
-      const nextStartMs = batchEndMs + intervalMin * 60000;
-      const nextStart = new Date(nextStartMs);
-      schedDate = `${nextStart.getFullYear()}-${String(nextStart.getMonth()+1).padStart(2,'0')}-${String(nextStart.getDate()).padStart(2,'0')}`;
-      schedTime = `${String(nextStart.getHours()).padStart(2,'0')}:${String(nextStart.getMinutes()).padStart(2,'0')}`;
+      let lastUploadDate: string;
+      let lastUploadTime: string;
+
+      if (isCustom) {
+        // Roll forward by custom interval hours from the batch start baseline
+        const nextStartMs = batchStartMs + customIntervalHours * 3600000;
+        const nextStart = new Date(nextStartMs);
+        schedDate = `${nextStart.getFullYear()}-${String(nextStart.getMonth()+1).padStart(2,'0')}-${String(nextStart.getDate()).padStart(2,'0')}`;
+        schedTime = `${String(nextStart.getHours()).padStart(2,'0')}:${String(nextStart.getMinutes()).padStart(2,'0')}`;
+        
+        lastUploadDate = schedDate;
+        lastUploadTime = schedTime;
+      } else {
+        const nextStartMs = batchEndMs + intervalMin * 60000;
+        const nextStart = new Date(nextStartMs);
+        schedDate = `${nextStart.getFullYear()}-${String(nextStart.getMonth()+1).padStart(2,'0')}-${String(nextStart.getDate()).padStart(2,'0')}`;
+        schedTime = `${String(nextStart.getHours()).padStart(2,'0')}:${String(nextStart.getMinutes()).padStart(2,'0')}`;
+
+        const lastUpload = new Date(batchEndMs);
+        lastUploadDate = `${lastUpload.getFullYear()}-${String(lastUpload.getMonth()+1).padStart(2,'0')}-${String(lastUpload.getDate()).padStart(2,'0')}`;
+        lastUploadTime = `${String(lastUpload.getHours()).padStart(2,'0')}:${String(lastUpload.getMinutes()).padStart(2,'0')}`;
+      }
 
       const updData = loadGrokbotData();
       if (updData.states[stateFile]) {
         updData.states[stateFile].scheduleDate = schedDate;
         updData.states[stateFile].scheduleTime = schedTime;
+        updData.states[stateFile].lastUploadDate = lastUploadDate;
+        updData.states[stateFile].lastUploadTime = lastUploadTime;
         saveGrokbotData(updData);
       }
 
@@ -4087,7 +4151,7 @@ async function grokbotRunState(stateFile: string): Promise<void> {
 }
 
 app.post('/api/grokbot/schedule', async (req, res) => {
-  if (grokbotRunning || infiniteGenRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
+  if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
   const { stateFile } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
 
@@ -4107,29 +4171,175 @@ app.post('/api/grokbot/schedule', async (req, res) => {
   }
 });
 
+function getStateNextTrigger(sf: string): { stateName: string; triggerTime: Date | null; targetTime: Date | null } {
+  const data = loadGrokbotData();
+  const cfg = data.states[sf];
+  const stateName = sf.replace('tiktok-state-', '').replace('.json', '');
+  if (!cfg) return { stateName, triggerTime: null, targetTime: null };
+
+  const lastDate = cfg.lastUploadDate;
+  const lastTime = cfg.lastUploadTime;
+  const intervalMin = cfg.threeUploadsPerHour ? (cfg.intervalMinutes || 300) : (cfg.intervalMinutes || 60);
+
+  if (!lastDate || !lastTime) {
+    // If lastUpload is not set, use scheduleDate/scheduleTime directly as next upload time, so lastUpload is next - interval
+    const schedDate = cfg.scheduleDate;
+    const schedTime = cfg.scheduleTime;
+    if (!schedDate || !schedTime) return { stateName, triggerTime: null, targetTime: null };
+    const nextUploadTime = new Date(`${schedDate}T${schedTime}:00`);
+    if (isNaN(nextUploadTime.getTime())) return { stateName, triggerTime: null, targetTime: null };
+    const lastUploadTime = new Date(nextUploadTime.getTime() - intervalMin * 60000);
+    const triggerTime = new Date(lastUploadTime.getTime() - 5 * 3600000);
+    return { stateName, triggerTime, targetTime: nextUploadTime };
+  }
+
+  const lastUploadTime = new Date(`${lastDate}T${lastTime}:00`);
+  if (isNaN(lastUploadTime.getTime())) return { stateName, triggerTime: null, targetTime: null };
+  const triggerTime = new Date(lastUploadTime.getTime() - 5 * 3600000);
+  const targetTime = new Date(lastUploadTime.getTime() + intervalMin * 60000);
+  return { stateName, triggerTime, targetTime };
+}
+
+async function grokbotRunFullAuto(stateFiles: string[]): Promise<void> {
+  grokbotLog(`♾️ Memulai Full Auto standby loop untuk ${stateFiles.length} state...`);
+  
+  const autoData = loadGrokbotData();
+  const autoGlobalConfig = autoData.globalConfig;
+  const autoIsCustom = autoGlobalConfig?.fullAuto?.enableCustomScheduler;
+  const autoCustomIntervalHours = autoGlobalConfig?.fullAuto?.customIntervalHours || 10;
+  const autoCustomUploadCount = autoGlobalConfig?.fullAuto?.customUploadCount || 5;
+
+  let startWAMsg = "";
+  if (autoIsCustom) {
+    startWAMsg = `📢 [Full Auto] Mulai dengan Custom Scheduler (Interval: ${autoCustomIntervalHours} jam, Jumlah Video: ${autoCustomUploadCount} video/batch).`;
+  } else {
+    startWAMsg = `📢 [Full Auto] Mulai dengan Standard Scheduler (Interval mengikuti masing-masing state).`;
+  }
+  sendWAMessage(startWAMsg);
+
+  grokbotQueue = stateFiles.map(sf => {
+    const name = sf.replace('tiktok-state-', '').replace('.json', '');
+    return { stateName: name, stateFile: sf, videoCount: 0, scheduleStart: 'Standby', scheduleEnd: 'Standby', active: false };
+  });
+  grokbotBroadcastQueue();
+
+  while (grokbotFullAutoRunning) {
+    if (!grokbotFullAutoRunning) break;
+
+    if (grokbotRunning) {
+      let slept = 0;
+      while (slept < 10000 && grokbotFullAutoRunning) {
+        await new Promise(r => setTimeout(r, 2000));
+        slept += 2000;
+      }
+      continue;
+    }
+
+    const now = new Date();
+    let triggeredStateFile: string | null = null;
+    let nextStateName = 'Tidak ada';
+    let nextScheduleTimeStr = 'Tidak ada';
+    let earliestTriggerTime = Infinity;
+
+    for (const sf of stateFiles) {
+      const { triggerTime, targetTime, stateName } = getStateNextTrigger(sf);
+      if (!triggerTime) continue;
+
+      const triggerTimeMs = triggerTime.getTime();
+
+      if (now.getTime() >= triggerTimeMs && !triggeredStateFile) {
+        triggeredStateFile = sf;
+      }
+
+      if (triggerTimeMs > now.getTime() && triggerTimeMs < earliestTriggerTime) {
+        earliestTriggerTime = triggerTimeMs;
+        nextStateName = stateName;
+        nextScheduleTimeStr = `${triggerTime.getFullYear()}-${String(triggerTime.getMonth()+1).padStart(2,'0')}-${String(triggerTime.getDate()).padStart(2,'0')} ${String(triggerTime.getHours()).padStart(2,'0')}:${String(triggerTime.getMinutes()).padStart(2,'0')}`;
+      }
+    }
+
+    if (triggeredStateFile) {
+      const stateName = triggeredStateFile.replace('tiktok-state-', '').replace('.json', '');
+      grokbotLog(`🎯 [Full Auto] State terpicu: ${stateName}. Menyiapkan eksekusi...`);
+
+      grokbotQueue = grokbotQueue.map(q => ({ ...q, active: q.stateFile === triggeredStateFile }));
+      grokbotBroadcastQueue();
+
+      let futureNextStateName = 'Tidak ada';
+      let futureNextScheduleTimeStr = 'Tidak ada';
+      let futureEarliestTriggerTime = Infinity;
+      for (const sf of stateFiles) {
+        if (sf === triggeredStateFile) continue;
+        const { triggerTime, stateName } = getStateNextTrigger(sf);
+        if (triggerTime) {
+          const triggerTimeMs = triggerTime.getTime();
+          if (triggerTimeMs > now.getTime() && triggerTimeMs < futureEarliestTriggerTime) {
+            futureEarliestTriggerTime = triggerTimeMs;
+            futureNextStateName = stateName;
+            futureNextScheduleTimeStr = `${triggerTime.getFullYear()}-${String(triggerTime.getMonth()+1).padStart(2,'0')}-${String(triggerTime.getDate()).padStart(2,'0')} ${String(triggerTime.getHours()).padStart(2,'0')}:${String(triggerTime.getMinutes()).padStart(2,'0')}`;
+          }
+        }
+      }
+
+      const { targetTime } = getStateNextTrigger(triggeredStateFile);
+      const startSchedStr = targetTime ? `${targetTime.getFullYear()}-${String(targetTime.getMonth()+1).padStart(2,'0')}-${String(targetTime.getDate()).padStart(2,'0')} ${String(targetTime.getHours()).padStart(2,'0')}:${String(targetTime.getMinutes()).padStart(2,'0')}` : 'Tidak diketahui';
+      
+      const lastUploadTime = new Date(targetTime ? targetTime.getTime() - (loadGrokbotData().states[triggeredStateFile]?.intervalMinutes || 60) * 60000 : Date.now());
+      const lastUploadTimeStr = `${lastUploadTime.getFullYear()}-${String(lastUploadTime.getMonth()+1).padStart(2,'0')}-${String(lastUploadTime.getDate()).padStart(2,'0')} ${String(lastUploadTime.getHours()).padStart(2,'0')}:${String(lastUploadTime.getMinutes()).padStart(2,'0')}`;
+
+      let waMsg = `🚀 [Full Auto] Mulai Penjadwalan Otomatis!\n`;
+      waMsg += `🔑 State: ${stateName}\n`;
+      waMsg += `📅 Upload Terakhir: ${lastUploadTimeStr}\n`;
+      waMsg += `⏰ Sched Target Start: ${startSchedStr}\n`;
+      waMsg += `⏭️ Antrian Selanjutnya: State ${futureNextStateName} pada ${futureNextScheduleTimeStr}`;
+      sendWAMessage(waMsg);
+
+      grokbotRunning = true;
+      try {
+        await grokbotRunState(triggeredStateFile, true);
+      } catch (err: any) {
+        grokbotLog(`❌ [Full Auto] Gagal menjalankan penjadwalan: ${err.message}`);
+      } finally {
+        grokbotRunning = false;
+        resetGrokbotProgress();
+        grokbotBroadcastProgress();
+      }
+
+      grokbotQueue = grokbotQueue.map(q => ({ ...q, active: false }));
+      grokbotBroadcastQueue();
+    } else {
+      let slept = 0;
+      while (slept < 10000 && grokbotFullAutoRunning) {
+        await new Promise(r => setTimeout(r, 2000));
+        slept += 2000;
+      }
+    }
+  }
+
+  grokbotLog('===== FULL AUTO STANDBY LOGIC STOPPED =====');
+}
+
 app.post('/api/grokbot/full-auto', async (req, res) => {
-  if (grokbotRunning || infiniteGenRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
+  if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
   const { stateFiles } = req.body;
   if (!stateFiles || !Array.isArray(stateFiles) || stateFiles.length === 0) {
     return res.status(400).json({ error: 'stateFiles diperlukan' });
   }
 
-  grokbotRunning = true;
+  grokbotFullAutoRunning = true;
   grokbotQueue = [];
-  res.json({ success: true, message: 'Full Auto dimulai' });
+  res.json({ success: true, message: 'Full Auto Standby Mode dimulai' });
 
   try {
-    for (const sf of stateFiles) {
-      if (!grokbotRunning) break;
-      await grokbotRunState(sf);
-    }
+    await grokbotRunFullAuto(stateFiles);
   } catch (e: any) {
-    grokbotLog(`❌ Fatal: ${e.message}`);
+    grokbotLog(`❌ Fatal Full Auto: ${e.message}`);
   } finally {
+    grokbotFullAutoRunning = false;
     grokbotRunning = false;
     resetGrokbotProgress();
     grokbotBroadcastProgress();
-    grokbotLog('===== GROKBOT FINISHED =====');
+    grokbotLog('===== FULL AUTO FINISHED =====');
   }
 });
 
@@ -4594,12 +4804,13 @@ app.post('/api/grokbot/infinite-generate', async (req, res) => {
 });
 
 app.get('/api/grokbot/status', (req, res) => {
-  res.json({ running: grokbotRunning, infiniteGenRunning, infiniteGenWaitInfo, queue: grokbotQueue, progress: grokbotProgress, rateLimits: getGrokRateLimits() });
+  res.json({ running: grokbotRunning, infiniteGenRunning, infiniteGenWaitInfo, grokbotFullAutoRunning, queue: grokbotQueue, progress: grokbotProgress, rateLimits: getGrokRateLimits() });
 });
 
 app.post('/api/grokbot/stop', async (req, res) => {
   infiniteGenRunning = false;
   infiniteGenWaitInfo = null;
+  grokbotFullAutoRunning = false;
   grokbotRunning = false;
   resetGrokbotProgress();
   grokbotBroadcastProgress();
@@ -4607,6 +4818,21 @@ app.post('/api/grokbot/stop', async (req, res) => {
   await stopGrokGenerator();
   await stopUploader();
   grokbotLog('⛔ ===== GROKBOT STOPPED =====');
+  res.json({ success: true });
+});
+
+app.post('/api/grokbot/stop-full-auto', (req, res) => {
+  grokbotFullAutoRunning = false;
+  grokbotLog('⛔ ===== FULL AUTO STANDBY STOPPED =====');
+  res.json({ success: true });
+});
+
+app.post('/api/grokbot/stop-infinite-generate', async (req, res) => {
+  infiniteGenRunning = false;
+  infiniteGenWaitInfo = null;
+  grokbotSseClients.forEach(c => c.write(`data: [INFINITE_WAIT]:null\n\n`));
+  await stopGrokGenerator();
+  grokbotLog('⛔ ===== INFINITE GENERATE STOPPED =====');
   res.json({ success: true });
 });
 

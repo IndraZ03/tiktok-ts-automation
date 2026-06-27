@@ -169,6 +169,11 @@
            <span class="text-xl">📝</span>
            <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Prompt</span>
          </button>
+         <!-- Nav Button: Full Auto Config -->
+         <button onclick="switchTab('fullauto')" id="nav-fullauto" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-pink-300 hover:bg-pink-500/5 hover:border-pink-500/10 transition-all duration-300 group" title="Full Auto Settings">
+           <span class="text-xl">⚙️</span>
+           <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Config</span>
+         </button>
        </div>
      </div>
 
@@ -563,6 +568,56 @@
         </div>
       </div>
 
+      <!-- TAB 5: FULL AUTO CONFIG -->
+      <div id="tab-fullauto" class="tab-content hidden space-y-6">
+        <div class="glass-panel rounded-3xl p-8 border border-gray-800/80 shadow-2xl relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-80 h-80 bg-pink-500/5 rounded-full blur-3xl -z-10"></div>
+          
+          <h2 class="text-2xl font-extrabold mb-2 bg-gradient-to-r from-pink-400 to-purple-500 bg-clip-text text-transparent flex items-center gap-2">
+            <span>⚙️</span> Pengaturan Khusus Full Auto
+          </h2>
+          <p class="text-gray-400 text-sm mb-6">Konfigurasi opsi scheduler kustom dan pengiriman batch terjadwal untuk mode Full Auto.</p>
+
+          <div class="space-y-6 max-w-xl">
+            <!-- Toggle Custom Scheduler -->
+            <div class="bg-gray-900/60 p-5 rounded-2xl border border-gray-800/80 flex items-center justify-between gap-4">
+              <div>
+                <label class="font-bold text-gray-200 block mb-1">📅 Aktifkan Custom Scheduler</label>
+                <span class="text-xs text-gray-400">Jadwalkan batch video pada jam baseline dengan menit acak berakhiran 0 atau 5.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input id="chk-enableCustomScheduler" type="checkbox" class="sr-only peer" onchange="toggleCustomFields()">
+                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+              </label>
+            </div>
+
+            <!-- Custom Scheduler Details -->
+            <div id="custom-scheduler-details" class="space-y-4 hidden">
+              <div>
+                <label class="text-xs text-gray-400 font-bold block mb-2">⏱️ Interval Jam Antar Batch</label>
+                <input id="num-customIntervalHours" type="number" min="1" value="10" 
+                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-pink-500 transition font-semibold text-gray-200">
+                <span class="text-[11px] text-gray-500 mt-1 block">Tentukan interval batch dalam jam (contoh: 10 jam sekali).</span>
+              </div>
+
+              <div>
+                <label class="text-xs text-gray-400 font-bold block mb-2">📹 Jumlah Video per Batch (Upload dalam 1 Jam)</label>
+                <input id="num-customUploadCount" type="number" min="1" max="12" value="5" 
+                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-pink-500 transition font-semibold text-gray-200">
+                <span class="text-[11px] text-gray-500 mt-1 block">Tentukan jumlah video yang diupload bersamaan di jam batch (contoh: 5 video).</span>
+              </div>
+            </div>
+
+            <div class="pt-4 border-t border-gray-800 flex justify-end">
+              <button onclick="saveFullAutoSettings()" 
+                      class="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white px-8 py-3.5 rounded-2xl text-sm font-extrabold transition shadow-lg shadow-pink-500/20 active:scale-95 flex items-center gap-2">
+                💾 Simpan Konfigurasi Full Auto
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -584,6 +639,7 @@
     let dropdownOpen = false;
     let stockPollInterval = null;
     let currentWaitInfo = null;
+    let globalConfig = {};
 
     // ═══════════════════════════════════════
     //  ONLOAD INIT
@@ -742,7 +798,8 @@
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
           scheduleTime: '', intervalMinutes: 60,
           addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
-          headless: true, threeUploadsPerHour: false
+          headless: true, threeUploadsPerHour: false,
+          lastUploadDate: '', lastUploadTime: ''
         };
 
         // Preload stock badges
@@ -919,6 +976,19 @@
                     </label>
                   </div>
 
+                  <div class="grid grid-cols-2 gap-2 mb-2">
+                    <div>
+                      <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Upload Terakhir (Tanggal)</label>
+                      <input id="lastUploadDate-${fn}" type="date" value="${cfg.lastUploadDate || ''}"
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-gray-400 font-bold block mb-1">⏰ Upload Terakhir (Jam)</label>
+                      <input id="lastUploadTime-${fn}" type="time" value="${cfg.lastUploadTime || ''}"
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                    </div>
+                  </div>
+
                   <div class="grid grid-cols-3 gap-2">
                     <div class="col-span-1">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Sched Date</label>
@@ -1045,6 +1115,8 @@
         productDescription: document.getElementById(`productDescription-${fn}`)?.value || '',
         headless: document.getElementById(`chk-headless-${fn}`)?.checked || false,
         threeUploadsPerHour: document.getElementById(`chk-threeUploads-${fn}`)?.checked || false,
+        lastUploadDate: document.getElementById(`lastUploadDate-${fn}`)?.value || '',
+        lastUploadTime: document.getElementById(`lastUploadTime-${fn}`)?.value || '',
       };
 
       try {
@@ -1212,7 +1284,7 @@
         await saveConfig(fn);
       }
 
-      addLog(`🚀 Memulai Orchestrator FULL AUTO untuk ${selectedStates.length} state...`);
+      addLog(`🚀 Memulai Orchestrator FULL AUTO standby untuk ${selectedStates.length} state...`);
       setBusy(true);
       connectSSE();
 
@@ -1226,6 +1298,8 @@
         if (!data.success) {
           addLog('❌ Gagal: ' + (data.error || ''));
           setBusy(false);
+        } else {
+          pollStatus();
         }
       } catch (e) {
         addLog('❌ Request Error: ' + e.message);
@@ -1255,6 +1329,8 @@
         if (!data.success) {
           addLog('❌ Gagal: ' + (data.error || ''));
           setBusy(false);
+        } else {
+          pollStatus();
         }
       } catch (e) {
         addLog('❌ Request Error: ' + e.message);
@@ -1271,27 +1347,68 @@
     // ═══════════════════════════════════════
     //  UI CONTROLS
     // ═══════════════════════════════════════
+    // ═══════════════════════════════════════
+    //  UI CONTROLS
+    // ═══════════════════════════════════════
     function setBusy(busy) {
-      document.getElementById('btn-full-auto').disabled = busy;
-      if (document.getElementById('btn-infinite-generate')) {
-        document.getElementById('btn-infinite-generate').disabled = busy;
-      }
       document.getElementById('btn-stop').disabled = !busy;
       if (!busy) {
         document.getElementById('overall-progress-card').classList.add('hidden');
-        updateStatusBadge(false, false, null);
+        updateStatusBadge(false, false, null, false);
       }
     }
 
-    function updateStatusBadge(running, infiniteGenRunning, waitInfo) {
+    function updateControlsUI(data) {
+      const btnFullAuto = document.getElementById('btn-full-auto');
+      const btnInfGen = document.getElementById('btn-infinite-generate');
+      const btnStopAll = document.getElementById('btn-stop');
+
+      if (!btnFullAuto || !btnInfGen || !btnStopAll) return;
+
+      // 1. Full Auto Toggle Control
+      if (data.grokbotFullAutoRunning) {
+        btnFullAuto.textContent = '⛔ Hentikan Full Auto';
+        btnFullAuto.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnFullAuto.setAttribute('onclick', 'stopFullAuto()');
+        btnFullAuto.disabled = false;
+      } else {
+        btnFullAuto.textContent = '🚀 Mulai Full Auto (Semua State)';
+        btnFullAuto.className = 'w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-pink-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnFullAuto.setAttribute('onclick', 'startFullAuto()');
+        btnFullAuto.disabled = data.running && !data.grokbotFullAutoRunning && !data.infiniteGenRunning;
+      }
+
+      // 2. Infinite Generate Toggle Control
+      if (data.infiniteGenRunning) {
+        btnInfGen.textContent = '⛔ Hentikan Infinite Gen';
+        btnInfGen.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnInfGen.setAttribute('onclick', 'stopInfiniteGenerate()');
+        btnInfGen.disabled = false;
+      } else {
+        btnInfGen.textContent = '♾️ Infinite Generate (Stok Utama & Cadangan)';
+        btnInfGen.className = 'w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnInfGen.setAttribute('onclick', 'startInfiniteGenerate()');
+        btnInfGen.disabled = data.running && !data.grokbotFullAutoRunning && !data.infiniteGenRunning;
+      }
+
+      // 3. Force Stop All Control
+      const anyActive = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning;
+      btnStopAll.disabled = !anyActive;
+      btnStopAll.textContent = '⛔ Force Stop Semua';
+    }
+
+    function updateStatusBadge(running, infiniteGenRunning, waitInfo, fullAutoRunning) {
       const badge = document.getElementById('status-badge');
-      if (running || infiniteGenRunning) {
+      if (running || infiniteGenRunning || fullAutoRunning) {
         if (waitInfo) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-yellow-500 running-pulse"></span> ⏳ Wait Limit`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-yellow-950/40 border border-yellow-800 text-yellow-400 font-semibold flex items-center gap-2';
         } else if (running) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-green-500 running-pulse"></span> 🟢 Generating`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-green-950/40 border border-green-800 text-green-400 font-semibold flex items-center gap-2';
+        } else if (fullAutoRunning) {
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-pink-500 running-pulse"></span> 🚀 Standby (Full Auto)`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-pink-950/40 border border-pink-800 text-pink-400 font-semibold flex items-center gap-2';
         } else {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-indigo-500 running-pulse"></span> ♾️ Checking Stock`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-indigo-950/40 border border-indigo-800 text-indigo-400 font-semibold flex items-center gap-2';
@@ -1299,6 +1416,34 @@
       } else {
         badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-gray-500"></span> ⏸ Idle`;
         badge.className = 'text-xs px-3.5 py-2 rounded-full bg-gray-800 border border-gray-700 text-gray-400 font-semibold flex items-center gap-2';
+      }
+    }
+
+    async function stopFullAuto() {
+      addLog('⛔ Mengirim perintah hentikan Full Auto...');
+      try {
+        const res = await fetch('/api/grokbot/stop-full-auto', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          addLog('✓ Full Auto standby loop berhasil dihentikan.');
+          pollStatus();
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
+      }
+    }
+
+    async function stopInfiniteGenerate() {
+      addLog('⛔ Mengirim perintah hentikan Infinite Generate...');
+      try {
+        const res = await fetch('/api/grokbot/stop-infinite-generate', { method: 'POST' });
+        const data = await res.json();
+        if (data.success) {
+          addLog('✓ Infinite Generate loop berhasil dihentikan.');
+          pollStatus();
+        }
+      } catch (e) {
+        addLog('❌ Request Error: ' + e.message);
       }
     }
 
@@ -1311,9 +1456,10 @@
       eventSource.onmessage = (e) => {
         addLog(e.data);
         
-        if (e.data.includes('GROKBOT FINISHED') || e.data.includes('GROKBOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED') || e.data.includes('INFINITE GENERATE FINISHED')) {
+        if (e.data.includes('GROKBOT FINISHED') || e.data.includes('GROKBOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED') || e.data.includes('INFINITE GENERATE FINISHED') || e.data.includes('FULL AUTO FINISHED')) {
           currentWaitInfo = null;
           setBusy(false);
+          fetch('/api/grokbot/status').then(res => res.json()).then(data => updateControlsUI(data));
           loadConfigs().then(() => {
             selectedStates.forEach(fn => loadStateStock(fn));
           });
@@ -1324,7 +1470,7 @@
             const waitStr = e.data.substring('[INFINITE_WAIT]:'.length);
             currentWaitInfo = waitStr === 'null' ? null : JSON.parse(waitStr);
             fetch('/api/grokbot/status').then(res => res.json()).then(data => {
-              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo);
+              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning);
               if (data.queue) renderQueue(data.queue);
             });
           } catch {}
@@ -1342,7 +1488,6 @@
             const prog = JSON.parse(e.data.substring('[PROGRESS_UPDATE]:'.length));
             updateProgressUI(prog);
             if (prog.rateLimits) renderRateLimits(prog.rateLimits);
-            // Refresh stock counts in real-time when progress changes
             selectedStates.forEach(fn => loadStateStock(fn));
           } catch {}
         }
@@ -1358,11 +1503,15 @@
         const res = await fetch('/api/grokbot/status');
         const data = await res.json();
         currentWaitInfo = data.infiniteGenWaitInfo;
-        const active = data.running || data.infiniteGenRunning;
+        if (data.globalConfig) {
+          globalConfig = data.globalConfig;
+        }
+        const active = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning;
         setBusy(active);
+        updateControlsUI(data);
         if (active) {
           connectSSE();
-          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo);
+          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning);
         }
         if (data.queue) renderQueue(data.queue);
         if (data.progress) updateProgressUI(data.progress);
@@ -1655,6 +1804,65 @@
         loadBahanFoldersTab();
       } else if (tabId === 'prompts') {
         loadPromptsTab();
+      } else if (tabId === 'fullauto') {
+        loadFullAutoSettingsTab();
+      }
+    }
+
+    function toggleCustomFields() {
+      const chk = document.getElementById('chk-enableCustomScheduler');
+      const details = document.getElementById('custom-scheduler-details');
+      if (chk && details) {
+        if (chk.checked) {
+          details.classList.remove('hidden');
+        } else {
+          details.classList.add('hidden');
+        }
+      }
+    }
+
+    function loadFullAutoSettingsTab() {
+      const chk = document.getElementById('chk-enableCustomScheduler');
+      const interval = document.getElementById('num-customIntervalHours');
+      const count = document.getElementById('num-customUploadCount');
+      
+      if (chk && interval && count) {
+        const fa = globalConfig.fullAuto || {};
+        chk.checked = !!fa.enableCustomScheduler;
+        interval.value = fa.customIntervalHours !== undefined ? fa.customIntervalHours : 10;
+        count.value = fa.customUploadCount !== undefined ? fa.customUploadCount : 5;
+        toggleCustomFields();
+      }
+    }
+
+    async function saveFullAutoSettings() {
+      const chk = document.getElementById('chk-enableCustomScheduler').checked;
+      const interval = parseInt(document.getElementById('num-customIntervalHours').value) || 10;
+      const count = parseInt(document.getElementById('num-customUploadCount').value) || 5;
+
+      try {
+        const res = await fetch('/api/grokbot/full-auto-settings/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            enableCustomScheduler: chk,
+            customIntervalHours: interval,
+            customUploadCount: count
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLog('💾 Pengaturan Full Auto berhasil disimpan.');
+          if (!globalConfig.fullAuto) globalConfig.fullAuto = {};
+          globalConfig.fullAuto.enableCustomScheduler = chk;
+          globalConfig.fullAuto.customIntervalHours = interval;
+          globalConfig.fullAuto.customUploadCount = count;
+          alert('Pengaturan Full Auto berhasil disimpan!');
+        } else {
+          alert('Gagal menyimpan pengaturan.');
+        }
+      } catch (e) {
+        addLog('❌ Error: ' + e.message);
       }
     }
 

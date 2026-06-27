@@ -22,6 +22,9 @@ export interface UploadConfig {
   stateFile: string;      // filename in tiktok-states/
   statesDir: string;
   threeUploadsPerHour?: boolean;
+  enableCustomScheduler?: boolean;
+  customIntervalHours?: number;
+  customUploadCount?: number;
 }
 
 type LogFn = (msg: string) => void;
@@ -1123,6 +1126,21 @@ export async function runUpload(
     let currentBatchMinutes: number[] = [];
     let lastBatchIndex = -1;
 
+    let chosenMins: number[] = [];
+    if (config.enableCustomScheduler) {
+      const validMins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+      const temp = [...validMins];
+      for (let i = 0; i < videosToUpload.length; i++) {
+        if (temp.length === 0) {
+          chosenMins.push(validMins[Math.floor(Math.random() * validMins.length)]);
+        } else {
+          const idx = Math.floor(Math.random() * temp.length);
+          chosenMins.push(temp.splice(idx, 1)[0]);
+        }
+      }
+      chosenMins.sort((a, b) => a - b);
+    }
+
     for (const videoFile of videosToUpload) {
       if (!isRunning) {
         log('⛔ Upload dihentikan oleh user');
@@ -1131,7 +1149,12 @@ export async function runUpload(
 
       // ── Calculate schedule for this video ──
       let videoSchedule: Date;
-      if (config.threeUploadsPerHour) {
+      if (config.enableCustomScheduler) {
+        videoSchedule = new Date(baseSchedule.getTime());
+        videoSchedule.setMinutes(chosenMins[uploadIndex] || 0);
+        videoSchedule.setSeconds(0);
+        videoSchedule.setMilliseconds(0);
+      } else if (config.threeUploadsPerHour) {
         const batchIndex = Math.floor(uploadIndex / 3);
         const subIndex = uploadIndex % 3;
 
