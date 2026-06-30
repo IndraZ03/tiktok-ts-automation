@@ -8,10 +8,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec, spawn } from 'child_process';
+import { execa } from 'execa';
 import { runUpload, stopUploader, getIsRunning } from './tiktok-uploader.js';
 import { runFacebookUpload, stopFacebookUploader, getFacebookIsRunning } from './facebook-uploader.js';
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress, getGrokRateLimits, clearGrokRateLimit } from './grok-uploader.js';
 import multer from 'multer';
+import ffmpegPath from 'ffmpeg-static';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
 import { startWAPolling, notifyScheduleStarted, sendWAMessage, notifyScheduleFinished } from './whatsapp-service.js';
@@ -726,6 +728,413 @@ app.get('/api/namaproduk', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('[NAMAPRODUK] Error:', error);
     res.status(500).json({ success: false, error: error.message || 'Terjadi kesalahan saat memproses link.' });
+  }
+});
+
+function sanitizeFilename(value: string): string {
+  return value
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 120) || 'video';
+}
+
+function progressBar(percent: number, width = 20): string {
+  const safePercent = Math.max(0, Math.min(100, percent));
+  const filled = Math.round((safePercent / 100) * width);
+  return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}] ${safePercent.toFixed(1)}%`;
+}
+
+function ensureFfmpegPath(): string {
+  if (!ffmpegPath) {
+    throw new Error('ffmpeg-static tidak menemukan binary ffmpeg.');
+  }
+  return ffmpegPath;
+}
+
+app.get('/bahan', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'bahan.html'));
+});
+
+app.post('/api/bahan/download', async (req, res) => {
+  const { pairs, outputDir: clientOutputDir } = req.body;
+  if (!Array.isArray(pairs) || pairs.length === 0) {
+    return res.status(400).json({ success: false, error: 'Pairs harus diisi dan berupa array.' });
+  }
+
+  const outputDir = clientOutputDir ? path.resolve(clientOutputDir) : 'C:/tiktok-ts-automation/bahan-campaign';
+  
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const sendEvent = (event: string, data: unknown) => {
+    res.write(`event: ${event}\n`);
+    res.write(`data: ${JSON.stringify(data)}\n\n`);
+  };
+
+  let activeProcess: any = null;
+  let isAborted = false;
+  let isCleanFinished = false;
+
+  res.on('close', () => {
+    if (isCleanFinished) return;
+    isAborted = true;
+    console.log('[BAHAN-DOWNLOAD] Client disconnected. Aborting process.');
+    if (activeProcess) {
+      try {
+        activeProcess.kill();
+      } catch (err) {}
+    }
+  });
+
+  const ffmpegDir = path.dirname(ensureFfmpegPath());
+  const env = {
+    ...process.env,
+    PATH: `${ffmpegDir}${path.delimiter}${process.env.PATH || ''}`
+  };
+
+  const runTempDir = path.join(__dirname, '_tmp_uploads', `bahan-${Date.now()}`);
+  fs.mkdirSync(runTempDir, { recursive: true });
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  try {
+    const total = pairs.length;
+    let completed = 0;
+
+    for (let i = 0; i < total; i++) {
+      if (isAborted) break;
+
+      const { videoUrl, audioUrl } = pairs[i];
+      const videoNum = i + 1;
+      
+      sendEvent('progress', {
+        step: 'info',
+        completed,
+        total,
+        message: `[${videoNum}/${total}] Memulai pengolahan pasangan ke-${videoNum}...`
+      });
+
+      if (!videoUrl) {
+        sendEvent('progress', {
+          step: 'error',
+          completed,
+          total,
+          message: `[${videoNum}/${total}] Link video kosong. Dilewati.`
+        });
+        continue;
+      }
+
+      // Step 1: Ambil title video via yt-dlp dump-json
+      let videoTitle = `video_${Date.now()}_${i}`;
+      sendEvent('progress', {
+        step: 'metadata',
+        completed,
+        total,
+        message: `[${videoNum}/${total}] Mengambil judul video...`
+      });
+
+      try {
+        const metadataProcess = execa('yt-dlp', ['--dump-json', '--no-playlist', videoUrl], { windowsHide: true });
+        activeProcess = metadataProcess;
+        const { stdout } = await metadataProcess;
+        const metadata = JSON.parse(stdout);
+        if (metadata.title) {
+          videoTitle = sanitizeFilename(metadata.title);
+        }
+      } catch (metaErr: any) {
+        sendEvent('progress', {
+          step: 'warn',
+          completed,
+          total,
+          message: `[${videoNum}/${total}] Gagal mengambil judul video: ${metaErr.message}. Menggunakan nama default.`
+        });
+      }
+
+      activeProcess = null;
+      if (isAborted) break;
+
+      // Step 2: Download video
+      const rawVideoPath = path.join(runTempDir, `temp_video_${i}.mp4`);
+      sendEvent('progress', {
+        step: 'download_video',
+        percent: 0,
+        completed,
+        total,
+        message: `[${videoNum}/${total}] Mengunduh video: "${videoTitle}"...`
+      });
+
+      try {
+        const downloadProcess = execa('yt-dlp', [
+          '--newline',
+          '--no-playlist',
+          '--ffmpeg-location',
+          ffmpegDir,
+          '-f',
+          'bv*[vcodec^=avc]+ba[ext=m4a]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best',
+          '--merge-output-format',
+          'mp4',
+          '-o',
+          rawVideoPath,
+          videoUrl
+        ], {
+          all: true,
+          buffer: false,
+          windowsHide: true,
+          env
+        });
+
+        activeProcess = downloadProcess;
+
+        if (downloadProcess.all) {
+          downloadProcess.all.setEncoding('utf8');
+          downloadProcess.all.on('data', chunk => {
+            const lines = String(chunk).split(/\r?\n/).filter(Boolean);
+            for (const line of lines) {
+              const match = line.match(/\[download]\s+(\d+(?:\.\d+)?)%/);
+              if (match) {
+                const percent = Number(match[1]);
+                sendEvent('progress', {
+                  step: 'download_video',
+                  percent,
+                  completed,
+                  total,
+                  message: `[${videoNum}/${total}] Unduh video ${progressBar(percent)}`
+                });
+              }
+            }
+          });
+        }
+
+        await downloadProcess;
+      } catch (dlErr: any) {
+        sendEvent('progress', {
+          step: 'error',
+          completed,
+          total,
+          message: `[${videoNum}/${total}] Gagal mengunduh video: ${dlErr.message}. Pasangan dilewati.`
+        });
+        continue;
+      }
+
+      activeProcess = null;
+      if (isAborted) break;
+
+      // Step 3: Mute video
+      const mutedVideoPath = path.join(runTempDir, `temp_video_muted_${i}.mp4`);
+      sendEvent('progress', {
+        step: 'mute_video',
+        completed,
+        total,
+        message: `[${videoNum}/${total}] Meringkas audio video asli (mute)...`
+      });
+
+      try {
+        const muteProcess = execa(ensureFfmpegPath(), [
+          '-hide_banner',
+          '-loglevel',
+          'error',
+          '-i',
+          rawVideoPath,
+          '-an',
+          '-c:v',
+          'copy',
+          '-y',
+          mutedVideoPath
+        ], { windowsHide: true });
+        
+        activeProcess = muteProcess;
+        await muteProcess;
+      } catch (muteErr: any) {
+        sendEvent('progress', {
+          step: 'error',
+          completed,
+          total,
+          message: `[${videoNum}/${total}] Gagal menonaktifkan suara video: ${muteErr.message}. Pasangan dilewati.`
+        });
+        continue;
+      }
+
+      activeProcess = null;
+      if (isAborted) break;
+
+      // Step 4: Download music (MP3) if audioUrl is provided
+      let finalAudioPath = '';
+      if (audioUrl) {
+        finalAudioPath = path.join(runTempDir, `temp_audio_${i}.mp3`);
+        sendEvent('progress', {
+          step: 'download_audio',
+          percent: 0,
+          completed,
+          total,
+          message: `[${videoNum}/${total}] Mengunduh musik pendukung...`
+        });
+
+        try {
+          const audioProcess = execa('yt-dlp', [
+            '--newline',
+            '--no-playlist',
+            '--ffmpeg-location',
+            ffmpegDir,
+            '-x',
+            '--audio-format',
+            'mp3',
+            '--audio-quality',
+            '0',
+            '-o',
+            finalAudioPath,
+            audioUrl
+          ], {
+            all: true,
+            buffer: false,
+            windowsHide: true,
+            env
+          });
+
+          activeProcess = audioProcess;
+
+          if (audioProcess.all) {
+            audioProcess.all.setEncoding('utf8');
+            audioProcess.all.on('data', chunk => {
+              const lines = String(chunk).split(/\r?\n/).filter(Boolean);
+              for (const line of lines) {
+                const match = line.match(/\[download]\s+(\d+(?:\.\d+)?)%/);
+                if (match) {
+                  const percent = Number(match[1]);
+                  sendEvent('progress', {
+                    step: 'download_audio',
+                    percent,
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Unduh musik ${progressBar(percent)}`
+                  });
+                }
+              }
+            });
+          }
+
+          await audioProcess;
+        } catch (audErr: any) {
+          sendEvent('progress', {
+            step: 'error',
+            completed,
+            total,
+            message: `[${videoNum}/${total}] Gagal mengunduh musik: ${audErr.message}. Menggunakan video tanpa suara baru.`
+          });
+          finalAudioPath = '';
+        }
+      }
+
+      activeProcess = null;
+      if (isAborted) break;
+
+      // Step 5: Gabungkan muted video dengan audio (atau simpan muted video langsung jika tidak ada musik)
+      let finalOutputPath = path.join(outputDir, `${videoTitle}.mp4`);
+      let counter = 1;
+      while (fs.existsSync(finalOutputPath)) {
+        finalOutputPath = path.join(outputDir, `${videoTitle}_${counter}.mp4`);
+        counter++;
+      }
+
+      if (finalAudioPath && fs.existsSync(finalAudioPath)) {
+        sendEvent('progress', {
+          step: 'merge',
+          completed,
+          total,
+          message: `[${videoNum}/${total}] Menggabungkan video dengan musik...`
+        });
+
+        try {
+          const mergeProcess = execa(ensureFfmpegPath(), [
+            '-hide_banner',
+            '-loglevel',
+            'error',
+            '-i',
+            mutedVideoPath,
+            '-i',
+            finalAudioPath,
+            '-map',
+            '0:v:0',
+            '-map',
+            '1:a:0',
+            '-c:v',
+            'copy',
+            '-c:a',
+            'aac',
+            '-shortest',
+            '-y',
+            finalOutputPath
+          ], { windowsHide: true });
+          
+          activeProcess = mergeProcess;
+          await mergeProcess;
+        } catch (mergeErr: any) {
+          sendEvent('progress', {
+            step: 'error',
+            completed,
+            total,
+            message: `[${videoNum}/${total}] Gagal menggabungkan musik ke video: ${mergeErr.message}. Menyimpan video bisu.`
+          });
+          // Fallback: save the muted video directly
+          try {
+            fs.copyFileSync(mutedVideoPath, finalOutputPath);
+          } catch (copyErr) {
+            console.error('Failed to copy muted video fallback:', copyErr);
+          }
+        }
+      } else {
+        // No music, just save muted video
+        sendEvent('progress', {
+          step: 'save',
+          completed,
+          total,
+          message: `[${videoNum}/${total}] Menyimpan video bisu...`
+        });
+        try {
+          fs.copyFileSync(mutedVideoPath, finalOutputPath);
+        } catch (copyErr: any) {
+          sendEvent('progress', {
+            step: 'error',
+            completed,
+            total,
+            message: `[${videoNum}/${total}] Gagal menyimpan video bisu: ${copyErr.message}`
+          });
+          continue;
+        }
+      }
+
+      activeProcess = null;
+      completed++;
+      sendEvent('progress', {
+        step: 'success',
+        completed,
+        total,
+        message: `[${videoNum}/${total}] Berhasil memproses video: "${path.basename(finalOutputPath)}"`
+      });
+    }
+
+    // Cleanup temp dir
+    try {
+      fs.rmSync(runTempDir, { recursive: true, force: true });
+    } catch {}
+
+    sendEvent('done', {
+      success: true,
+      completed,
+      total,
+      message: `Selesai! Berhasil memproses ${completed} dari ${total} video.`
+    });
+
+    isCleanFinished = true;
+  } catch (err: any) {
+    console.error('[BAHAN-DOWNLOAD] Fatal:', err);
+    sendEvent('error', {
+      success: false,
+      error: err.message || 'Terjadi kesalahan sistem saat memproses.'
+    });
+  } finally {
+    res.end();
   }
 });
 

@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Downloader Bahan Campaign</title>
+  <!-- Google Fonts: Outfit & Inter -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  
+  <style>
+    :root {
+      --bg-dark: #0a0b10;
+      --bg-card: rgba(20, 22, 33, 0.7);
+      --border-glow: rgba(245, 158, 11, 0.2);
+      --text-main: #f3f4f6;
+      --text-muted: #9ca3af;
+      --accent-amber: #f59e0b;
+      --accent-orange: #f97316;
+      --accent-emerald: #10b981;
+      --accent-cyan: #06b6d4;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background: radial-gradient(circle at 50% 0%, #2b1d0c 0%, var(--bg-dark) 100%);
+      background-color: var(--bg-dark);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding-bottom: 5rem;
+    }
+
+    h1, h2, h3, .font-heading {
+      font-family: 'Outfit', sans-serif;
+    }
+
+    /* Glassmorphism containers */
+    .glass-card {
+      background: var(--bg-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 24px;
+      padding: 2.25rem;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .glass-card:hover {
+      border-color: var(--border-glow);
+      box-shadow: 0 20px 40px rgba(245, 158, 11, 0.1);
+    }
+
+    /* Premium gradient buttons */
+    .btn-gradient {
+      background: linear-gradient(135deg, var(--accent-amber) 0%, var(--accent-orange) 100%);
+      color: #fff;
+      border: none;
+      padding: 1rem 2rem;
+      border-radius: 16px;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      transition: all 0.25s ease;
+      box-shadow: 0 8px 16px rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-gradient:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 20px rgba(245, 158, 11, 0.5);
+      filter: brightness(1.1);
+    }
+
+    .btn-gradient:active {
+      transform: translateY(1px);
+    }
+
+    .btn-gradient:disabled {
+      background: #374151 !important;
+      color: #9ca3af !important;
+      box-shadow: none !important;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.06);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: var(--text-main);
+      padding: 0.75rem 1.5rem;
+      border-radius: 14px;
+      font-weight: 500;
+      font-size: 0.9rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.12);
+      border-color: rgba(255, 255, 255, 0.3);
+    }
+
+    /* Inputs */
+    .input-field {
+      width: 100%;
+      background: rgba(10, 11, 16, 0.6);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 0.85rem 1.25rem;
+      color: var(--text-main);
+      font-size: 0.95rem;
+      outline: none;
+      transition: all 0.2s ease;
+    }
+
+    .input-field:focus {
+      border-color: var(--accent-amber);
+      box-shadow: 0 0 0 4px rgba(245, 158, 11, 0.15);
+    }
+
+    /* Logs Console */
+    .console-logs {
+      font-family: 'Fira Code', 'Courier New', monospace;
+      font-size: 0.8rem;
+      background-color: #05060a;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 16px;
+      padding: 1.25rem;
+      color: #38bdf8;
+      height: 250px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.8);
+    }
+
+    /* Navigation Header */
+    .nav-header {
+      background: rgba(20, 22, 33, 0.8);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+
+    .gradient-text {
+      background: linear-gradient(135deg, #f59e0b 0%, #f97316 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    .form-label {
+      display: block;
+      font-size: 0.9rem;
+      font-weight: 550;
+      color: #d1d5db;
+      margin-bottom: 0.5rem;
+    }
+
+    .progress-bar-wrap {
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+      overflow: hidden;
+      height: 12px;
+      width: 100%;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-amber) 0%, var(--accent-emerald) 100%);
+      transition: width 0.3s ease;
+    }
+
+    .progress-bar-fill-sub {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, var(--accent-cyan) 0%, var(--accent-amber) 100%);
+      transition: width 0.3s ease;
+    }
+
+    .trash-btn {
+      color: #ef4444;
+      background: rgba(239, 68, 68, 0.1);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      padding: 0.85rem;
+      border-radius: 14px;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .trash-btn:hover {
+      background: rgba(239, 68, 68, 0.2);
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navigation Header -->
+  <div class="max-w-6xl mx-auto mt-6 px-4">
+    <div class="nav-header flex flex-wrap justify-between items-center shadow-lg rounded-2xl p-4 gap-3">
+      <span class="font-bold text-gray-300 flex items-center gap-2">
+        <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+        ⚡ Navigasi Bot:
+      </span>
+      <div class="flex flex-wrap gap-2">
+        <a href="/" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          ⚙️ StorageState
+        </a>
+        <a href="/tiktok" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          🎬 TikTok Uploader
+        </a>
+        <a href="/grok" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          🧠 Grok Imagine
+        </a>
+        <a href="/ytbot" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          🤖 YT Bot
+        </a>
+        <a href="/leonardo" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          ⚡ Leonardo Kling
+        </a>
+        <a href="/merge-upload" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          ⚡ Merge & Upload
+        </a>
+        <a href="/fb" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          🎬 FB Reels
+        </a>
+        <a href="/bahan" class="bg-amber-500 text-black px-3.5 py-2 rounded-xl text-sm font-bold transition">
+          📦 Downloader Bahan
+        </a>
+        <a href="/git" class="hover:bg-gray-800 text-gray-300 px-3.5 py-2 rounded-xl text-sm font-semibold transition">
+          🛠️ Git & System
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <div class="max-w-6xl mx-auto px-4 mt-8">
+    <!-- Header -->
+    <header class="mb-8 flex justify-between items-center">
+      <div>
+        <h1 class="text-3xl font-extrabold tracking-tight">
+          📦 <span class="gradient-text">Downloader Bahan</span> Campaign
+        </h1>
+        <p class="text-sm text-gray-400 mt-1">Unduh video & musik TikTok/YouTube secara sekuensial, mute video, lalu gabungkan.</p>
+      </div>
+      <div>
+        <span class="px-4 py-1.5 text-xs font-semibold bg-amber-900/50 text-amber-300 rounded-full border border-amber-700/30">YT-DLP & FFMPEG</span>
+      </div>
+    </header>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <!-- LEFT COLUMN: Form Inputs -->
+      <div class="lg:col-span-7 space-y-6">
+        <div class="glass-card">
+          <h2 class="text-xl font-bold mb-6 flex items-center gap-2">
+            <i class="fa-solid fa-sliders text-amber-500"></i>
+            <span>Setelan Unduhan</span>
+          </h2>
+
+          <!-- Output Folder Input & Browse -->
+          <div class="form-group">
+            <label class="form-label" for="folder-input">Folder Output (Hasil Penggabungan)</label>
+            <div class="flex gap-3">
+              <input type="text" id="folder-input" class="input-field" placeholder="C:/tiktok-ts-automation/bahan-campaign" value="C:/tiktok-ts-automation/bahan-campaign">
+              <button class="btn-secondary flex items-center gap-2" type="button" onclick="browseFolder()">
+                <i class="fa-regular fa-folder-open"></i> Browse
+              </button>
+            </div>
+          </div>
+
+          <!-- Links Pairs Section -->
+          <div class="form-group mt-6">
+            <div class="flex justify-between items-center mb-3">
+              <label class="form-label mb-0">Daftar Link Video & Musik</label>
+              <button class="btn-secondary py-1.5 px-3 rounded-lg text-xs flex items-center gap-1" type="button" onclick="addLinkRow()">
+                <i class="fa-solid fa-plus text-amber-500"></i> Tambah Baris
+              </button>
+            </div>
+
+            <!-- List container -->
+            <div id="link-rows-container" class="space-y-4 max-h-[400px] overflow-y-auto pr-1">
+              <!-- Dynamically populated rows -->
+            </div>
+          </div>
+
+          <!-- Run Execution Buttons -->
+          <div class="pt-4 flex gap-3">
+            <button id="btn-start" class="btn-gradient flex-1 py-4 text-lg" onclick="startProcess()">
+              <i class="fa-solid fa-cloud-arrow-down"></i> Mulai Download & Gabung
+            </button>
+            <button id="btn-stop" class="btn-secondary py-4 px-6 border-red-500/30 text-red-400 hover:bg-red-500/10 hover:border-red-500/50" onclick="stopProcess()" disabled>
+              <i class="fa-solid fa-circle-stop"></i> Batal
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT COLUMN: Progress & Logs -->
+      <div class="lg:col-span-5 space-y-6 flex flex-col">
+        <!-- Progress Card -->
+        <div class="glass-card flex-shrink-0">
+          <h2 class="text-lg font-bold mb-4 flex items-center gap-2 border-b border-gray-800 pb-3">
+            <i class="fa-solid fa-chart-line text-amber-500"></i>
+            <span>Status & Progress</span>
+          </h2>
+
+          <div class="space-y-4">
+            <!-- Overall Progress -->
+            <div>
+              <div class="flex justify-between text-sm mb-1.5">
+                <span class="font-medium text-gray-300">Progres Keseluruhan</span>
+                <span id="overall-progress-text" class="font-bold text-amber-400">0/0 Selesai (0%)</span>
+              </div>
+              <div class="progress-bar-wrap">
+                <div id="overall-progress-bar" class="progress-bar-fill" style="width: 0%;"></div>
+              </div>
+            </div>
+
+            <!-- Active File Download Progress -->
+            <div id="active-download-container" style="display: none;">
+              <div class="flex justify-between text-xs mb-1.5 text-gray-400">
+                <span id="active-download-label">Mengunduh...</span>
+                <span id="active-download-pct" class="font-semibold text-cyan-400">0%</span>
+              </div>
+              <div class="progress-bar-wrap h-2">
+                <div id="active-download-bar" class="progress-bar-fill-sub" style="width: 0%;"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Terminal Log Console -->
+        <div class="glass-card flex-1 flex flex-col justify-between" style="min-height: 350px;">
+          <div class="flex justify-between items-center border-b border-gray-800 pb-3 shrink-0 mb-3">
+            <h3 class="text-xs font-bold tracking-widest text-gray-400 uppercase flex items-center gap-2">
+              <i class="fa-solid fa-terminal text-amber-500"></i>
+              <span>Console Log</span>
+            </h3>
+            <button onclick="clearConsole()" class="text-xs text-gray-500 hover:text-white transition">Clear</button>
+          </div>
+          <div id="console-output" class="console-logs flex-1">
+            <div class="text-gray-500">// Menunggu instruksi unduh...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let abortController = null;
+    let isProcessing = false;
+
+    // Load initial row and retrieve cached configurations
+    window.addEventListener('DOMContentLoaded', () => {
+      // Load saved configurations if any
+      const savedFolder = localStorage.getItem('bahan_output_folder');
+      if (savedFolder) {
+        document.getElementById('folder-input').value = savedFolder;
+      }
+
+      const savedPairs = localStorage.getItem('bahan_pairs');
+      if (savedPairs) {
+        try {
+          const pairs = JSON.parse(savedPairs);
+          if (pairs.length > 0) {
+            pairs.forEach(p => addLinkRow(p.videoUrl, p.audioUrl));
+          } else {
+            addLinkRow();
+          }
+        } catch (e) {
+          addLinkRow();
+        }
+      } else {
+        addLinkRow();
+      }
+    });
+
+    // Browse folders using server API
+    async function browseFolder() {
+      try {
+        const res = await fetch('/api/browse-folder');
+        const data = await res.json();
+        if (data.success && data.folder) {
+          document.getElementById('folder-input').value = data.folder;
+          localStorage.setItem('bahan_output_folder', data.folder);
+        }
+      } catch (e) {
+        alert('Gagal membuka folder browser: ' + e.message);
+      }
+    }
+
+    // Dynamic fields handling
+    function addLinkRow(videoUrl = '', audioUrl = '') {
+      const container = document.getElementById('link-rows-container');
+      const rowId = 'row-' + Date.now() + '-' + Math.random().toString(36).substr(2, 9);
+
+      const html = `
+        <div id="${rowId}" class="link-row p-4 rounded-xl bg-gray-900/50 border border-gray-800 space-y-3 relative">
+          <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-center">
+            <div class="md:col-span-5">
+              <label class="text-[10px] text-gray-400 uppercase tracking-wider block mb-1">Link Video (TikTok/YT)</label>
+              <input type="text" class="input-field video-link py-2 px-3 text-xs" placeholder="Paste link video..." value="${videoUrl}" onchange="savePairsToCache()">
+            </div>
+            <div class="md:col-span-6">
+              <label class="text-[10px] text-gray-400 uppercase tracking-wider block mb-1">Link Musik (Trek MP3 pendukung)</label>
+              <input type="text" class="input-field audio-link py-2 px-3 text-xs" placeholder="Paste link musik..." value="${audioUrl}" onchange="savePairsToCache()">
+            </div>
+            <div class="md:col-span-1 flex justify-end md:justify-center items-end h-full pt-4 md:pt-0">
+              <button onclick="removeLinkRow('${rowId}')" class="trash-btn py-2 px-2 text-xs flex items-center justify-center" title="Hapus baris ini">
+                <i class="fa-solid fa-trash-can"></i>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+
+      container.insertAdjacentHTML('beforeend', html);
+      savePairsToCache();
+    }
+
+    function removeLinkRow(rowId) {
+      const row = document.getElementById(rowId);
+      if (row) {
+        row.remove();
+        savePairsToCache();
+      }
+    }
+
+    // Get input pairs as an array
+    function getPairs() {
+      const rows = document.querySelectorAll('.link-row');
+      const pairs = [];
+      rows.forEach(r => {
+        const videoUrl = r.querySelector('.video-link').value.trim();
+        const audioUrl = r.querySelector('.audio-link').value.trim();
+        if (videoUrl || audioUrl) {
+          pairs.push({ videoUrl, audioUrl });
+        }
+      });
+      return pairs;
+    }
+
+    function savePairsToCache() {
+      const pairs = getPairs();
+      localStorage.setItem('bahan_pairs', JSON.stringify(pairs));
+    }
+
+    // Logger
+    function appendLog(message, step = 'info') {
+      const consoleEl = document.getElementById('console-output');
+      const time = new Date().toLocaleTimeString('id-ID');
+      
+      let colorClass = 'text-sky-400';
+      if (step === 'error') colorClass = 'text-red-400';
+      else if (step === 'success') colorClass = 'text-green-400 font-semibold';
+      else if (step === 'warn') colorClass = 'text-amber-400';
+      else if (step === 'metadata') colorClass = 'text-purple-400';
+      else if (step === 'download_video' || step === 'download_audio') colorClass = 'text-cyan-300';
+      
+      const logDiv = document.createElement('div');
+      logDiv.className = 'py-0.5';
+      logDiv.innerHTML = `<span class="text-gray-500">[${time}]</span> <span class="${colorClass}">${message}</span>`;
+      
+      // Keep only last 500 lines
+      if (consoleEl.children.length > 500) {
+        consoleEl.removeChild(consoleEl.firstChild);
+      }
+      
+      consoleEl.appendChild(logDiv);
+      consoleEl.scrollTop = consoleEl.scrollHeight;
+    }
+
+    function clearConsole() {
+      document.getElementById('console-output').innerHTML = '';
+    }
+
+    // Abort active execution
+    function stopProcess() {
+      if (abortController) {
+        appendLog('⚠️ Menghentikan proses unduhan secara paksa...', 'warn');
+        abortController.abort();
+        abortController = null;
+      }
+      resetUI();
+    }
+
+    function resetUI() {
+      isProcessing = false;
+      document.getElementById('btn-start').disabled = false;
+      document.getElementById('btn-stop').disabled = true;
+      document.getElementById('active-download-container').style.display = 'none';
+      document.getElementById('active-download-bar').style.width = '0%';
+      document.getElementById('active-download-pct').textContent = '0%';
+    }
+
+    // Trigger process download and merge
+    async function startProcess() {
+      if (isProcessing) return;
+
+      const outputDir = document.getElementById('folder-input').value.trim();
+      const pairs = getPairs().filter(p => p.videoUrl); // must have at least video url
+
+      if (!outputDir) {
+        alert('Masukkan path folder output!');
+        return;
+      }
+
+      if (pairs.length === 0) {
+        alert('Tambahkan setidaknya satu link video untuk diproses!');
+        return;
+      }
+
+      // Lock UI
+      isProcessing = true;
+      document.getElementById('btn-start').disabled = true;
+      document.getElementById('btn-stop').disabled = false;
+      document.getElementById('overall-progress-text').textContent = `0/${pairs.length} Selesai (0%)`;
+      document.getElementById('overall-progress-bar').style.width = '0%';
+      clearConsole();
+      
+      appendLog(`🚀 Memulai pengunduhan & merge untuk ${pairs.length} video sekuensial...`, 'success');
+      localStorage.setItem('bahan_output_folder', outputDir);
+
+      abortController = new AbortController();
+
+      try {
+        const response = await fetch('/api/bahan/download', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pairs, outputDir }),
+          signal: abortController.signal
+        });
+
+        if (!response.ok) {
+          throw new Error('Gagal terhubung dengan server: HTTP ' + response.status);
+        }
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const chunks = buffer.split('\n\n');
+          buffer = chunks.pop() || '';
+
+          for (const chunk of chunks) {
+            const eventLine = chunk.split('\n').find(line => line.startsWith('event: '));
+            const dataLine = chunk.split('\n').find(line => line.startsWith('data: '));
+            if (!dataLine) continue;
+
+            const eventName = eventLine ? eventLine.slice(7) : 'message';
+            const data = JSON.parse(dataLine.slice(6));
+
+            if (eventName === 'progress') {
+              // Update logs
+              if (data.message) {
+                appendLog(data.message, data.step);
+              }
+
+              // Update overall progress
+              const completedCount = data.completed || 0;
+              const totalCount = data.total || pairs.length;
+              const overallPercent = totalCount > 0 ? (completedCount / totalCount) * 100 : 0;
+              document.getElementById('overall-progress-text').textContent = `${completedCount}/${totalCount} Selesai (${overallPercent.toFixed(0)}%)`;
+              document.getElementById('overall-progress-bar').style.width = `${overallPercent}%`;
+
+              // Update active file progress bar
+              if (data.step === 'download_video' || data.step === 'download_audio') {
+                const subPercent = data.percent || 0;
+                document.getElementById('active-download-container').style.display = 'block';
+                document.getElementById('active-download-label').textContent = data.step === 'download_video' ? 'Mengunduh Video...' : 'Mengunduh Musik...';
+                document.getElementById('active-download-pct').textContent = `${subPercent.toFixed(1)}%`;
+                document.getElementById('active-download-bar').style.width = `${subPercent}%`;
+              } else if (data.step === 'success' || data.step === 'error') {
+                document.getElementById('active-download-container').style.display = 'none';
+              }
+            }
+
+            if (eventName === 'done') {
+              appendLog(data.message || 'Proses unduh dan gabung selesai.', 'success');
+              alert(data.message || 'Unduh dan gabung bahan campaign selesai!');
+            }
+
+            if (eventName === 'error') {
+              appendLog('❌ Error: ' + data.error, 'error');
+              alert('Terjadi kesalahan: ' + data.error);
+            }
+          }
+        }
+      } catch (err) {
+        if (err.name === 'AbortError') {
+          appendLog('❌ Proses dihentikan oleh user.', 'error');
+        } else {
+          appendLog('❌ Fatal error: ' + err.message, 'error');
+          alert('Gagal memproses: ' + err.message);
+        }
+      } finally {
+        resetUI();
+        abortController = null;
+      }
+    }
+  </script>
+</body>
+</html>
