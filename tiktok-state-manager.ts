@@ -2088,7 +2088,7 @@ async function ytbotRunState(stateFile: string): Promise<void> {
   const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
   const marksFile = path.join(videoDir, '.uploaded.json');
 
-  ytbotProgress = { download: 0, split: 0, upload: 0, currentState: stateName };
+  ytbotProgress = { download: 0, split: 0, upload: 0, currentState: stateName, uploadedCount: 0, uploadTotal: 0 };
   ytbotBroadcastProgress();
 
   ytbotLog(`═══════════════════════════════════════`);
