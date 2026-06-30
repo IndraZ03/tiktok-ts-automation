@@ -84,6 +84,8 @@ interface YtbotStateConfig {
   scheduleDate: string;
   scheduleTime: string;
   intervalMinutes: number;
+  lastUploadDate?: string;
+  lastUploadTime?: string;
 }
 
 interface YtbotData {
@@ -112,12 +114,15 @@ function getYtbotStateVideoDir(stateFile: string): string {
 // YTBOT SSE + running state
 const ytbotSseClients: Response[] = [];
 let ytbotRunning = false;
+let ytbotFullAutoRunning = false;
 let ytbotQueue: Array<{ stateName: string; stateFile: string; videoCount: number; scheduleStart: string; scheduleEnd: string; active: boolean }> = [];
 let ytbotProgress = {
   download: 0,
   split: 0,
   upload: 0,
-  currentState: ''
+  currentState: '',
+  uploadedCount: 0,
+  uploadTotal: 0
 };
 
 function ytbotLog(msg: string) {
@@ -1979,17 +1984,19 @@ app.get('/api/ytbot/config', (req, res) => {
 
 // Save config for one state
 app.post('/api/ytbot/config/save', (req, res) => {
-  const { stateFile, description, hashtags, scheduleDate, scheduleTime, intervalMinutes } = req.body;
+  const { stateFile, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, lastUploadDate, lastUploadTime } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
   const data = loadYtbotData();
   if (!data.states[stateFile]) {
-    data.states[stateFile] = { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60 };
+    data.states[stateFile] = { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60, lastUploadDate: '', lastUploadTime: '' };
   }
   if (description !== undefined) data.states[stateFile].description = description;
   if (hashtags !== undefined) data.states[stateFile].hashtags = hashtags;
   if (scheduleDate !== undefined) data.states[stateFile].scheduleDate = scheduleDate;
   if (scheduleTime !== undefined) data.states[stateFile].scheduleTime = scheduleTime;
   if (intervalMinutes !== undefined) data.states[stateFile].intervalMinutes = intervalMinutes;
+  if (lastUploadDate !== undefined) data.states[stateFile].lastUploadDate = lastUploadDate;
+  if (lastUploadTime !== undefined) data.states[stateFile].lastUploadTime = lastUploadTime;
   saveYtbotData(data);
   res.json({ success: true });
 });
@@ -2058,7 +2065,8 @@ app.get('/api/ytbot/status', (req, res) => {
 // Stop
 app.post('/api/ytbot/stop', async (req, res) => {
   ytbotRunning = false;
-  ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '' };
+  ytbotFullAutoRunning = false;
+  ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
   ytbotBroadcastProgress();
   await stopUploader();
   ytbotLog('⛔ ===== YTBOT STOPPED =====');
@@ -2219,6 +2227,8 @@ async function ytbotRunState(stateFile: string): Promise<void> {
     ytbotProgress.download = 100;
     ytbotProgress.split = 100;
     ytbotProgress.upload = 0;
+    ytbotProgress.uploadedCount = 0;
+    ytbotProgress.uploadTotal = batch.length;
     ytbotBroadcastProgress();
 
     ytbotLog(`📤 Upload batch: ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
@@ -2262,6 +2272,8 @@ async function ytbotRunState(stateFile: string): Promise<void> {
       }
 
       uploadedCount++;
+      ytbotProgress.uploadedCount = uploadedCount;
+      ytbotProgress.uploadTotal = batch.length;
       ytbotProgress.upload = Math.round((uploadedCount / batch.length) * 100);
       ytbotBroadcastProgress();
     };
@@ -2280,11 +2292,17 @@ async function ytbotRunState(stateFile: string): Promise<void> {
     schedDate = `${nextStart.getFullYear()}-${String(nextStart.getMonth()+1).padStart(2,'0')}-${String(nextStart.getDate()).padStart(2,'0')}`;
     schedTime = `${String(nextStart.getHours()).padStart(2,'0')}:${String(nextStart.getMinutes()).padStart(2,'0')}`;
 
+    const lastUpload = new Date(batchEndMs);
+    const lastUploadDate = `${lastUpload.getFullYear()}-${String(lastUpload.getMonth()+1).padStart(2,'0')}-${String(lastUpload.getDate()).padStart(2,'0')}`;
+    const lastUploadTime = `${String(lastUpload.getHours()).padStart(2,'0')}:${String(lastUpload.getMinutes()).padStart(2,'0')}`;
+
     // Update config with new schedule for next loop
     const updData = loadYtbotData();
     if (updData.states[stateFile]) {
       updData.states[stateFile].scheduleDate = schedDate;
       updData.states[stateFile].scheduleTime = schedTime;
+      updData.states[stateFile].lastUploadDate = lastUploadDate;
+      updData.states[stateFile].lastUploadTime = lastUploadTime;
       saveYtbotData(updData);
     }
 
@@ -2328,15 +2346,175 @@ app.post('/api/ytbot/schedule', async (req, res) => {
     ytbotLog(`❌ Fatal: ${e.message}`);
   } finally {
     ytbotRunning = false;
-    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '' };
+    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
     ytbotBroadcastProgress();
     ytbotLog('===== YTBOT FINISHED =====');
   }
 });
 
+function getYtbotStateNextTrigger(sf: string): { stateName: string; triggerTime: Date | null; targetTime: Date | null } {
+  const data = loadYtbotData();
+  const cfg = data.states[sf];
+  const stateName = sf.replace('tiktok-state-', '').replace('.json', '');
+  if (!cfg) return { stateName, triggerTime: null, targetTime: null };
+
+  const lastDate = cfg.lastUploadDate;
+  const lastTime = cfg.lastUploadTime;
+  const intervalMin = cfg.intervalMinutes || 60;
+
+  if (!lastDate || !lastTime) {
+    const schedDate = cfg.scheduleDate;
+    const schedTime = cfg.scheduleTime;
+    if (!schedDate || !schedTime) return { stateName, triggerTime: null, targetTime: null };
+    const nextUploadTime = new Date(`${schedDate}T${schedTime}:00`);
+    if (isNaN(nextUploadTime.getTime())) return { stateName, triggerTime: null, targetTime: null };
+    const lastUploadTime = new Date(nextUploadTime.getTime() - intervalMin * 60000);
+    const triggerTime = new Date(lastUploadTime.getTime() - 5 * 3600000);
+    return { stateName, triggerTime, targetTime: nextUploadTime };
+  }
+
+  const lastUploadTime = new Date(`${lastDate}T${lastTime}:00`);
+  if (isNaN(lastUploadTime.getTime())) return { stateName, triggerTime: null, targetTime: null };
+  const triggerTime = new Date(lastUploadTime.getTime() - 5 * 3600000);
+  const targetTime = new Date(lastUploadTime.getTime() + intervalMin * 60000);
+  return { stateName, triggerTime, targetTime };
+}
+
+function getYtbotStateLastUploadMs(sf: string): number {
+  const data = loadYtbotData();
+  const cfg = data.states[sf];
+  if (!cfg) return 0;
+  
+  const lastDate = cfg.lastUploadDate;
+  const lastTime = cfg.lastUploadTime;
+  if (!lastDate || !lastTime) {
+    const schedDate = cfg.scheduleDate;
+    const schedTime = cfg.scheduleTime;
+    if (!schedDate || !schedTime) return 0;
+    const nextUploadTime = new Date(`${schedDate}T${schedTime}:00`);
+    if (isNaN(nextUploadTime.getTime())) return 0;
+    const intervalMin = cfg.intervalMinutes || 60;
+    return nextUploadTime.getTime() - intervalMin * 60000;
+  }
+  
+  const lastUploadTime = new Date(`${lastDate}T${lastTime}:00`);
+  if (isNaN(lastUploadTime.getTime())) return 0;
+  return lastUploadTime.getTime();
+}
+
+async function ytbotRunFullAuto(stateFiles: string[]): Promise<void> {
+  ytbotLog(`♾️ Memulai YTBot Full Auto standby loop untuk ${stateFiles.length} state...`);
+  
+  sendWAMessage(`📢 [YTBot Full Auto] Mulai dengan Standard Scheduler (Interval mengikuti masing-masing state).`);
+
+  ytbotQueue = stateFiles.map(sf => {
+    const name = sf.replace('tiktok-state-', '').replace('.json', '');
+    return { stateName: name, stateFile: sf, videoCount: 0, scheduleStart: 'Standby', scheduleEnd: 'Standby', active: false };
+  });
+  ytbotBroadcastQueue();
+
+  while (ytbotFullAutoRunning) {
+    if (!ytbotFullAutoRunning) break;
+
+    if (ytbotRunning) {
+      let slept = 0;
+      while (slept < 10000 && ytbotFullAutoRunning) {
+        await new Promise(r => setTimeout(r, 2000));
+        slept += 2000;
+      }
+      continue;
+    }
+
+    const now = new Date();
+    let triggeredStateFile: string | null = null;
+    let nextStateName = 'Tidak ada';
+    let nextScheduleTimeStr = 'Tidak ada';
+    let earliestTriggerTime = Infinity;
+
+    // Sort states so the one with the newest last upload is checked first
+    const sortedStates = [...stateFiles].sort((a, b) => getYtbotStateLastUploadMs(b) - getYtbotStateLastUploadMs(a));
+
+    for (const sf of sortedStates) {
+      const { triggerTime, targetTime, stateName } = getYtbotStateNextTrigger(sf);
+      if (!triggerTime) continue;
+
+      const triggerTimeMs = triggerTime.getTime();
+
+      if (now.getTime() >= triggerTimeMs && !triggeredStateFile) {
+        triggeredStateFile = sf;
+      }
+
+      if (triggerTimeMs > now.getTime() && triggerTimeMs < earliestTriggerTime) {
+        earliestTriggerTime = triggerTimeMs;
+        nextStateName = stateName;
+        nextScheduleTimeStr = `${triggerTime.getFullYear()}-${String(triggerTime.getMonth()+1).padStart(2,'0')}-${String(triggerTime.getDate()).padStart(2,'0')} ${String(triggerTime.getHours()).padStart(2,'0')}:${String(triggerTime.getMinutes()).padStart(2,'0')}`;
+      }
+    }
+
+    if (triggeredStateFile) {
+      const stateName = triggeredStateFile.replace('tiktok-state-', '').replace('.json', '');
+      ytbotLog(`🎯 [Full Auto] State terpicu: ${stateName}. Menyiapkan eksekusi...`);
+
+      ytbotQueue = ytbotQueue.map(q => ({ ...q, active: q.stateFile === triggeredStateFile }));
+      ytbotBroadcastQueue();
+
+      let futureNextStateName = 'Tidak ada';
+      let futureNextScheduleTimeStr = 'Tidak ada';
+      let futureEarliestTriggerTime = Infinity;
+      for (const sf of sortedStates) {
+        if (sf === triggeredStateFile) continue;
+        const { triggerTime, stateName } = getYtbotStateNextTrigger(sf);
+        if (triggerTime) {
+          const triggerTimeMs = triggerTime.getTime();
+          if (triggerTimeMs > now.getTime() && triggerTimeMs < futureEarliestTriggerTime) {
+            futureEarliestTriggerTime = triggerTimeMs;
+            futureNextStateName = stateName;
+            futureNextScheduleTimeStr = `${triggerTime.getFullYear()}-${String(triggerTime.getMonth()+1).padStart(2,'0')}-${String(triggerTime.getDate()).padStart(2,'0')} ${String(triggerTime.getHours()).padStart(2,'0')}:${String(triggerTime.getMinutes()).padStart(2,'0')}`;
+          }
+        }
+      }
+
+      const { targetTime } = getYtbotStateNextTrigger(triggeredStateFile);
+      const startSchedStr = targetTime ? `${targetTime.getFullYear()}-${String(targetTime.getMonth()+1).padStart(2,'0')}-${String(targetTime.getDate()).padStart(2,'0')} ${String(targetTime.getHours()).padStart(2,'0')}:${String(targetTime.getMinutes()).padStart(2,'0')}` : 'Tidak diketahui';
+      
+      const lastUploadTime = new Date(targetTime ? targetTime.getTime() - (loadYtbotData().states[triggeredStateFile]?.intervalMinutes || 60) * 60000 : Date.now());
+      const lastUploadTimeStr = `${lastUploadTime.getFullYear()}-${String(lastUploadTime.getMonth()+1).padStart(2,'0')}-${String(lastUploadTime.getDate()).padStart(2,'0')} ${String(lastUploadTime.getHours()).padStart(2,'0')}:${String(lastUploadTime.getMinutes()).padStart(2,'0')}`;
+
+      let waMsg = `🚀 [YTBot Full Auto] Mulai Penjadwalan Otomatis!\n`;
+      waMsg += `🔑 State: ${stateName}\n`;
+      waMsg += `📅 Upload Terakhir: ${lastUploadTimeStr}\n`;
+      waMsg += `⏰ Sched Target Start: ${startSchedStr}\n`;
+      waMsg += `⏭️ Antrian Selanjutnya: State ${futureNextStateName} pada ${futureNextScheduleTimeStr}`;
+      sendWAMessage(waMsg);
+
+      ytbotRunning = true;
+      try {
+        await ytbotRunState(triggeredStateFile);
+      } catch (err: any) {
+        ytbotLog(`❌ [Full Auto] Gagal menjalankan penjadwalan: ${err.message}`);
+      } finally {
+        ytbotRunning = false;
+        ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
+        ytbotBroadcastProgress();
+      }
+
+      ytbotQueue = ytbotQueue.map(q => ({ ...q, active: false }));
+      ytbotBroadcastQueue();
+    } else {
+      let slept = 0;
+      while (slept < 10000 && ytbotFullAutoRunning) {
+        await new Promise(r => setTimeout(r, 2000));
+        slept += 2000;
+      }
+    }
+  }
+
+  ytbotLog('===== FULL AUTO STANDBY LOGIC STOPPED =====');
+}
+
 // Full auto all states
 app.post('/api/ytbot/full-auto', async (req, res) => {
-  if (ytbotRunning) {
+  if (ytbotRunning || ytbotFullAutoRunning) {
     return res.status(400).json({ success: false, error: 'YTBot sedang berjalan!' });
   }
   const { stateFiles } = req.body;
@@ -2344,20 +2522,18 @@ app.post('/api/ytbot/full-auto', async (req, res) => {
     return res.status(400).json({ error: 'stateFiles diperlukan' });
   }
 
-  ytbotRunning = true;
+  ytbotFullAutoRunning = true;
   ytbotQueue = [];
-  res.json({ success: true, message: 'Full Auto dimulai' });
+  res.json({ success: true, message: 'Full Auto Standby Mode dimulai' });
 
   try {
-    for (const sf of stateFiles) {
-      if (!ytbotRunning) break;
-      await ytbotRunState(sf);
-    }
+    await ytbotRunFullAuto(stateFiles);
   } catch (e: any) {
-    ytbotLog(`❌ Fatal: ${e.message}`);
+    ytbotLog(`❌ Fatal Full Auto: ${e.message}`);
   } finally {
+    ytbotFullAutoRunning = false;
     ytbotRunning = false;
-    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '' };
+    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
     ytbotBroadcastProgress();
     ytbotLog('===== YTBOT FINISHED =====');
   }

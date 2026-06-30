@@ -314,7 +314,7 @@
       container.innerHTML = selectedStates.map(fn => {
         const state = allStates.find(s => s.filename === fn);
         const name = state ? state.name : fn;
-        const cfg = stateConfigs[fn] || { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60 };
+        const cfg = stateConfigs[fn] || { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60, lastUploadDate: '', lastUploadTime: '' };
         const videos = stateVideos[fn] || [];
         const uploadedCount = videos.filter(v => v.uploaded).length;
         const pendingCount = videos.length - uploadedCount;
@@ -374,15 +374,29 @@
             </div>
           </div>
 
+          <!-- Last Upload Info -->
+          <div class="grid grid-cols-2 gap-3 mb-3">
+            <div>
+              <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Upload Terakhir (Tanggal)</label>
+              <input id="last-date-${fn}" type="date" value="${cfg.lastUploadDate || ''}"
+                     class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
+            </div>
+            <div>
+              <label class="text-[10px] text-gray-400 font-bold block mb-1">⏰ Upload Terakhir (Jam)</label>
+              <input id="last-time-${fn}" type="time" value="${cfg.lastUploadTime || ''}"
+                     class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
+            </div>
+          </div>
+
           <!-- Schedule & Interval -->
           <div class="grid grid-cols-3 gap-3 mb-4">
             <div>
-              <label class="text-sm text-gray-400 block mb-1">📅 Schedule Date</label>
+              <label class="text-sm text-gray-400 block mb-1">📅 Sched Date (Awal)</label>
               <input id="sdate-${fn}" type="date" value="${cfg.scheduleDate || today}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
             <div>
-              <label class="text-sm text-gray-400 block mb-1">⏰ Schedule Time</label>
+              <label class="text-sm text-gray-400 block mb-1">⏰ Sched Time (Awal)</label>
               <input id="stime-${fn}" type="time" value="${cfg.scheduleTime || nowTime}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
@@ -422,6 +436,8 @@
         scheduleDate: document.getElementById('sdate-' + fn)?.value || '',
         scheduleTime: document.getElementById('stime-' + fn)?.value || '',
         intervalMinutes: parseInt(document.getElementById('interval-' + fn)?.value) || 60,
+        lastUploadDate: document.getElementById('last-date-' + fn)?.value || '',
+        lastUploadTime: document.getElementById('last-time-' + fn)?.value || '',
       };
       try {
         const res = await fetch('/api/ytbot/config/save', {
@@ -666,6 +682,8 @@
       const dl = prog.download || 0;
       const sp = prog.split || 0;
       const up = prog.upload || 0;
+      const uploadedCount = prog.uploadedCount || 0;
+      const uploadTotal = prog.uploadTotal || 0;
       
       // Update bars width
       document.getElementById('prog-download').style.width = dl + '%';
@@ -675,7 +693,11 @@
       document.getElementById('txt-split').textContent = `✂ Splitting: ${sp}%`;
       
       document.getElementById('prog-upload').style.width = up + '%';
-      document.getElementById('txt-upload').textContent = `🚀 TikTok Upload: ${up}%`;
+      if (uploadTotal > 0) {
+        document.getElementById('txt-upload').textContent = `🚀 TikTok Upload: ${uploadedCount}/${uploadTotal} (${up}%)`;
+      } else {
+        document.getElementById('txt-upload').textContent = `🚀 TikTok Upload: ${up}%`;
+      }
       
       // Update labels with beautiful badges and icons
       const lblDl = document.getElementById('lbl-download');
@@ -707,7 +729,7 @@
         lblUp.textContent = sp < 100 ? 'Menunggu' : 'Persiapan';
         lblUp.className = 'text-xs mt-1 text-gray-500';
       } else if (up < 100) {
-        lblUp.textContent = `Mengupload (${up}%)`;
+        lblUp.textContent = uploadTotal > 0 ? `Mengupload (${uploadedCount}/${uploadTotal})` : `Mengupload (${up}%)`;
         lblUp.className = 'text-xs mt-1 text-pink-400 font-semibold animate-pulse';
       } else {
         lblUp.textContent = 'Selesai ✓';
@@ -721,7 +743,7 @@
       } else if (sp < 100) {
         activeTask = `Memotong video menjadi segmen 3 menit... (${sp}%)`;
       } else if (up < 100) {
-        activeTask = `Mengupload segmen ke TikTok... (${up}%)`;
+        activeTask = uploadTotal > 0 ? `Mengupload segmen ke TikTok... (${uploadedCount}/${uploadTotal})` : `Mengupload segmen ke TikTok... (${up}%)`;
       } else {
         activeTask = 'Semua proses selesai!';
       }
