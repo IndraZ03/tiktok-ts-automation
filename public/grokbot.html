@@ -1375,7 +1375,7 @@
         btnFullAuto.textContent = '🚀 Mulai Full Auto (Semua State)';
         btnFullAuto.className = 'w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-pink-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnFullAuto.setAttribute('onclick', 'startFullAuto()');
-        btnFullAuto.disabled = data.running && !data.grokbotFullAutoRunning && !data.infiniteGenRunning;
+        btnFullAuto.disabled = !data.grokbotFullAutoRunning && data.running;
       }
 
       // 2. Infinite Generate Toggle Control
@@ -1388,7 +1388,7 @@
         btnInfGen.textContent = '♾️ Infinite Generate (Stok Utama & Cadangan)';
         btnInfGen.className = 'w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'startInfiniteGenerate()');
-        btnInfGen.disabled = data.running && !data.grokbotFullAutoRunning && !data.infiniteGenRunning;
+        btnInfGen.disabled = !data.infiniteGenRunning && data.running;
       }
 
       // 3. Force Stop All Control

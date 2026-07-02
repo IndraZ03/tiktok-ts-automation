@@ -4905,7 +4905,7 @@ async function grokbotRunFullAuto(stateFiles: string[]): Promise<void> {
 }
 
 app.post('/api/grokbot/full-auto', async (req, res) => {
-  if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
+  if (grokbotRunning || grokbotFullAutoRunning) return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
   const { stateFiles } = req.body;
   if (!stateFiles || !Array.isArray(stateFiles) || stateFiles.length === 0) {
     return res.status(400).json({ error: 'stateFiles diperlukan' });

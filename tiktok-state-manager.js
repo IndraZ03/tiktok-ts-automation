@@ -7,10 +7,12 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { exec, spawn } from 'child_process';
+import { execa } from 'execa';
 import { runUpload, stopUploader, getIsRunning } from './tiktok-uploader.js';
 import { runFacebookUpload, stopFacebookUploader } from './facebook-uploader.js';
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, getGrokRateLimits, clearGrokRateLimit } from './grok-uploader.js';
 import multer from 'multer';
+import ffmpegPath from 'ffmpeg-static';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo } from './video-splitter.js';
 import { startWAPolling, notifyScheduleStarted, sendWAMessage, notifyScheduleFinished } from './whatsapp-service.js';
@@ -74,12 +76,15 @@ function getYtbotStateVideoDir(stateFile) {
 // YTBOT SSE + running state
 const ytbotSseClients = [];
 let ytbotRunning = false;
+let ytbotFullAutoRunning = false;
 let ytbotQueue = [];
 let ytbotProgress = {
     download: 0,
     split: 0,
     upload: 0,
-    currentState: ''
+    currentState: '',
+    uploadedCount: 0,
+    uploadTotal: 0
 };
 function ytbotLog(msg) {
     console.log(`[YTBOT] ${msg}`);
@@ -622,6 +627,387 @@ app.get('/api/namaproduk', async (req, res) => {
     catch (error) {
         console.error('[NAMAPRODUK] Error:', error);
         res.status(500).json({ success: false, error: error.message || 'Terjadi kesalahan saat memproses link.' });
+    }
+});
+function sanitizeFilename(value) {
+    return value
+        .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, 120) || 'video';
+}
+function progressBar(percent, width = 20) {
+    const safePercent = Math.max(0, Math.min(100, percent));
+    const filled = Math.round((safePercent / 100) * width);
+    return `[${'#'.repeat(filled)}${'-'.repeat(width - filled)}] ${safePercent.toFixed(1)}%`;
+}
+function ensureFfmpegPath() {
+    if (!ffmpegPath) {
+        throw new Error('ffmpeg-static tidak menemukan binary ffmpeg.');
+    }
+    return ffmpegPath;
+}
+app.get('/bahan', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'bahan.html'));
+});
+app.post('/api/bahan/download', async (req, res) => {
+    const { pairs, outputDir: clientOutputDir } = req.body;
+    if (!Array.isArray(pairs) || pairs.length === 0) {
+        return res.status(400).json({ success: false, error: 'Pairs harus diisi dan berupa array.' });
+    }
+    const outputDir = clientOutputDir ? path.resolve(clientOutputDir) : 'C:/tiktok-ts-automation/bahan-campaign';
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+    const sendEvent = (event, data) => {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+    };
+    let activeProcess = null;
+    let isAborted = false;
+    let isCleanFinished = false;
+    res.on('close', () => {
+        if (isCleanFinished)
+            return;
+        isAborted = true;
+        console.log('[BAHAN-DOWNLOAD] Client disconnected. Aborting process.');
+        if (activeProcess) {
+            try {
+                activeProcess.kill();
+            }
+            catch (err) { }
+        }
+    });
+    const ffmpegDir = path.dirname(ensureFfmpegPath());
+    const env = {
+        ...process.env,
+        PATH: `${ffmpegDir}${path.delimiter}${process.env.PATH || ''}`
+    };
+    const runTempDir = path.join(__dirname, '_tmp_uploads', `bahan-${Date.now()}`);
+    fs.mkdirSync(runTempDir, { recursive: true });
+    fs.mkdirSync(outputDir, { recursive: true });
+    try {
+        const total = pairs.length;
+        let completed = 0;
+        for (let i = 0; i < total; i++) {
+            if (isAborted)
+                break;
+            const { videoUrl, audioUrl } = pairs[i];
+            const videoNum = i + 1;
+            sendEvent('progress', {
+                step: 'info',
+                completed,
+                total,
+                message: `[${videoNum}/${total}] Memulai pengolahan pasangan ke-${videoNum}...`
+            });
+            if (!videoUrl) {
+                sendEvent('progress', {
+                    step: 'error',
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Link video kosong. Dilewati.`
+                });
+                continue;
+            }
+            // Step 1: Ambil title video via yt-dlp dump-json
+            let videoTitle = `video_${Date.now()}_${i}`;
+            sendEvent('progress', {
+                step: 'metadata',
+                completed,
+                total,
+                message: `[${videoNum}/${total}] Mengambil judul video...`
+            });
+            try {
+                const metadataProcess = execa('yt-dlp', ['--dump-json', '--no-playlist', videoUrl], { windowsHide: true });
+                activeProcess = metadataProcess;
+                const { stdout } = await metadataProcess;
+                const metadata = JSON.parse(stdout);
+                if (metadata.title) {
+                    videoTitle = sanitizeFilename(metadata.title);
+                }
+            }
+            catch (metaErr) {
+                sendEvent('progress', {
+                    step: 'warn',
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Gagal mengambil judul video: ${metaErr.message}. Menggunakan nama default.`
+                });
+            }
+            activeProcess = null;
+            if (isAborted)
+                break;
+            // Step 2: Download video
+            const rawVideoPath = path.join(runTempDir, `temp_video_${i}.mp4`);
+            sendEvent('progress', {
+                step: 'download_video',
+                percent: 0,
+                completed,
+                total,
+                message: `[${videoNum}/${total}] Mengunduh video: "${videoTitle}"...`
+            });
+            try {
+                const downloadProcess = execa('yt-dlp', [
+                    '--newline',
+                    '--no-playlist',
+                    '--ffmpeg-location',
+                    ffmpegDir,
+                    '-f',
+                    'bv*[vcodec^=avc]+ba[ext=m4a]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best',
+                    '--merge-output-format',
+                    'mp4',
+                    '-o',
+                    rawVideoPath,
+                    videoUrl
+                ], {
+                    all: true,
+                    buffer: false,
+                    windowsHide: true,
+                    env
+                });
+                activeProcess = downloadProcess;
+                if (downloadProcess.all) {
+                    downloadProcess.all.setEncoding('utf8');
+                    downloadProcess.all.on('data', chunk => {
+                        const lines = String(chunk).split(/\r?\n/).filter(Boolean);
+                        for (const line of lines) {
+                            const match = line.match(/\[download]\s+(\d+(?:\.\d+)?)%/);
+                            if (match) {
+                                const percent = Number(match[1]);
+                                sendEvent('progress', {
+                                    step: 'download_video',
+                                    percent,
+                                    completed,
+                                    total,
+                                    message: `[${videoNum}/${total}] Unduh video ${progressBar(percent)}`
+                                });
+                            }
+                        }
+                    });
+                }
+                await downloadProcess;
+            }
+            catch (dlErr) {
+                sendEvent('progress', {
+                    step: 'error',
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Gagal mengunduh video: ${dlErr.message}. Pasangan dilewati.`
+                });
+                continue;
+            }
+            activeProcess = null;
+            if (isAborted)
+                break;
+            // Step 3: Mute video
+            const mutedVideoPath = path.join(runTempDir, `temp_video_muted_${i}.mp4`);
+            sendEvent('progress', {
+                step: 'mute_video',
+                completed,
+                total,
+                message: `[${videoNum}/${total}] Meringkas audio video asli (mute)...`
+            });
+            try {
+                const muteProcess = execa(ensureFfmpegPath(), [
+                    '-hide_banner',
+                    '-loglevel',
+                    'error',
+                    '-i',
+                    rawVideoPath,
+                    '-an',
+                    '-c:v',
+                    'copy',
+                    '-y',
+                    mutedVideoPath
+                ], { windowsHide: true });
+                activeProcess = muteProcess;
+                await muteProcess;
+            }
+            catch (muteErr) {
+                sendEvent('progress', {
+                    step: 'error',
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Gagal menonaktifkan suara video: ${muteErr.message}. Pasangan dilewati.`
+                });
+                continue;
+            }
+            activeProcess = null;
+            if (isAborted)
+                break;
+            // Step 4: Download music (MP3) if audioUrl is provided
+            let finalAudioPath = '';
+            if (audioUrl) {
+                finalAudioPath = path.join(runTempDir, `temp_audio_${i}.mp3`);
+                sendEvent('progress', {
+                    step: 'download_audio',
+                    percent: 0,
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Mengunduh musik pendukung...`
+                });
+                try {
+                    const audioProcess = execa('yt-dlp', [
+                        '--newline',
+                        '--no-playlist',
+                        '--ffmpeg-location',
+                        ffmpegDir,
+                        '-x',
+                        '--audio-format',
+                        'mp3',
+                        '--audio-quality',
+                        '0',
+                        '-o',
+                        finalAudioPath,
+                        audioUrl
+                    ], {
+                        all: true,
+                        buffer: false,
+                        windowsHide: true,
+                        env
+                    });
+                    activeProcess = audioProcess;
+                    if (audioProcess.all) {
+                        audioProcess.all.setEncoding('utf8');
+                        audioProcess.all.on('data', chunk => {
+                            const lines = String(chunk).split(/\r?\n/).filter(Boolean);
+                            for (const line of lines) {
+                                const match = line.match(/\[download]\s+(\d+(?:\.\d+)?)%/);
+                                if (match) {
+                                    const percent = Number(match[1]);
+                                    sendEvent('progress', {
+                                        step: 'download_audio',
+                                        percent,
+                                        completed,
+                                        total,
+                                        message: `[${videoNum}/${total}] Unduh musik ${progressBar(percent)}`
+                                    });
+                                }
+                            }
+                        });
+                    }
+                    await audioProcess;
+                }
+                catch (audErr) {
+                    sendEvent('progress', {
+                        step: 'error',
+                        completed,
+                        total,
+                        message: `[${videoNum}/${total}] Gagal mengunduh musik: ${audErr.message}. Menggunakan video tanpa suara baru.`
+                    });
+                    finalAudioPath = '';
+                }
+            }
+            activeProcess = null;
+            if (isAborted)
+                break;
+            // Step 5: Gabungkan muted video dengan audio (atau simpan muted video langsung jika tidak ada musik)
+            let finalOutputPath = path.join(outputDir, `${videoTitle}.mp4`);
+            let counter = 1;
+            while (fs.existsSync(finalOutputPath)) {
+                finalOutputPath = path.join(outputDir, `${videoTitle}_${counter}.mp4`);
+                counter++;
+            }
+            if (finalAudioPath && fs.existsSync(finalAudioPath)) {
+                sendEvent('progress', {
+                    step: 'merge',
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Menggabungkan video dengan musik...`
+                });
+                try {
+                    const mergeProcess = execa(ensureFfmpegPath(), [
+                        '-hide_banner',
+                        '-loglevel',
+                        'error',
+                        '-i',
+                        mutedVideoPath,
+                        '-i',
+                        finalAudioPath,
+                        '-map',
+                        '0:v:0',
+                        '-map',
+                        '1:a:0',
+                        '-c:v',
+                        'copy',
+                        '-c:a',
+                        'aac',
+                        '-shortest',
+                        '-y',
+                        finalOutputPath
+                    ], { windowsHide: true });
+                    activeProcess = mergeProcess;
+                    await mergeProcess;
+                }
+                catch (mergeErr) {
+                    sendEvent('progress', {
+                        step: 'error',
+                        completed,
+                        total,
+                        message: `[${videoNum}/${total}] Gagal menggabungkan musik ke video: ${mergeErr.message}. Menyimpan video bisu.`
+                    });
+                    // Fallback: save the muted video directly
+                    try {
+                        fs.copyFileSync(mutedVideoPath, finalOutputPath);
+                    }
+                    catch (copyErr) {
+                        console.error('Failed to copy muted video fallback:', copyErr);
+                    }
+                }
+            }
+            else {
+                // No music, just save muted video
+                sendEvent('progress', {
+                    step: 'save',
+                    completed,
+                    total,
+                    message: `[${videoNum}/${total}] Menyimpan video bisu...`
+                });
+                try {
+                    fs.copyFileSync(mutedVideoPath, finalOutputPath);
+                }
+                catch (copyErr) {
+                    sendEvent('progress', {
+                        step: 'error',
+                        completed,
+                        total,
+                        message: `[${videoNum}/${total}] Gagal menyimpan video bisu: ${copyErr.message}`
+                    });
+                    continue;
+                }
+            }
+            activeProcess = null;
+            completed++;
+            sendEvent('progress', {
+                step: 'success',
+                completed,
+                total,
+                message: `[${videoNum}/${total}] Berhasil memproses video: "${path.basename(finalOutputPath)}"`
+            });
+        }
+        // Cleanup temp dir
+        try {
+            fs.rmSync(runTempDir, { recursive: true, force: true });
+        }
+        catch { }
+        sendEvent('done', {
+            success: true,
+            completed,
+            total,
+            message: `Selesai! Berhasil memproses ${completed} dari ${total} video.`
+        });
+        isCleanFinished = true;
+    }
+    catch (err) {
+        console.error('[BAHAN-DOWNLOAD] Fatal:', err);
+        sendEvent('error', {
+            success: false,
+            error: err.message || 'Terjadi kesalahan sistem saat memproses.'
+        });
+    }
+    finally {
+        res.end();
     }
 });
 app.get('/tiktok', (req, res) => {
@@ -1843,12 +2229,12 @@ app.get('/api/ytbot/config', (req, res) => {
 });
 // Save config for one state
 app.post('/api/ytbot/config/save', (req, res) => {
-    const { stateFile, description, hashtags, scheduleDate, scheduleTime, intervalMinutes } = req.body;
+    const { stateFile, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, lastUploadDate, lastUploadTime } = req.body;
     if (!stateFile)
         return res.status(400).json({ error: 'stateFile diperlukan' });
     const data = loadYtbotData();
     if (!data.states[stateFile]) {
-        data.states[stateFile] = { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60 };
+        data.states[stateFile] = { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60, lastUploadDate: '', lastUploadTime: '' };
     }
     if (description !== undefined)
         data.states[stateFile].description = description;
@@ -1860,6 +2246,10 @@ app.post('/api/ytbot/config/save', (req, res) => {
         data.states[stateFile].scheduleTime = scheduleTime;
     if (intervalMinutes !== undefined)
         data.states[stateFile].intervalMinutes = intervalMinutes;
+    if (lastUploadDate !== undefined)
+        data.states[stateFile].lastUploadDate = lastUploadDate;
+    if (lastUploadTime !== undefined)
+        data.states[stateFile].lastUploadTime = lastUploadTime;
     saveYtbotData(data);
     res.json({ success: true });
 });
@@ -1930,7 +2320,8 @@ app.get('/api/ytbot/status', (req, res) => {
 // Stop
 app.post('/api/ytbot/stop', async (req, res) => {
     ytbotRunning = false;
-    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '' };
+    ytbotFullAutoRunning = false;
+    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
     ytbotBroadcastProgress();
     await stopUploader();
     ytbotLog('⛔ ===== YTBOT STOPPED =====');
@@ -1950,7 +2341,7 @@ async function ytbotRunState(stateFile) {
     const videoDir = getYtbotStateVideoDir(stateFile);
     const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
     const marksFile = path.join(videoDir, '.uploaded.json');
-    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: stateName };
+    ytbotProgress = { download: 0, split: 0, upload: 0, currentState: stateName, uploadedCount: 0, uploadTotal: 0 };
     ytbotBroadcastProgress();
     ytbotLog(`═══════════════════════════════════════`);
     ytbotLog(`🔑 Memproses state: ${stateName}`);
@@ -2083,6 +2474,8 @@ async function ytbotRunState(stateFile) {
         ytbotProgress.download = 100;
         ytbotProgress.split = 100;
         ytbotProgress.upload = 0;
+        ytbotProgress.uploadedCount = 0;
+        ytbotProgress.uploadTotal = batch.length;
         ytbotBroadcastProgress();
         ytbotLog(`📤 Upload batch: ${batch.length} video, schedule ${schedDate} ${schedTime} → ${endStr}`);
         // 4. Run upload using existing tiktok-uploader
@@ -2125,6 +2518,8 @@ async function ytbotRunState(stateFile) {
                 }
             }
             uploadedCount++;
+            ytbotProgress.uploadedCount = uploadedCount;
+            ytbotProgress.uploadTotal = batch.length;
             ytbotProgress.upload = Math.round((uploadedCount / batch.length) * 100);
             ytbotBroadcastProgress();
         };
@@ -2141,11 +2536,16 @@ async function ytbotRunState(stateFile) {
         const nextStart = new Date(nextStartMs);
         schedDate = `${nextStart.getFullYear()}-${String(nextStart.getMonth() + 1).padStart(2, '0')}-${String(nextStart.getDate()).padStart(2, '0')}`;
         schedTime = `${String(nextStart.getHours()).padStart(2, '0')}:${String(nextStart.getMinutes()).padStart(2, '0')}`;
+        const lastUpload = new Date(batchEndMs);
+        const lastUploadDate = `${lastUpload.getFullYear()}-${String(lastUpload.getMonth() + 1).padStart(2, '0')}-${String(lastUpload.getDate()).padStart(2, '0')}`;
+        const lastUploadTime = `${String(lastUpload.getHours()).padStart(2, '0')}:${String(lastUpload.getMinutes()).padStart(2, '0')}`;
         // Update config with new schedule for next loop
         const updData = loadYtbotData();
         if (updData.states[stateFile]) {
             updData.states[stateFile].scheduleDate = schedDate;
             updData.states[stateFile].scheduleTime = schedTime;
+            updData.states[stateFile].lastUploadDate = lastUploadDate;
+            updData.states[stateFile].lastUploadTime = lastUploadTime;
             saveYtbotData(updData);
         }
         ytbotLog(`⏭ Batch selanjutnya mulai: ${schedDate} ${schedTime}`);
@@ -2193,36 +2593,180 @@ app.post('/api/ytbot/schedule', async (req, res) => {
     }
     finally {
         ytbotRunning = false;
-        ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '' };
+        ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
         ytbotBroadcastProgress();
         ytbotLog('===== YTBOT FINISHED =====');
     }
 });
+function getYtbotStateNextTrigger(sf) {
+    const data = loadYtbotData();
+    const cfg = data.states[sf];
+    const stateName = sf.replace('tiktok-state-', '').replace('.json', '');
+    if (!cfg)
+        return { stateName, triggerTime: null, targetTime: null };
+    const lastDate = cfg.lastUploadDate;
+    const lastTime = cfg.lastUploadTime;
+    const intervalMin = cfg.intervalMinutes || 60;
+    if (!lastDate || !lastTime) {
+        const schedDate = cfg.scheduleDate;
+        const schedTime = cfg.scheduleTime;
+        if (!schedDate || !schedTime)
+            return { stateName, triggerTime: null, targetTime: null };
+        const nextUploadTime = new Date(`${schedDate}T${schedTime}:00`);
+        if (isNaN(nextUploadTime.getTime()))
+            return { stateName, triggerTime: null, targetTime: null };
+        const lastUploadTime = new Date(nextUploadTime.getTime() - intervalMin * 60000);
+        const triggerTime = new Date(lastUploadTime.getTime() - 5 * 3600000);
+        return { stateName, triggerTime, targetTime: nextUploadTime };
+    }
+    const lastUploadTime = new Date(`${lastDate}T${lastTime}:00`);
+    if (isNaN(lastUploadTime.getTime()))
+        return { stateName, triggerTime: null, targetTime: null };
+    const triggerTime = new Date(lastUploadTime.getTime() - 5 * 3600000);
+    const targetTime = new Date(lastUploadTime.getTime() + intervalMin * 60000);
+    return { stateName, triggerTime, targetTime };
+}
+function getYtbotStateLastUploadMs(sf) {
+    const data = loadYtbotData();
+    const cfg = data.states[sf];
+    if (!cfg)
+        return 0;
+    const lastDate = cfg.lastUploadDate;
+    const lastTime = cfg.lastUploadTime;
+    if (!lastDate || !lastTime) {
+        const schedDate = cfg.scheduleDate;
+        const schedTime = cfg.scheduleTime;
+        if (!schedDate || !schedTime)
+            return 0;
+        const nextUploadTime = new Date(`${schedDate}T${schedTime}:00`);
+        if (isNaN(nextUploadTime.getTime()))
+            return 0;
+        const intervalMin = cfg.intervalMinutes || 60;
+        return nextUploadTime.getTime() - intervalMin * 60000;
+    }
+    const lastUploadTime = new Date(`${lastDate}T${lastTime}:00`);
+    if (isNaN(lastUploadTime.getTime()))
+        return 0;
+    return lastUploadTime.getTime();
+}
+async function ytbotRunFullAuto(stateFiles) {
+    ytbotLog(`♾️ Memulai YTBot Full Auto standby loop untuk ${stateFiles.length} state...`);
+    sendWAMessage(`📢 [YTBot Full Auto] Mulai dengan Standard Scheduler (Interval mengikuti masing-masing state).`);
+    ytbotQueue = stateFiles.map(sf => {
+        const name = sf.replace('tiktok-state-', '').replace('.json', '');
+        return { stateName: name, stateFile: sf, videoCount: 0, scheduleStart: 'Standby', scheduleEnd: 'Standby', active: false };
+    });
+    ytbotBroadcastQueue();
+    while (ytbotFullAutoRunning) {
+        if (!ytbotFullAutoRunning)
+            break;
+        if (ytbotRunning) {
+            let slept = 0;
+            while (slept < 10000 && ytbotFullAutoRunning) {
+                await new Promise(r => setTimeout(r, 2000));
+                slept += 2000;
+            }
+            continue;
+        }
+        const now = new Date();
+        let triggeredStateFile = null;
+        let nextStateName = 'Tidak ada';
+        let nextScheduleTimeStr = 'Tidak ada';
+        let earliestTriggerTime = Infinity;
+        // Sort states so the one with the newest last upload is checked first
+        const sortedStates = [...stateFiles].sort((a, b) => getYtbotStateLastUploadMs(b) - getYtbotStateLastUploadMs(a));
+        for (const sf of sortedStates) {
+            const { triggerTime, targetTime, stateName } = getYtbotStateNextTrigger(sf);
+            if (!triggerTime)
+                continue;
+            const triggerTimeMs = triggerTime.getTime();
+            if (now.getTime() >= triggerTimeMs && !triggeredStateFile) {
+                triggeredStateFile = sf;
+            }
+            if (triggerTimeMs > now.getTime() && triggerTimeMs < earliestTriggerTime) {
+                earliestTriggerTime = triggerTimeMs;
+                nextStateName = stateName;
+                nextScheduleTimeStr = `${triggerTime.getFullYear()}-${String(triggerTime.getMonth() + 1).padStart(2, '0')}-${String(triggerTime.getDate()).padStart(2, '0')} ${String(triggerTime.getHours()).padStart(2, '0')}:${String(triggerTime.getMinutes()).padStart(2, '0')}`;
+            }
+        }
+        if (triggeredStateFile) {
+            const stateName = triggeredStateFile.replace('tiktok-state-', '').replace('.json', '');
+            ytbotLog(`🎯 [Full Auto] State terpicu: ${stateName}. Menyiapkan eksekusi...`);
+            ytbotQueue = ytbotQueue.map(q => ({ ...q, active: q.stateFile === triggeredStateFile }));
+            ytbotBroadcastQueue();
+            let futureNextStateName = 'Tidak ada';
+            let futureNextScheduleTimeStr = 'Tidak ada';
+            let futureEarliestTriggerTime = Infinity;
+            for (const sf of sortedStates) {
+                if (sf === triggeredStateFile)
+                    continue;
+                const { triggerTime, stateName } = getYtbotStateNextTrigger(sf);
+                if (triggerTime) {
+                    const triggerTimeMs = triggerTime.getTime();
+                    if (triggerTimeMs > now.getTime() && triggerTimeMs < futureEarliestTriggerTime) {
+                        futureEarliestTriggerTime = triggerTimeMs;
+                        futureNextStateName = stateName;
+                        futureNextScheduleTimeStr = `${triggerTime.getFullYear()}-${String(triggerTime.getMonth() + 1).padStart(2, '0')}-${String(triggerTime.getDate()).padStart(2, '0')} ${String(triggerTime.getHours()).padStart(2, '0')}:${String(triggerTime.getMinutes()).padStart(2, '0')}`;
+                    }
+                }
+            }
+            const { targetTime } = getYtbotStateNextTrigger(triggeredStateFile);
+            const startSchedStr = targetTime ? `${targetTime.getFullYear()}-${String(targetTime.getMonth() + 1).padStart(2, '0')}-${String(targetTime.getDate()).padStart(2, '0')} ${String(targetTime.getHours()).padStart(2, '0')}:${String(targetTime.getMinutes()).padStart(2, '0')}` : 'Tidak diketahui';
+            const lastUploadTime = new Date(targetTime ? targetTime.getTime() - (loadYtbotData().states[triggeredStateFile]?.intervalMinutes || 60) * 60000 : Date.now());
+            const lastUploadTimeStr = `${lastUploadTime.getFullYear()}-${String(lastUploadTime.getMonth() + 1).padStart(2, '0')}-${String(lastUploadTime.getDate()).padStart(2, '0')} ${String(lastUploadTime.getHours()).padStart(2, '0')}:${String(lastUploadTime.getMinutes()).padStart(2, '0')}`;
+            let waMsg = `🚀 [YTBot Full Auto] Mulai Penjadwalan Otomatis!\n`;
+            waMsg += `🔑 State: ${stateName}\n`;
+            waMsg += `📅 Upload Terakhir: ${lastUploadTimeStr}\n`;
+            waMsg += `⏰ Sched Target Start: ${startSchedStr}\n`;
+            waMsg += `⏭️ Antrian Selanjutnya: State ${futureNextStateName} pada ${futureNextScheduleTimeStr}`;
+            sendWAMessage(waMsg);
+            ytbotRunning = true;
+            try {
+                await ytbotRunState(triggeredStateFile);
+            }
+            catch (err) {
+                ytbotLog(`❌ [Full Auto] Gagal menjalankan penjadwalan: ${err.message}`);
+            }
+            finally {
+                ytbotRunning = false;
+                ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
+                ytbotBroadcastProgress();
+            }
+            ytbotQueue = ytbotQueue.map(q => ({ ...q, active: false }));
+            ytbotBroadcastQueue();
+        }
+        else {
+            let slept = 0;
+            while (slept < 10000 && ytbotFullAutoRunning) {
+                await new Promise(r => setTimeout(r, 2000));
+                slept += 2000;
+            }
+        }
+    }
+    ytbotLog('===== FULL AUTO STANDBY LOGIC STOPPED =====');
+}
 // Full auto all states
 app.post('/api/ytbot/full-auto', async (req, res) => {
-    if (ytbotRunning) {
+    if (ytbotRunning || ytbotFullAutoRunning) {
         return res.status(400).json({ success: false, error: 'YTBot sedang berjalan!' });
     }
     const { stateFiles } = req.body;
     if (!stateFiles || !Array.isArray(stateFiles) || stateFiles.length === 0) {
         return res.status(400).json({ error: 'stateFiles diperlukan' });
     }
-    ytbotRunning = true;
+    ytbotFullAutoRunning = true;
     ytbotQueue = [];
-    res.json({ success: true, message: 'Full Auto dimulai' });
+    res.json({ success: true, message: 'Full Auto Standby Mode dimulai' });
     try {
-        for (const sf of stateFiles) {
-            if (!ytbotRunning)
-                break;
-            await ytbotRunState(sf);
-        }
+        await ytbotRunFullAuto(stateFiles);
     }
     catch (e) {
-        ytbotLog(`❌ Fatal: ${e.message}`);
+        ytbotLog(`❌ Fatal Full Auto: ${e.message}`);
     }
     finally {
+        ytbotFullAutoRunning = false;
         ytbotRunning = false;
-        ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '' };
+        ytbotProgress = { download: 0, split: 0, upload: 0, currentState: '', uploadedCount: 0, uploadTotal: 0 };
         ytbotBroadcastProgress();
         ytbotLog('===== YTBOT FINISHED =====');
     }
@@ -4103,7 +4647,7 @@ async function grokbotRunFullAuto(stateFiles) {
     grokbotLog('===== FULL AUTO STANDBY LOGIC STOPPED =====');
 }
 app.post('/api/grokbot/full-auto', async (req, res) => {
-    if (grokbotRunning || infiniteGenRunning || grokbotFullAutoRunning)
+    if (grokbotRunning || grokbotFullAutoRunning)
         return res.status(400).json({ success: false, error: 'Grokbot sedang berjalan!' });
     const { stateFiles } = req.body;
     if (!stateFiles || !Array.isArray(stateFiles) || stateFiles.length === 0) {
