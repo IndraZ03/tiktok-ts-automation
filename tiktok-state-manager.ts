@@ -16,7 +16,12 @@ import multer from 'multer';
 import ffmpegPath from 'ffmpeg-static';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
-import { startWAPolling, notifyScheduleStarted, sendWAMessage, notifyScheduleFinished } from './whatsapp-service.js';
+import {
+  startWAPolling,
+  notifyScheduleStarted as originalNotifyScheduleStarted,
+  sendWAMessage as originalSendWAMessage,
+  notifyScheduleFinished as originalNotifyScheduleFinished
+} from './whatsapp-service.js';
 import {
   loadLeonardoData,
   saveLeonardoData,
@@ -37,7 +42,7 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = 5000;
 
-app.use(express.json());
+app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/bahan', express.static(path.join(__dirname, 'bahan')));
 
@@ -3739,10 +3744,13 @@ interface GrokbotData {
   states: Record<string, GrokbotStateConfig>;
   globalConfig?: {
     parallelBrowsers?: number;
+    headless?: boolean;
+    sendWhatsApp?: boolean;
     fullAuto?: {
       enableCustomScheduler?: boolean;
       customIntervalHours?: number;
       customUploadCount?: number;
+      headless?: boolean;
     };
   };
 }
@@ -3757,6 +3765,28 @@ function loadGrokbotData(): GrokbotData {
 
 function saveGrokbotData(data: GrokbotData) {
   fs.writeFileSync(GROKBOT_DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+// Wrapper functions for WhatsApp notifications based on global config
+function sendWAMessage(msg: string) {
+  const data = loadGrokbotData();
+  if (data.globalConfig?.sendWhatsApp !== false) {
+    originalSendWAMessage(msg);
+  }
+}
+
+function notifyScheduleStarted(sched: string, end: string, stateName: string) {
+  const data = loadGrokbotData();
+  if (data.globalConfig?.sendWhatsApp !== false) {
+    originalNotifyScheduleStarted(sched, end, stateName);
+  }
+}
+
+function notifyScheduleFinished(stateName: string, success: boolean, count: number, err?: string) {
+  const data = loadGrokbotData();
+  if (data.globalConfig?.sendWhatsApp !== false) {
+    originalNotifyScheduleFinished(stateName, success, count, err);
+  }
 }
 
 // Global state for Grokbot SSE & Orchestration
@@ -3866,7 +3896,7 @@ app.post('/api/grokbot/config/save', (req, res) => {
 });
 
 app.post('/api/grokbot/global-config/save', (req, res) => {
-  const { parallelBrowsers } = req.body;
+  const { parallelBrowsers, headless, sendWhatsApp } = req.body;
   const data = loadGrokbotData();
   if (!data.globalConfig) {
     data.globalConfig = {};
@@ -3874,12 +3904,18 @@ app.post('/api/grokbot/global-config/save', (req, res) => {
   if (parallelBrowsers !== undefined) {
     data.globalConfig.parallelBrowsers = Math.max(1, parseInt(parallelBrowsers) || 1);
   }
+  if (headless !== undefined) {
+    data.globalConfig.headless = !!headless;
+  }
+  if (sendWhatsApp !== undefined) {
+    data.globalConfig.sendWhatsApp = !!sendWhatsApp;
+  }
   saveGrokbotData(data);
   res.json({ success: true });
 });
 
 app.post('/api/grokbot/full-auto-settings/save', (req, res) => {
-  const { enableCustomScheduler, customIntervalHours, customUploadCount } = req.body;
+  const { enableCustomScheduler, customIntervalHours, customUploadCount, headless } = req.body;
   const data = loadGrokbotData();
   if (!data.globalConfig) {
     data.globalConfig = {};
@@ -3887,7 +3923,8 @@ app.post('/api/grokbot/full-auto-settings/save', (req, res) => {
   data.globalConfig.fullAuto = {
     enableCustomScheduler: !!enableCustomScheduler,
     customIntervalHours: Math.max(1, parseInt(customIntervalHours) || 10),
-    customUploadCount: Math.max(1, parseInt(customUploadCount) || 5)
+    customUploadCount: Math.max(1, parseInt(customUploadCount) || 5),
+    headless: headless !== false
   };
   saveGrokbotData(data);
   res.json({ success: true });
@@ -3986,7 +4023,7 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
     resolution: cfg.resolution || '720p',
     duration: cfg.duration || '10s',
     aspectRatio: cfg.aspectRatio || '9:16',
-    headless: cfg.headless !== false,
+    headless: data.globalConfig?.headless !== false,
     downloadDir: GROK_DOWNLOAD_DIR,
     customDownloadDir: stateDownloadDir,
     totalVideos: totalRawToGenerate,
@@ -4074,7 +4111,7 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
     resolution: cfg.resolution || '720p',
     duration: cfg.duration || '10s',
     aspectRatio: cfg.aspectRatio || '9:16',
-    headless: cfg.headless !== false,
+    headless: data.globalConfig?.headless !== false,
     downloadDir: GROK_DOWNLOAD_DIR,
     customDownloadDir: cadanganDir,
     totalVideos: 60, // 30 merged videos require 60 raw
@@ -4266,7 +4303,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
       productTitle: cfg.productTitle || '',
       productDescription: cfg.productDescription || '',
       skipSwitches: false,
-      headless: cfg.headless !== false,
+      headless: data.globalConfig?.headless !== false,
       scheduleDate: schedDate,
       scheduleTime: schedTime,
       intervalMinutes: intervalMin,
@@ -4561,7 +4598,7 @@ async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<v
           resolution: cfg.resolution || '720p',
           duration: cfg.duration || '10s',
           aspectRatio: cfg.aspectRatio || '9:16',
-          headless: cfg.headless !== false, // Headless mode sesuai config
+          headless: data.globalConfig?.headless !== false, // Headless mode sesuai config
           downloadDir: GROK_DOWNLOAD_DIR,
           customDownloadDir: stateDownloadDir,
           totalVideos: totalRawToGenerate,
@@ -4685,7 +4722,7 @@ async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<v
         productTitle: cfg.productTitle || '',
         productDescription: cfg.productDescription || '',
         skipSwitches: false, // jangan centang skip switches
-        headless: cfg.headless !== false, // headless mode sesuai config
+        headless: data.globalConfig?.headless !== false, // headless mode sesuai config
         scheduleDate: schedDate,
         scheduleTime: schedTime,
         intervalMinutes: intervalMin,
@@ -5166,7 +5203,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       promptFile: cfg.promptFile, promptDir: PROMPT_DIR,
       mode: cfg.mode || 'Video', resolution: cfg.resolution || '720p',
       duration: cfg.duration || '10s', aspectRatio: cfg.aspectRatio || '9:16',
-      headless: cfg.headless !== false, downloadDir: GROK_DOWNLOAD_DIR,
+      headless: loadGrokbotData().globalConfig?.headless !== false, downloadDir: GROK_DOWNLOAD_DIR,
       customDownloadDir: stateDownloadDir, totalVideos: totalRawToGenerate,
       merge: mergeEnabled, audioFolder: cfg.audioFolder || '',
       parallelBrowsers: loadGrokbotData().globalConfig?.parallelBrowsers || 1,
@@ -5223,7 +5260,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       promptFile: cfg.promptFile, promptDir: PROMPT_DIR,
       mode: cfg.mode || 'Video', resolution: cfg.resolution || '720p',
       duration: cfg.duration || '10s', aspectRatio: cfg.aspectRatio || '9:16',
-      headless: cfg.headless !== false, downloadDir: GROK_DOWNLOAD_DIR,
+      headless: loadGrokbotData().globalConfig?.headless !== false, downloadDir: GROK_DOWNLOAD_DIR,
       customDownloadDir: cadanganDir, totalVideos: totalRawToGenerate,
       merge: mergeEnabled, audioFolder: cfg.audioFolder || '',
       parallelBrowsers: loadGrokbotData().globalConfig?.parallelBrowsers || 1,

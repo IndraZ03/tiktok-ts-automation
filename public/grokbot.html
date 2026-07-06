@@ -582,6 +582,51 @@
 
       <!-- TAB 5: FULL AUTO CONFIG -->
       <div id="tab-fullauto" class="tab-content hidden space-y-6">
+        
+        <!-- CARD 1: Setelan Browser & Umum -->
+        <div class="glass-panel rounded-3xl p-8 border border-gray-800/80 shadow-2xl relative overflow-hidden">
+          <div class="absolute top-0 right-0 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl -z-10"></div>
+          
+          <h2 class="text-2xl font-extrabold mb-2 bg-gradient-to-r from-purple-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2">
+            <span>🖥️</span> Setelan Browser & Umum
+          </h2>
+          <p class="text-gray-400 text-sm mb-6">Pengaturan browser global untuk semua proses pembuatan video (generate) dan penjadwalan (upload).</p>
+
+          <div class="space-y-6 max-w-xl">
+            <!-- Headless Mode Global Option -->
+            <div class="bg-gray-900/60 p-5 rounded-2xl border border-gray-800/80 flex items-center justify-between gap-4">
+              <div>
+                <label class="font-bold text-gray-200 block mb-1">🖥️ Aktifkan Headless Mode secara Default</label>
+                <span class="text-xs text-gray-400">Jalankan browser di latar belakang tanpa tampilan grafis (default aktif, direkomendasikan untuk VPS/Server).</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input id="chk-globalHeadless" type="checkbox" class="sr-only peer" checked>
+                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+              </label>
+            </div>
+
+            <!-- WhatsApp Notification Option -->
+            <div class="bg-gray-900/60 p-5 rounded-2xl border border-gray-800/80 flex items-center justify-between gap-4">
+              <div>
+                <label class="font-bold text-gray-200 block mb-1">🔔 Kirim Notifikasi WhatsApp</label>
+                <span class="text-xs text-gray-400">Kirim notifikasi otomatis ke WhatsApp saat proses generate atau penjadwalan dimulai/selesai.</span>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input id="chk-globalSendWhatsApp" type="checkbox" class="sr-only peer" checked>
+                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+              </label>
+            </div>
+
+            <div class="pt-4 border-t border-gray-800 flex justify-end">
+              <button onclick="saveGlobalGeneralSettings()" 
+                      class="bg-gradient-to-r from-purple-600 to-indigo-500 hover:from-purple-500 hover:to-indigo-400 text-white px-8 py-3.5 rounded-2xl text-sm font-extrabold transition shadow-lg shadow-indigo-500/20 active:scale-95 flex items-center gap-2">
+                💾 Simpan Setelan Browser & Umum
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- CARD 2: Pengaturan Khusus Full Auto -->
         <div class="glass-panel rounded-3xl p-8 border border-gray-800/80 shadow-2xl relative overflow-hidden">
           <div class="absolute top-0 right-0 w-80 h-80 bg-pink-500/5 rounded-full blur-3xl -z-10"></div>
           
@@ -712,6 +757,7 @@
         const res = await fetch('/api/grokbot/config');
         const data = await res.json();
         stateConfigs = data.states || {};
+        globalConfig = data.globalConfig || {};
         
         // Restore selected states from localStorage if any
         const savedSelection = localStorage.getItem('grokbot_selected_states');
@@ -970,14 +1016,7 @@
                     </div>
                   </div>
 
-                  <!-- Headless Mode Option -->
-                  <div class="mt-2">
-                    <label class="flex items-center gap-2 cursor-pointer">
-                      <input id="chk-headless-${fn}" type="checkbox" class="w-4 h-4 accent-pink-500"
-                             ${cfg.headless !== false ? 'checked' : ''}>
-                      <span class="text-xs text-gray-300 font-semibold">🖥 Headless Mode (tanpa browser)</span>
-                    </label>
-                  </div>
+
 
                   <!-- Three Uploads Per Hour Option -->
                   <div class="mt-2">
@@ -1125,7 +1164,6 @@
         productNameRadio: document.getElementById(`productNameRadio-${fn}`)?.value || '',
         productTitle: document.getElementById(`productTitle-${fn}`)?.value || '',
         productDescription: document.getElementById(`productDescription-${fn}`)?.value || '',
-        headless: document.getElementById(`chk-headless-${fn}`)?.checked || false,
         threeUploadsPerHour: document.getElementById(`chk-threeUploads-${fn}`)?.checked || false,
         lastUploadDate: document.getElementById(`lastUploadDate-${fn}`)?.value || '',
         lastUploadTime: document.getElementById(`lastUploadTime-${fn}`)?.value || '',
@@ -1837,13 +1875,51 @@
       const chk = document.getElementById('chk-enableCustomScheduler');
       const interval = document.getElementById('num-customIntervalHours');
       const count = document.getElementById('num-customUploadCount');
+      const headless = document.getElementById('chk-globalHeadless');
+      const sendWhatsApp = document.getElementById('chk-globalSendWhatsApp');
       
-      if (chk && interval && count) {
+      if (chk && interval && count && headless && sendWhatsApp) {
         const fa = globalConfig.fullAuto || {};
         chk.checked = !!fa.enableCustomScheduler;
         interval.value = fa.customIntervalHours !== undefined ? fa.customIntervalHours : 10;
         count.value = fa.customUploadCount !== undefined ? fa.customUploadCount : 5;
+        headless.checked = globalConfig.headless !== false;
+        sendWhatsApp.checked = globalConfig.sendWhatsApp !== false;
         toggleCustomFields();
+      }
+    }
+
+    async function saveGlobalGeneralSettings() {
+      const headless = document.getElementById('chk-globalHeadless').checked;
+      const sendWhatsApp = document.getElementById('chk-globalSendWhatsApp').checked;
+      try {
+        const res = await fetch('/api/grokbot/global-config/save', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            headless: headless,
+            sendWhatsApp: sendWhatsApp
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          addLog('💾 Setelan browser & notifikasi WhatsApp berhasil disimpan.');
+          if (!globalConfig) globalConfig = {};
+          globalConfig.headless = headless;
+          globalConfig.sendWhatsApp = sendWhatsApp;
+          
+          // Keep drawer toggles in sync!
+          const drawerHl = document.getElementById('drawer-global-headless');
+          if (drawerHl) drawerHl.checked = headless;
+          const drawerWa = document.getElementById('drawer-global-send-whatsapp');
+          if (drawerWa) drawerWa.checked = sendWhatsApp;
+
+          alert('Setelan browser & umum berhasil disimpan!');
+        } else {
+          alert('Gagal menyimpan setelan.');
+        }
+      } catch (e) {
+        addLog('❌ Error: ' + e.message);
       }
     }
 
@@ -2115,7 +2191,16 @@
               platform: platform
             })
           });
-          const data = await res.json();
+          
+          let data;
+          const contentType = res.headers.get("content-type");
+          if (contentType && contentType.indexOf("application/json") !== -1) {
+            data = await res.json();
+          } else {
+            const textError = await res.text();
+            throw new Error(textError || `Server error (Status: ${res.status})`);
+          }
+
           if (data.success) {
             alert('✅ ' + data.message);
             addLog(`✓ Berhasil mengimpor sesi ${platform} baru: ${data.filename}`);
@@ -2512,6 +2597,14 @@
             const pb = data.globalConfig?.parallelBrowsers || 1;
             document.getElementById('global-parallel-browsers').value = pb;
             updateParallelBrowsersLabel(pb);
+            
+            const hl = data.globalConfig?.headless !== false;
+            const drawerHl = document.getElementById('drawer-global-headless');
+            if (drawerHl) drawerHl.checked = hl;
+            
+            const wa = data.globalConfig?.sendWhatsApp !== false;
+            const drawerWa = document.getElementById('drawer-global-send-whatsapp');
+            if (drawerWa) drawerWa.checked = wa;
           });
         sidebar.classList.remove('translate-x-full');
         overlay.classList.remove('hidden');
@@ -2525,15 +2618,29 @@
     }
     async function saveGlobalConfig() {
       const parallelBrowsers = parseInt(document.getElementById('global-parallel-browsers').value) || 1;
+      const drawerHl = document.getElementById('drawer-global-headless');
+      const headless = drawerHl ? drawerHl.checked : true;
+      const drawerWa = document.getElementById('drawer-global-send-whatsapp');
+      const sendWhatsApp = drawerWa ? drawerWa.checked : true;
       try {
         const res = await fetch('/api/grokbot/global-config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ parallelBrowsers })
+          body: JSON.stringify({ parallelBrowsers, headless, sendWhatsApp })
         });
         const data = await res.json();
         if (data.success) {
-          addLog(`💾 Setelan browser paralel disimpan: ${parallelBrowsers} browser`);
+          addLog(`💾 Setelan browser paralel disimpan: ${parallelBrowsers} browser (headless: ${headless}, wa: ${sendWhatsApp})`);
+          if (!globalConfig) globalConfig = {};
+          globalConfig.parallelBrowsers = parallelBrowsers;
+          globalConfig.headless = headless;
+          globalConfig.sendWhatsApp = sendWhatsApp;
+          
+          const tabHl = document.getElementById('chk-globalHeadless');
+          if (tabHl) tabHl.checked = headless;
+          const tabWa = document.getElementById('chk-globalSendWhatsApp');
+          if (tabWa) tabWa.checked = sendWhatsApp;
+          
           toggleSettingsSidebar();
         } else {
           alert('Gagal menyimpan setelan global.');
@@ -2566,6 +2673,26 @@
           <small class="text-gray-500 text-[10px] mt-2 block leading-relaxed">
             * Peringatan: Semakin banyak browser, semakin tinggi beban CPU/RAM. Sangat direkomendasikan 1-3 browser tergantung spesifikasi VPS/PC.
           </small>
+        </div>
+        
+        <!-- Global Headless Option in Drawer -->
+        <div class="pt-4 border-t border-gray-900">
+          <label class="text-xs text-gray-400 font-extrabold uppercase tracking-wider block mb-2">Mode Tampilan Browser</label>
+          <p class="text-gray-505 text-[11px] mb-3 leading-relaxed">Jalankan browser di latar belakang (headless) atau tampilkan antarmuka grafis browser.</p>
+          <label class="flex items-center gap-2 cursor-pointer bg-gray-900/40 border border-gray-900 p-3.5 rounded-xl hover:bg-gray-900/60 transition">
+            <input id="drawer-global-headless" type="checkbox" class="w-4 h-4 accent-purple-500 rounded" checked>
+            <span class="text-xs text-gray-300 font-bold">🖥️ Headless Mode (tanpa browser)</span>
+          </label>
+        </div>
+        
+        <!-- Global WhatsApp Notification Option in Drawer -->
+        <div class="pt-4 border-t border-gray-800">
+          <label class="text-xs text-gray-400 font-extrabold uppercase tracking-wider block mb-2">Notifikasi WhatsApp</label>
+          <p class="text-gray-505 text-[11px] mb-3 leading-relaxed">Kirim laporan progress dan status generate/upload ke nomor WhatsApp yang terhubung.</p>
+          <label class="flex items-center gap-2 cursor-pointer bg-gray-900/40 border border-gray-900 p-3.5 rounded-xl hover:bg-gray-900/60 transition">
+            <input id="drawer-global-send-whatsapp" type="checkbox" class="w-4 h-4 accent-purple-500 rounded" checked>
+            <span class="text-xs text-gray-300 font-bold">🔔 Kirim Notifikasi WhatsApp</span>
+          </label>
         </div>
       </div>
     </div>
