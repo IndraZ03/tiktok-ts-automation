@@ -381,6 +381,12 @@
                     📋 Paste Cookies
                   </button>
                 </div>
+                <div class="mt-2">
+                  <button onclick="triggerImportTab('tiktok')" class="w-full bg-pink-900/40 hover:bg-pink-900/60 border border-pink-700/50 text-pink-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
+                    📥 Impor Sesi (.json)
+                  </button>
+                  <input type="file" id="tiktok-import-file" class="hidden" accept=".json" onchange="handleImportFile('tiktok')">
+                </div>
 
                 <div id="tiktok-paste-container-tab" class="hidden p-4 bg-pink-950/20 rounded-xl border border-pink-900/30 space-y-3">
                   <textarea id="tiktok-cookies-text-tab" rows="6" placeholder='Paste JSON cookies di sini...' 
@@ -426,6 +432,12 @@
                   <button onclick="togglePasteAreaTab('grok')" class="bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 py-3 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
                     📋 Paste Cookies
                   </button>
+                </div>
+                <div class="mt-2">
+                  <button onclick="triggerImportTab('grok')" class="w-full bg-blue-900/40 hover:bg-blue-900/60 border border-blue-700/50 text-blue-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
+                    📥 Impor Sesi (.json)
+                  </button>
+                  <input type="file" id="grok-import-file" class="hidden" accept=".json" onchange="handleImportFile('grok')">
                 </div>
 
                 <div id="grok-paste-container-tab" class="hidden p-4 bg-blue-950/20 rounded-xl border border-blue-900/30 space-y-3">
@@ -1905,6 +1917,9 @@
                 <button onclick="startLoginWithStateTab('${s.filename}', '${platform}')" class="${btnTheme} text-white text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1 shadow">
                   🌐 Buka
                 </button>
+                <button onclick="exportStateTab('${s.filename}', '${platform}')" class="bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800/40 text-emerald-300 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
+                  📤 Ekspor
+                </button>
                 <button onclick="copyCodegenTab('${s.filename}', '${platform}')" class="bg-purple-950/60 hover:bg-purple-900 border border-purple-800/40 text-purple-300 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
                   📋 Command
                 </button>
@@ -2052,6 +2067,70 @@
       } catch (err) {
         alert('❌ Error: ' + err.message);
       }
+    }
+
+    function exportStateTab(filename, platform) {
+      window.location.href = `/api/states/export?filename=${encodeURIComponent(filename)}&platform=${encodeURIComponent(platform)}`;
+    }
+
+    function triggerImportTab(platform) {
+      const fileInput = document.getElementById(`${platform}-import-file`);
+      if (fileInput) {
+        fileInput.value = '';
+        fileInput.click();
+      }
+    }
+
+    function handleImportFile(platform) {
+      const fileInput = document.getElementById(`${platform}-import-file`);
+      if (!fileInput || !fileInput.files || fileInput.files.length === 0) return;
+
+      const file = fileInput.files[0];
+      const reader = new FileReader();
+
+      reader.onload = async function(e) {
+        const text = e.target.result;
+        let parsedJSON;
+        try {
+          parsedJSON = JSON.parse(text);
+        } catch (err) {
+          alert('❌ File yang diunggah bukan format JSON yang valid!');
+          return;
+        }
+
+        const defaultName = file.name.replace(/\.json$/i, '').replace(/^(tiktok|grok|facebook)-state-/, '');
+        const sessionName = prompt(`Masukkan nama sesi untuk impor:`, defaultName);
+        if (!sessionName || !sessionName.trim()) {
+          alert('❌ Impor dibatalkan. Nama sesi harus diisi!');
+          return;
+        }
+
+        try {
+          const res = await fetch('/api/states/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              filename: sessionName.trim(),
+              content: parsedJSON,
+              platform: platform
+            })
+          });
+          const data = await res.json();
+          if (data.success) {
+            alert('✅ ' + data.message);
+            addLog(`✓ Berhasil mengimpor sesi ${platform} baru: ${data.filename}`);
+            loadStatesTab(platform);
+            preloadOptions();
+            loadTikTokStates();
+          } else {
+            alert('❌ ' + data.error);
+          }
+        } catch (err) {
+          alert('❌ Gagal melakukan impor: ' + err.message);
+        }
+      };
+
+      reader.readAsText(file);
     }
 
     // ═══════════════════════════════════════

@@ -3523,6 +3523,64 @@ app.post('/api/delete-state', (req, res) => {
   }
 });
 
+// Export state for platform
+app.get('/api/states/export', (req, res) => {
+  const { filename, platform = 'tiktok' } = req.query;
+  if (!filename || typeof filename !== 'string') {
+    return res.status(400).json({ error: 'Filename diperlukan' });
+  }
+
+  const dir = platform === 'grok' ? GROK_STATES_DIR : (platform === 'facebook' ? FB_STATES_DIR : STATES_DIR);
+  const filepath = path.join(dir, filename);
+
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ error: 'File state tidak ditemukan' });
+  }
+
+  res.download(filepath, filename);
+});
+
+// Import state for platform
+app.post('/api/states/import', (req, res) => {
+  const { filename, content, platform = 'tiktok' } = req.body;
+  if (!filename || !content) {
+    return res.status(400).json({ error: 'Filename dan content diperlukan' });
+  }
+
+  const dir = platform === 'grok' ? GROK_STATES_DIR : (platform === 'facebook' ? FB_STATES_DIR : STATES_DIR);
+  const prefix = platform === 'grok' ? 'grok-state-' : (platform === 'facebook' ? 'facebook-state-' : 'tiktok-state-');
+
+  // Sanitize filename: remove prefix if present, extract the raw name, then build the proper filename
+  let rawName = filename.replace(/\.json$/i, '');
+  if (rawName.startsWith(prefix)) {
+    rawName = rawName.substring(prefix.length);
+  }
+
+  const cleanName = rawName.replace(/[<>:"/\\|?*\x00-\x1F\s]+/g, '_').trim();
+  if (!cleanName) {
+    return res.status(400).json({ error: 'Nama sesi tidak valid' });
+  }
+
+  const targetFilename = `${prefix}${cleanName}.json`;
+  const filepath = path.join(dir, targetFilename);
+
+  try {
+    let parsedContent = typeof content === 'string' ? JSON.parse(content) : content;
+    if (!parsedContent || (!Array.isArray(parsedContent.cookies) && !Array.isArray(parsedContent))) {
+      return res.status(400).json({ error: 'Format JSON tidak valid. Harus berisi cookies array atau storageState Playwright.' });
+    }
+
+    if (Array.isArray(parsedContent)) {
+      parsedContent = { cookies: parsedContent, origins: [] };
+    }
+
+    fs.writeFileSync(filepath, JSON.stringify(parsedContent, null, 2));
+    res.json({ success: true, message: `Sesi berhasil diimpor sebagai ${targetFilename}`, filename: targetFilename });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Gagal memproses/menyimpan file sesi: ' + err.message });
+  }
+});
+
 // Add FB link
 app.post('/api/fb/links/add', (req, res) => {
   const { stateFile, link } = req.body;
