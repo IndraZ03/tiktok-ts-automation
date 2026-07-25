@@ -63,8 +63,11 @@
         <div class="flex gap-3">
           <input id="tiktok-state-name" type="text" placeholder="Masukkan nama state (contoh: akun1)" 
                  class="flex-1 border border-gray-300 rounded-2xl px-5 py-4 focus:outline-none focus:border-pink-500 text-lg">
-          <button onclick="startLogin('tiktok')" class="bg-pink-600 hover:bg-pink-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
-            🚀 Buka Browser
+          <button onclick="startLogin('tiktok')" class="bg-pink-600 hover:bg-pink-700 text-white px-6 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
+            🚀 Buka Playwright
+          </button>
+          <button onclick="startNativeChrome('tiktok')" class="bg-amber-600 hover:bg-amber-700 text-white px-6 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
+            💻 Chrome CMD
           </button>
         </div>
         
@@ -110,8 +113,11 @@
         <div class="flex gap-3">
           <input id="grok-state-name" type="text" placeholder="Masukkan nama state (contoh: grok_premium)" 
                  class="flex-1 bg-gray-800 border border-gray-700 rounded-2xl px-5 py-4 focus:outline-none focus:border-blue-500 text-lg text-white">
-          <button onclick="startLogin('grok')" class="bg-blue-600 hover:bg-blue-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
-            🚀 Buka Browser
+          <button onclick="startLogin('grok')" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
+            🚀 Buka Playwright
+          </button>
+          <button onclick="startNativeChrome('grok')" class="bg-amber-600 hover:bg-amber-700 text-white px-6 py-4 rounded-2xl font-semibold text-lg whitespace-nowrap transition-all duration-200 active:scale-95 shadow-md flex items-center gap-2">
+            💻 Chrome CMD
           </button>
         </div>
 
@@ -184,7 +190,10 @@
               ${badge}
               <div class="flex gap-2 mt-2">
                 <button onclick="startLoginWithState('${s.filename}', '${platform}')" class="${isGrok ? 'bg-blue-600 hover:bg-blue-700' : 'bg-pink-600 hover:bg-pink-700'} text-white text-sm px-4 py-2.5 rounded-2xl flex items-center gap-2">
-                  🌐 Buka Browser
+                  🌐 Buka Playwright
+                </button>
+                <button onclick="startNativeChrome('${platform}', '${s.filename}')" class="bg-amber-600 hover:bg-amber-700 text-white text-sm px-4 py-2.5 rounded-2xl flex items-center gap-2">
+                  💻 Chrome CMD
                 </button>
                 <button onclick="copyCodegenCommand('${s.filename}', '${platform}')" class="bg-violet-600 hover:bg-violet-700 text-white text-sm px-4 py-2.5 rounded-2xl flex items-center gap-2">
                   📋 Codegen
@@ -250,6 +259,31 @@
         alert(data.message);
       } else {
         alert('❌ ' + data.error);
+      }
+    }
+
+    async function startNativeChrome(platform, filename = '') {
+      let name = '';
+      if (!filename) {
+        const input = document.getElementById(`${platform}-state-name`);
+        name = input ? input.value.trim() : '';
+        if (!name) return alert('❌ Masukkan nama state dulu!');
+      }
+
+      try {
+        const res = await fetch('/api/start-native-chrome', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ filename, name, platform })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(data.message);
+        } else {
+          alert('❌ ' + data.error);
+        }
+      } catch (err) {
+        alert('❌ Terjadi kesalahan: ' + err.message);
       }
     }
 

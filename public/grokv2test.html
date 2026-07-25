@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Grok Imagine V2 Tester (/grokv2test)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --panel-bg: rgba(30, 41, 59, 0.7);
+      --panel-border: rgba(255, 255, 255, 0.1);
+      --accent-purple: #8b5cf6;
+      --accent-pink: #ec4899;
+      --accent-blue: #3b82f6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --input-bg: #1e293b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(139, 92, 246, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.15) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .header h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #a78bfa, #f472b6, #60a5fa);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--panel-border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 600;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #e2e8f0;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.2rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 500;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    select, input, textarea {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      padding: 0.75rem;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent-purple);
+      box-shadow: 0 0 0 2px rgba(139, 92, 246, 0.2);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 90px;
+    }
+
+    .row-3 {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 0.75rem;
+    }
+
+    .preview-box {
+      width: 100%;
+      height: 160px;
+      border: 2px dashed var(--panel-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.4);
+      overflow: hidden;
+      margin-top: 0.5rem;
+      position: relative;
+    }
+
+    .preview-box img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .preview-placeholder {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      text-align: center;
+    }
+
+    .btn-generate {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-purple), var(--accent-pink));
+      border: none;
+      border-radius: 10px;
+      padding: 1rem;
+      color: white;
+      font-weight: 600;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 4px 15px rgba(139, 92, 246, 0.4);
+      transition: transform 0.2s, opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+    }
+
+    .btn-generate:hover {
+      opacity: 0.95;
+      transform: translateY(-1px);
+    }
+
+    .btn-generate:disabled {
+      background: #475569;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .status-card {
+      margin-top: 1.5rem;
+      display: none;
+    }
+
+    .status-log {
+      background: #090d16;
+      border-radius: 8px;
+      padding: 0.75rem;
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: #38bdf8;
+      max-height: 150px;
+      overflow-y: auto;
+      margin-top: 0.5rem;
+    }
+
+    .video-container {
+      margin-top: 1rem;
+      border-radius: 12px;
+      overflow: hidden;
+      background: #000;
+      text-align: center;
+    }
+
+    video {
+      width: 100%;
+      max-height: 380px;
+      border-radius: 12px;
+    }
+
+    .btn-download {
+      display: inline-block;
+      margin-top: 0.75rem;
+      background: #10b981;
+      color: white;
+      text-decoration: none;
+      padding: 0.6rem 1.2rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .btn-download:hover {
+      background: #059669;
+    }
+
+    .spinner {
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top: 3px solid white;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>🚀 Grok Imagine V2 Tester (/grokv2test)</h1>
+    <p>Otomatisasi Generasi Video Grok secara Headless dengan Pilihan Bahan & Parameter Lengkap</p>
+  </div>
+
+  <div class="grid">
+    <!-- PANEL KIRI: FORM CONFIGURATION -->
+    <div class="card">
+      <div class="card-title">⚙️ Konfigurasi Inputs</div>
+
+      <!-- State Account -->
+      <div class="form-group">
+        <label for="stateSelect">1. Session Account (Grok State)</label>
+        <select id="stateSelect">
+          <option value="indra">indra (grok-state-indra.json)</option>
+        </select>
+      </div>
+
+      <!-- Folder & File Bahan Gambar -->
+      <div class="form-group">
+        <label>2. Bahan Gambar (Folder & File)</label>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+          <select id="bahanFolderSelect">
+            <option value="">-- Pilih Folder Bahan --</option>
+          </select>
+          <select id="bahanFileSelect" disabled>
+            <option value="">-- Pilih File Gambar --</option>
+          </select>
+        </div>
+        <div class="preview-box" id="imagePreviewBox">
+          <span class="preview-placeholder">Preview gambar bahan akan muncul di sini</span>
+        </div>
+      </div>
+
+      <!-- Prompt Selection -->
+      <div class="form-group">
+        <label for="promptFileSelect">3. Prompt File</label>
+        <select id="promptFileSelect">
+          <option value="">-- Pilih Prompt File atau Ketik Kustom --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="promptInput">Prompt Text</label>
+        <textarea id="promptInput" placeholder="Masukkan prompt deskripsi video..."></textarea>
+      </div>
+    </div>
+
+    <!-- PANEL KANAN: PARAMETER & HASIL GENERATE -->
+    <div class="card">
+      <div class="card-title">🎛️ Parameter Video & Action</div>
+
+      <div class="row-3">
+        <div class="form-group">
+          <label for="resSelect">Resolusi</label>
+          <select id="resSelect">
+            <option value="720p" selected>720p</option>
+            <option value="1080p">1080p</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="durSelect">Durasi</label>
+          <select id="durSelect">
+            <option value="5s" selected>5s</option>
+            <option value="10s">10s</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="aspectSelect">Aspect Ratio</label>
+          <select id="aspectSelect">
+            <option value="9:16" selected>9:16 (Portrait)</option>
+            <option value="16:9">16:9 (Landscape)</option>
+            <option value="1:1">1:1 (Square)</option>
+          </select>
+        </div>
+      </div>
+
+      <button id="btnGenerate" class="btn-generate">
+        <span>🎬 Generate Video via Grok V2</span>
+      </button>
+
+      <!-- STATUS LOG & PROGRESS -->
+      <div id="statusCard" class="status-card">
+        <label id="statusTitle">Status Generasi:</label>
+        <div class="status-log" id="statusLog">Menunggu instruksi...</div>
+      </div>
+
+      <!-- RESULT VIDEO PLAYER -->
+      <div id="resultCard" style="display: none; margin-top: 1.5rem;">
+        <div class="card-title" style="color: #4ade80;">✅ Hasil Video Tergenerate</div>
+        <div class="video-container">
+          <video id="videoPlayer" controls autoplay loop muted></video>
+        </div>
+        <div style="text-align: center;">
+          <a id="btnDownload" href="#" download class="btn-download">💾 Download File MP4</a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  let bahanDataMap = {};
+
+  async function loadInitialData() {
+    // Load States
+    try {
+      const res = await fetch('/api/states?platform=grok');
+      const states = await res.json();
+      const stateSelect = document.getElementById('stateSelect');
+      stateSelect.innerHTML = '';
+      if (states.length > 0) {
+        states.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.name;
+          opt.textContent = `${s.name} (${s.filename})`;
+          stateSelect.appendChild(opt);
+        });
+      } else {
+        stateSelect.innerHTML = '<option value="indra">indra (Default)</option>';
+      }
+    } catch (e) { console.error('Error loading states:', e); }
+
+    // Load Bahan Folders & Files
+    try {
+      const res = await fetch('/api/grokv2test/bahan');
+      const data = await res.json();
+      bahanDataMap = data.bahanMap || {};
+      const folderSelect = document.getElementById('bahanFolderSelect');
+      folderSelect.innerHTML = '<option value="">-- Tanpa Gambar (Text-to-Video) --</option>';
+      (data.folders || []).forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = f;
+        folderSelect.appendChild(opt);
+      });
+    } catch (e) { console.error('Error loading bahan:', e); }
+
+    // Load Prompt Files
+    try {
+      const res = await fetch('/api/grokv2test/prompts');
+      const data = await res.json();
+      const promptSelect = document.getElementById('promptFileSelect');
+      promptSelect.innerHTML = '<option value="">-- Pilih Prompt File atau Ketik Kustom --</option>';
+      (data.files || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        promptSelect.appendChild(opt);
+      });
+    } catch (e) { console.error('Error loading prompts:', e); }
+  }
+
+  // Handle Bahan Folder Selection
+  document.getElementById('bahanFolderSelect').addEventListener('change', (e) => {
+    const folder = e.target.value;
+    const fileSelect = document.getElementById('bahanFileSelect');
+    fileSelect.innerHTML = '<option value="">-- Pilih File Gambar --</option>';
+    
+    if (folder && bahanDataMap[folder]) {
+      fileSelect.disabled = false;
+      bahanDataMap[folder].forEach(img => {
+        const opt = document.createElement('option');
+        opt.value = img;
+        opt.textContent = img;
+        fileSelect.appendChild(opt);
+      });
+    } else {
+      fileSelect.disabled = true;
+      updateImagePreview('', '');
+    }
+  });
+
+  // Handle Bahan File Selection
+  document.getElementById('bahanFileSelect').addEventListener('change', (e) => {
+    const folder = document.getElementById('bahanFolderSelect').value;
+    const file = e.target.value;
+    updateImagePreview(folder, file);
+  });
+
+  function updateImagePreview(folder, file) {
+    const previewBox = document.getElementById('imagePreviewBox');
+    if (folder && file) {
+      previewBox.innerHTML = `<img src="/bahan/${folder}/${file}" alt="Preview">`;
+    } else {
+      previewBox.innerHTML = `<span class="preview-placeholder">Preview gambar bahan akan muncul di sini</span>`;
+    }
+  }
+
+  // Handle Prompt File Selection
+  document.getElementById('promptFileSelect').addEventListener('change', async (e) => {
+    const filename = e.target.value;
+    if (!filename) return;
+    try {
+      const res = await fetch(`/api/grokv2test/prompt-content/${filename}`);
+      const data = await res.json();
+      if (data.success && data.prompt) {
+        document.getElementById('promptInput').value = data.prompt;
+      }
+    } catch (err) { console.error('Error loading prompt content:', err); }
+  });
+
+  // Handle Generate Button
+  document.getElementById('btnGenerate').addEventListener('click', async () => {
+    const stateName = document.getElementById('stateSelect').value || 'indra';
+    const bahanFolder = document.getElementById('bahanFolderSelect').value;
+    const bahanFile = document.getElementById('bahanFileSelect').value;
+    const promptText = document.getElementById('promptInput').value;
+    const resolution = document.getElementById('resSelect').value;
+    const duration = document.getElementById('durSelect').value;
+    const aspectRatio = document.getElementById('aspectSelect').value;
+
+    if (!promptText || promptText.trim() === '') {
+      alert('Silakan masukkan prompt teks terlebih dahulu!');
+      return;
+    }
+
+    const btn = document.getElementById('btnGenerate');
+    const statusCard = document.getElementById('statusCard');
+    const statusLog = document.getElementById('statusLog');
+    const resultCard = document.getElementById('resultCard');
+
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner"></div> <span>Generating Video... (Mohon Tunggu)</span>`;
+    statusCard.style.display = 'block';
+    resultCard.style.display = 'none';
+
+    statusLog.textContent = `[${new Date().toLocaleTimeString()}] Memulai request generasi video ke Grok API Headless...\n`;
+
+    try {
+      const response = await fetch('/api/grokv2test/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          stateName,
+          promptText,
+          bahanFolder,
+          bahanFile,
+          resolution,
+          duration,
+          aspectRatio,
+          mode: 'Video'
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Terjadi kesalahan saat generate video');
+      }
+
+      statusLog.textContent += `[${new Date().toLocaleTimeString()}] ✅ Video berhasil di-generate dan tersimpan di: ${data.result.savePath}\n`;
+
+      // Show video result
+      const player = document.getElementById('videoPlayer');
+      const dlBtn = document.getElementById('btnDownload');
+      
+      player.src = data.result.downloadUrl;
+      dlBtn.href = data.result.downloadUrl;
+      dlBtn.setAttribute('download', data.result.filename);
+      
+      resultCard.style.display = 'block';
+    } catch (err) {
+      statusLog.textContent += `[${new Date().toLocaleTimeString()}] ❌ Error: ${err.message}\n`;
+      alert(`Gagal generate video: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<span>🎬 Generate Video via Grok V2</span>`;
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', loadInitialData);
+</script>
+
+</body>
+</html>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Grok to TikTok Bot</title>
+  <title>Grok V2 to TikTok Bot</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -194,7 +194,7 @@
     <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
       <div>
         <h1 class="text-4xl font-extrabold bg-gradient-to-r from-purple-400 via-fuchsia-500 to-pink-500 bg-clip-text text-transparent tracking-tight">
-          🤖 Grok to TikTok Bot
+          🤖 Grok V2 to TikTok Bot
         </h1>
         <p class="text-gray-400 text-sm mt-1">Generate stok video otomatis dengan Grok AI dan upload terjadwal ke TikTok</p>
       </div>
@@ -206,7 +206,7 @@
           ⚙️ Setelan Browser
         </button>
         <a href="/tiktok" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">TikTok Uploader →</a>
-        <a href="/grokbotv2" class="text-xs px-3.5 py-2 rounded-xl bg-purple-900/50 hover:bg-purple-800 border border-purple-700 text-purple-300 hover:text-white transition font-medium">Grokbot V2 →</a>
+        <a href="/grokbot" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">Grokbot V1 →</a>
         <a href="/grok" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">Grok Imagine →</a>
         <a href="/namaproduk" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-emerald-400 hover:text-emerald-300 transition font-medium">Tokopedia Extractor →</a>
         <a href="/" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">← State Manager</a>
@@ -822,13 +822,13 @@
 
     async function loadConfigs() {
       try {
-        const res = await fetch('/api/grokbot/config');
+        const res = await fetch('/api/grokbotv2/config');
         const data = await res.json();
         stateConfigs = data.states || {};
         globalConfig = data.globalConfig || {};
         
         // Restore selected states from localStorage if any
-        const savedSelection = localStorage.getItem('grokbot_selected_states');
+        const savedSelection = localStorage.getItem('grokbotv2_selected_states');
         if (savedSelection) {
           try {
             const parsed = JSON.parse(savedSelection);
@@ -878,7 +878,7 @@
       } else {
         selectedStates.push(filename);
       }
-      localStorage.setItem('grokbot_selected_states', JSON.stringify(selectedStates));
+      localStorage.setItem('grokbotv2_selected_states', JSON.stringify(selectedStates));
       renderDropdown();
       renderAllCards();
     }
@@ -1197,7 +1197,7 @@
 
     async function loadStateStock(fn) {
       try {
-        const res = await fetch(`/api/grokbot/stock?state=${encodeURIComponent(fn)}`);
+        const res = await fetch(`/api/grokbotv2/stock?state=${encodeURIComponent(fn)}`);
         const stock = await res.json();
         const badgeRaw = document.getElementById(`stock-raw-${fn}`);
         const badgeUtama = document.getElementById(`stock-utama-${fn}`);
@@ -1238,7 +1238,7 @@
       };
 
       try {
-        const res = await fetch('/api/grokbot/config/save', {
+        const res = await fetch('/api/grokbotv2/config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(cfg)
@@ -1266,7 +1266,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbot/generate-utama', {
+        const res = await fetch('/api/grokbotv2/generate-utama', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1289,7 +1289,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbot/generate-cadangan', {
+        const res = await fetch('/api/grokbotv2/generate-cadangan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1308,7 +1308,7 @@
     async function importCadangan(fn) {
       addLog(`⚙️ Memulai Impor Cadangan ke Stok Utama untuk state: ${getStateName(fn)}...`);
       try {
-        const res = await fetch('/api/grokbot/import-cadangan', {
+        const res = await fetch('/api/grokbotv2/import-cadangan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1332,7 +1332,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbot/schedule', {
+        const res = await fetch('/api/grokbotv2/schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1355,7 +1355,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbot/schedule-only', {
+        const res = await fetch('/api/grokbotv2/schedule-only', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1378,7 +1378,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbot/merge-only', {
+        const res = await fetch('/api/grokbotv2/merge-only', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1407,7 +1407,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbot/full-auto', {
+        const res = await fetch('/api/grokbotv2/full-auto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFiles: selectedStates })
@@ -1438,7 +1438,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbot/infinite-generate', {
+        const res = await fetch('/api/grokbotv2/infinite-generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFiles: selectedStates })
@@ -1458,7 +1458,7 @@
 
     async function stopBot() {
       addLog('⛔ Mengirim perintah stop ke Grokbot...');
-      await fetch('/api/grokbot/stop', { method: 'POST' });
+      await fetch('/api/grokbotv2/stop', { method: 'POST' });
       setBusy(false);
     }
 
@@ -1540,7 +1540,7 @@
     async function stopFullAuto() {
       addLog('⛔ Mengirim perintah hentikan Full Auto...');
       try {
-        const res = await fetch('/api/grokbot/stop-full-auto', { method: 'POST' });
+        const res = await fetch('/api/grokbotv2/stop-full-auto', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           addLog('✓ Full Auto standby loop berhasil dihentikan.');
@@ -1554,7 +1554,7 @@
     async function stopInfiniteGenerate() {
       addLog('⛔ Mengirim perintah hentikan Infinite Generate...');
       try {
-        const res = await fetch('/api/grokbot/stop-infinite-generate', { method: 'POST' });
+        const res = await fetch('/api/grokbotv2/stop-infinite-generate', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           addLog('✓ Infinite Generate loop berhasil dihentikan.');
@@ -1570,14 +1570,14 @@
     // ═══════════════════════════════════════
     function connectSSE() {
       if (eventSource) eventSource.close();
-      eventSource = new EventSource('/api/grokbot/logs');
+      eventSource = new EventSource('/api/grokbotv2/logs');
       eventSource.onmessage = (e) => {
         addLog(e.data);
         
         if (e.data.includes('GROKBOT FINISHED') || e.data.includes('GROKBOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED') || e.data.includes('INFINITE GENERATE FINISHED') || e.data.includes('FULL AUTO FINISHED')) {
           currentWaitInfo = null;
           setBusy(false);
-          fetch('/api/grokbot/status').then(res => res.json()).then(data => updateControlsUI(data));
+          fetch('/api/grokbotv2/status').then(res => res.json()).then(data => updateControlsUI(data));
           loadConfigs().then(() => {
             selectedStates.forEach(fn => loadStateStock(fn));
           });
@@ -1587,7 +1587,7 @@
           try {
             const waitStr = e.data.substring('[INFINITE_WAIT]:'.length);
             currentWaitInfo = waitStr === 'null' ? null : JSON.parse(waitStr);
-            fetch('/api/grokbot/status').then(res => res.json()).then(data => {
+            fetch('/api/grokbotv2/status').then(res => res.json()).then(data => {
               updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning);
               if (data.queue) renderQueue(data.queue);
             });
@@ -1618,7 +1618,7 @@
     // ═══════════════════════════════════════
     async function pollStatus() {
       try {
-        const res = await fetch('/api/grokbot/status');
+        const res = await fetch('/api/grokbotv2/status');
         const data = await res.json();
         currentWaitInfo = data.infiniteGenWaitInfo;
         if (data.globalConfig) {
@@ -1963,7 +1963,7 @@
       const headless = document.getElementById('chk-globalHeadless').checked;
       const sendWhatsApp = document.getElementById('chk-globalSendWhatsApp').checked;
       try {
-        const res = await fetch('/api/grokbot/global-config/save', {
+        const res = await fetch('/api/grokbotv2/global-config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -1999,7 +1999,7 @@
       const count = parseInt(document.getElementById('num-customUploadCount').value) || 5;
 
       try {
-        const res = await fetch('/api/grokbot/full-auto-settings/save', {
+        const res = await fetch('/api/grokbotv2/full-auto-settings/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2883,7 +2883,7 @@
       const sidebar = document.getElementById('settings-sidebar');
       const overlay = document.getElementById('settings-sidebar-overlay');
       if (sidebar.classList.contains('translate-x-full')) {
-        fetch('/api/grokbot/config')
+        fetch('/api/grokbotv2/config')
           .then(res => res.json())
           .then(data => {
             const pb = data.globalConfig?.parallelBrowsers || 1;
@@ -2915,7 +2915,7 @@
       const drawerWa = document.getElementById('drawer-global-send-whatsapp');
       const sendWhatsApp = drawerWa ? drawerWa.checked : true;
       try {
-        const res = await fetch('/api/grokbot/global-config/save', {
+        const res = await fetch('/api/grokbotv2/global-config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ parallelBrowsers, headless, sendWhatsApp })
