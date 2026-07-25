@@ -25,6 +25,7 @@
     };
 
     const STATE = window.__GROK_AUTO;
+    setTimeout(clickGetStartedIfPresent, 1000);
 
     // ── Helpers ──
     const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -89,12 +90,28 @@
         return true;
     }
 
+    async function clickGetStartedIfPresent() {
+        const getStartedBtn = document.querySelector('button[data-slot="button"]') || 
+                              Array.from(document.querySelectorAll('button')).find(b => {
+                                  const txt = (b.textContent || b.innerText || '').trim().toLowerCase();
+                                  return txt === 'get started' || txt === 'mulai';
+                              });
+        if (getStartedBtn && isVisible(getStartedBtn)) {
+            log('🚀 Get Started button found! Clicking...');
+            simulateClick(getStartedBtn);
+            await sleep(1500);
+            return true;
+        }
+        return false;
+    }
+
     // ═══════════════════════════════════════════════════════════════
     //  NAVIGATE TO /imagine
     // ═══════════════════════════════════════════════════════════════
     async function ensureImaginePage() {
         if (location.pathname.includes('/imagine') && !location.pathname.includes('/imagine/')) {
             log('✅ Already on /imagine');
+            await clickGetStartedIfPresent();
             return true;
         }
         log('🌐 Navigating to /imagine...');
@@ -104,11 +121,13 @@
             await sleep(2000);
             if (location.pathname.includes('/imagine')) {
                 log('✅ Navigated to /imagine via link');
+                await clickGetStartedIfPresent();
                 return true;
             }
         }
         location.href = 'https://grok.com/imagine';
         await sleep(3000);
+        await clickGetStartedIfPresent();
         return location.pathname.includes('/imagine');
     }
 
@@ -195,8 +214,10 @@
                 }
                 const buttons = group.querySelectorAll('button[role="radio"]');
                 for (const btn of buttons) {
-                    const txt = (btn.textContent || '').trim();
-                    if (txt === optionText || txt.includes(optionText)) {
+                    const txt = (btn.textContent || '').trim().toLowerCase();
+                    const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    const target = optionText.toLowerCase();
+                    if (txt === target || txt.includes(target) || aria === target || aria.includes(target)) {
                         const alreadyChecked = btn.getAttribute('aria-checked') === 'true';
                         if (alreadyChecked) {
                             log(`✅ "${optionText}" already selected`);
@@ -326,7 +347,10 @@
             log(`⚠️ Could not select ${genMode} mode via label, trying fallback...`);
             for (const rg of $$('div[role="radiogroup"]')) {
                 for (const btn of rg.querySelectorAll('button[role="radio"]')) {
-                    if ((btn.textContent || '').trim() === genMode) {
+                    const txt = (btn.textContent || '').trim().toLowerCase();
+                    const aria = (btn.getAttribute('aria-label') || '').toLowerCase();
+                    const target = genMode.toLowerCase();
+                    if (txt === target || txt.includes(target) || aria === target || aria.includes(target)) {
                         simulateClick(btn);
                         await sleep(400);
                         log(`✅ ${genMode} mode selected (fallback)`);
@@ -634,15 +658,194 @@
         return null;
     }
 
+    let isFetchingResetTime = false;
+
+    async function _fetchGrokResetTime() {
+        try {
+            const res = await fetch('https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/grpc-web+proto',
+                    'X-Grpc-Web': '1'
+                },
+                body: new Uint8Array([0, 0, 0, 0, 0])
+            });
+            if (!res.ok) return null;
+            const arrayBuffer = await res.arrayBuffer();
+            const bytes = new Uint8Array(arrayBuffer);
+            
+            let timestamps = [];
+            for (let i = 0; i < bytes.length - 4; i++) {
+                let result = 0n;
+                let shift = 0n;
+                let len = 0;
+                for (let j = 0; j < 5; j++) {
+                    if (i + j >= bytes.length) break;
+                    let b = bytes[i + j];
+                    result |= BigInt(b & 0x7f) << shift;
+                    len++;
+                    if (!(b & 0x80)) {
+                        const num = Number(result);
+                        if (num >= 1700000000 && num <= 1900000000) {
+                            timestamps.push({ value: num, index: i, len: len });
+                        }
+                        break;
+                    }
+                    shift += 7n;
+                }
+            }
+            
+            if (timestamps.length > 0) {
+                const uniqueSecs = Array.from(new Set(timestamps.map(t => t.value))).sort((a, b) => a - b);
+                const targetSecs = uniqueSecs[uniqueSecs.length - 1]; 
+                if (targetSecs) {
+                    const date = new Date(targetSecs * 1000);
+                    const days = ['Min', 'Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab'];
+                    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+                    const dayName = days[date.getDay()];
+                    const dateNum = date.getDate();
+                    const monthName = months[date.getMonth()];
+                    const hours = String(date.getHours()).padStart(2, '0');
+                    const mins = String(date.getMinutes()).padStart(2, '0');
+                    return `${dayName}, ${dateNum} ${monthName} pukul ${hours}.${mins}`;
+                }
+            }
+        } catch (e) {
+            console.error('Failed to fetch/parse Grok reset time:', e);
+        }
+        return null;
+    }
+
+    function _parseResetTimeString(txt) {
+        // English: "Available again at 10:29" / "available again at 10.29 AM"
+        const mEn = txt.match(/available again at\s+([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm))?)/i);
+        if (mEn) {
+            STATE.availableAt = mEn[1].trim();
+            return true;
+        }
+        
+        // Indonesian: "Tersedia kembali pada 10.29" / "Tersedia kembali pada 10:29"
+        const mId = txt.match(/tersedia kembali\s+(?:pada|pukul)?\s*([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm|WIB|WITA|WIT))?)/i);
+        if (mId) {
+            STATE.availableAt = mId[1].trim();
+            return true;
+        }
+        
+        // Loose regex match for "Mengatur ulang Rab, 8 pukul 14.31" or "Resets Wed, 8 at 14:31"
+        const mLoose = txt.match(/(?:mengatur ulang|resets)\s*(?:pada|at|on)?[:\s,.-]+((?:(?:[A-Za-z]{3,}\s*,?\s*)?(?:\d{1,2}\s*[A-Za-z]*\s*)?(?:pukul|at|on|pada|\s)+)?\d{1,2}[:.]\d{2}(?:\s*(?:AM|PM|am|pm))?)/i);
+        if (mLoose) {
+            STATE.availableAt = mLoose[1].trim();
+            return true;
+        }
+
+        // Fallback: substring extraction
+        const lower = txt.toLowerCase();
+        let idx = lower.indexOf('mengatur ulang');
+        if (idx !== -1) {
+            let val = txt.substring(idx + 14).trim();
+            val = val.replace(/^[:\s,.-]+/, '');
+            val = val.replace(/^(?:pada|at|on)\b/i, '').trim();
+            val = val.replace(/^[:\s,.-]+/, '');
+            let parts = val.split(/[!?]|\.(?=\s|$)/);
+            val = parts[0].trim();
+            if (val) {
+                STATE.availableAt = val;
+                return true;
+            }
+        }
+        idx = lower.indexOf('resets');
+        if (idx !== -1) {
+            let val = txt.substring(idx + 6).trim();
+            val = val.replace(/^[:\s,.-]+/, '');
+            val = val.replace(/^(?:pada|at|on)\b/i, '').trim();
+            val = val.replace(/^[:\s,.-]+/, '');
+            let parts = val.split(/[!?]|\.(?=\s|$)/);
+            val = parts[0].trim();
+            if (val) {
+                STATE.availableAt = val;
+                return true;
+            }
+        }
+        return false;
+    }
+
+    async function _clickAndDetectResetTime() {
+        log('🎯 Starting UI-based reset time detection (clicking gauge button)...');
+        const gaugeBtn = document.querySelector('button[aria-label*="credits used"]');
+        if (!gaugeBtn) {
+            log('⚠️ Gauge button not found in DOM');
+            return null;
+        }
+        
+        try {
+            // Click the gauge button to open popover
+            simulateClick(gaugeBtn);
+            log('🎯 Gauge button clicked, waiting for popover...');
+            
+            // Poll for the popover/dialog to appear (max 3 seconds)
+            let resetText = '';
+            for (let i = 0; i < 15; i++) {
+                await sleep(200);
+                const popoverElements = document.querySelectorAll('[role="dialog"] *, [data-side] *, [data-radix-popper-content-wrapper] *');
+                for (const el of popoverElements) {
+                    const t = el.textContent || '';
+                    if (t.includes('Mengatur ulang') || t.includes('Resets') || t.includes('Atur ulang')) {
+                        resetText = t.trim();
+                        break;
+                    }
+                }
+                if (resetText) break;
+            }
+            
+            // Close the popover by pressing escape
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+            
+            if (resetText) {
+                log(`🎯 Reset text found in popover: "${resetText}"`);
+                let val = resetText.replace(/^(?:Mengatur ulang|Atur ulang|Resets)[:\s,.-]+(?:pada\s+)?/i, '').trim();
+                let parts = val.split(/[!?]|\.(?=\s|$)/);
+                val = parts[0].trim();
+                if (val) {
+                    return val;
+                }
+            } else {
+                log('⚠️ Reset text not found in popover');
+            }
+        } catch (e) {
+            log(`⚠️ Error in UI-based detection: ${e.message}`);
+        }
+        return null;
+    }
+
     function _isRateLimitReached() {
         let reached = false;
-        const toasts = document.querySelectorAll('li[data-sonner-toast][data-type="error"]');
-        for (const toast of toasts) {
-            const text = (toast.textContent || '').toLowerCase();
-            if (text.includes('rate limit') || text.includes('supergrok') ||
-                text.includes('batas permintaan') || text.includes('batas request')) {
-                reached = true;
-                break;
+        
+        // 0. Check for exhausted toast or specific warning elements
+        const exhausted = document.querySelector('.usage-pool-exhausted-toast');
+        if (exhausted && isVisible(exhausted)) {
+            reached = true;
+        }
+        
+        const gaugeBtn = document.querySelector('button[aria-label*="credits used"]');
+        if (gaugeBtn && isVisible(gaugeBtn)) {
+            reached = true;
+        }
+
+        if (!reached && (document.body.innerText || '').includes('batas mingguan Anda')) {
+            reached = true;
+        }
+
+        if (!reached) {
+            const toasts = document.querySelectorAll('li[data-sonner-toast][data-type="error"]');
+            for (const toast of toasts) {
+                const text = (toast.textContent || '').toLowerCase();
+                if (text.includes('rate limit') || text.includes('supergrok') ||
+                    text.includes('batas permintaan') || text.includes('batas request') ||
+                    text.includes('weekly limit') || text.includes('batas mingguan') ||
+                    text.includes('mengatur ulang') || text.includes('resets')) {
+                    reached = true;
+                    break;
+                }
             }
         }
         if (!reached) {
@@ -652,7 +855,9 @@
                 if ((t.includes('rate limit') && t.includes('reached')) ||
                     (t.includes('upgrade') && t.includes('supergrok')) ||
                     (t.includes('batas permintaan') && t.includes('tercapai')) ||
-                    (t.includes('batas request') && t.includes('tercapai'))) {
+                    (t.includes('batas request') && t.includes('tercapai')) ||
+                    t.includes('weekly limit') || t.includes('batas mingguan') ||
+                    t.includes('mengatur ulang') || t.includes('resets')) {
                     if (isVisible(s) || (s.closest('li[data-sonner-toast]'))) {
                         reached = true;
                         break;
@@ -661,22 +866,42 @@
             }
         }
         if (reached) {
-            // Deteksi "Available again at XX.XX" (English) or "Tersedia kembali pada XX.XX" (Indonesian)
-            const allElements = document.querySelectorAll('li[data-sonner-toast] *, span, div');
-            for (const el of allElements) {
-                const txt = (el.textContent || '');
-                // English: "Available again at 10:29" / "available again at 10.29 AM"
-                const mEn = txt.match(/available again at\s+([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm))?)/i);
-                if (mEn) {
-                    STATE.availableAt = mEn[1].trim();
-                    break;
+            const allElements = document.querySelectorAll('li[data-sonner-toast], li[data-sonner-toast] *, span, div, p, li');
+            const lines = (document.body.innerText || '').split('\n').map(l => l.trim()).filter(Boolean);
+            
+            // Loop through lines first
+            for (const txt of lines) {
+                if (_parseResetTimeString(txt)) break;
+            }
+            
+            // Loop through elements if still not found
+            if (!STATE.availableAt) {
+                for (const el of allElements) {
+                    const txt = (el.textContent || '');
+                    if (_parseResetTimeString(txt)) break;
                 }
-                // Indonesian: "Tersedia kembali pada 10.29" / "Tersedia kembali pada 10:29"
-                const mId = txt.match(/tersedia kembali\s+(?:pada|pukul)?\s*([0-9]{1,2}(?:[:.][0-9]{2})?(?:\s*(?:AM|PM|am|pm|WIB|WITA|WIT))?)/i);
-                if (mId) {
-                    STATE.availableAt = mId[1].trim();
-                    break;
-                }
+            }
+            
+            // UI click and detect + API background fetch fallback
+            if (!STATE.availableAt && !isFetchingResetTime) {
+                isFetchingResetTime = true;
+                _clickAndDetectResetTime().then(time => {
+                    if (time) {
+                        STATE.availableAt = time;
+                        isFetchingResetTime = false;
+                    } else {
+                        _fetchGrokResetTime().then(apiTime => {
+                            if (apiTime) {
+                                STATE.availableAt = apiTime;
+                            }
+                            isFetchingResetTime = false;
+                        }).catch(() => {
+                            isFetchingResetTime = false;
+                        });
+                    }
+                }).catch(() => {
+                    isFetchingResetTime = false;
+                });
             }
         }
         return reached;
@@ -1095,6 +1320,7 @@
         STATE.message = 'Starting...';
 
         try {
+            await clickGetStartedIfPresent();
             // Step 1: Navigate to /imagine
             if (!await ensureImaginePage()) {
                 await sleep(3000);
@@ -1240,6 +1466,7 @@
             STATE.videoUrl = null;
             STATE.error = null;
 
+            await clickGetStartedIfPresent();
             await sleep(1000);
 
             // Configure video settings FIRST (before image upload!)

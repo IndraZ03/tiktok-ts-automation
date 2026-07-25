@@ -1,0 +1,56 @@
+{
+  "states": {
+    "tiktok-state-dracin.ceo.candu.json": {
+      "grokState": "grok-state-indra.json",
+      "promptFile": "ginosel.json",
+      "bahanFolder": "leonardo",
+      "mode": "Video",
+      "resolution": "720p",
+      "duration": "10s",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "ginosel",
+      "description": "",
+      "hashtags": "",
+      "scheduleDate": "2026-07-25",
+      "scheduleTime": "11:03",
+      "intervalMinutes": 60,
+      "addProduct": false,
+      "productNameRadio": "",
+      "productTitle": "",
+      "productDescription": "",
+      "headless": true,
+      "threeUploadsPerHour": false,
+      "lastUploadDate": "",
+      "lastUploadTime": ""
+    },
+    "tiktok-state-herbalily.json": {
+      "grokState": "grok-state-groknya indra.json",
+      "promptFile": "ginosel.json",
+      "bahanFolder": "herbalily",
+      "mode": "Video",
+      "resolution": "720p",
+      "duration": "10s",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "ginosel",
+      "description": "Suplemen ginosel sirup, untuk tetap aktif tanpa keluhan Neuropati Botol",
+      "hashtags": "neuropati, ginosel, suplemen",
+      "scheduleDate": "2026-07-26",
+      "scheduleTime": "00:00",
+      "intervalMinutes": 60,
+      "addProduct": true,
+      "productNameRadio": "Suplemen ginosel sirup, untuk tetap aktif tanpa keluhan Neuropati Botol",
+      "productTitle": "BELI DISINI SEBELUM KEHABISAN",
+      "productDescription": "",
+      "headless": true,
+      "threeUploadsPerHour": false,
+      "lastUploadDate": "",
+      "lastUploadTime": ""
+    }
+  },
+  "globalConfig": {
+    "headless": true,
+    "sendWhatsApp": false
+  }
+}

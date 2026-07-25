@@ -1,0 +1,57 @@
+KETIKA KLIK GENERATE MUNUCL GET REQUEST :
+GET /rest/assets/91c6c93b-6cae-4784-994b-4732e0fd76c0 HTTP/2
+Host: grok.com
+Cookie: i18nextLng=en; _gcl_au=1.1.676304110.1784850532; _twpid=tw.1784850531963.53166386242064007; grok_device_id=b97aa6a8-3951-468a-aa42-0e9f4063cb6b; i18nextLng=id; __stripe_mid=c80d51ab-9c3c-4ca0-b717-2a182801ba37109652; sso-rw=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uX2lkIjoiZjViZThiZjUtODc0Yy00MTM3LWIxMTktMzYyZmZiODMzYmM5In0.Yi7p8pJ3rybO6Fm0wecOZiHXNELNe9ixRSGcW0fpgXI; sso=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uX2lkIjoiZjViZThiZjUtODc0Yy00MTM3LWIxMTktMzYyZmZiODMzYmM5In0.Yi7p8pJ3rybO6Fm0wecOZiHXNELNe9ixRSGcW0fpgXI; OptanonAlertBoxClosed=2026-07-23T23:51:39.916Z; OptanonConsent=isGpcEnabled=0&datestamp=Fri+Jul+24+2026+07%3A08%3A56+GMT%2B0700+(Western+Indonesia+Time)&version=202603.1.0&browserGpcFlag=0&isDntEnabled=0&isIABGlobal=false&hosts=&consentId=d805eded-4357-4c59-8d3a-15ed7ede624a&interactionCount=2&isAnonUser=0&prevHadToken=0&landingPath=NotLandingPage&groups=C0001%3A1%2CC0004%3A0%2CC0002%3A0&crTime=1784850700576&AwaitingReconsent=false&intType=3&geolocation=ID%3BKI; x-userid=d805eded-4357-4c59-8d3a-15ed7ede624a; mp_ea93da913ddb66b6372b89d97b1029ac_mixpanel=%7B%22distinct_id%22%3A%22d805eded-4357-4c59-8d3a-15ed7ede624a%22%2C%22%24device_id%22%3A%229fc10f60-47ba-414c-9ecb-a77e3ffe277d%22%2C%22%24search_engine%22%3A%22google%22%2C%22%24initial_referrer%22%3A%22https%3A%2F%2Fwww.google.com%2F%22%2C%22%24initial_referring_domain%22%3A%22www.google.com%22%2C%22__mps%22%3A%7B%7D%2C%22__mpso%22%3A%7B%7D%2C%22__mpus%22%3A%7B%7D%2C%22__mpa%22%3A%7B%7D%2C%22__mpu%22%3A%7B%7D%2C%22__mpr%22%3A%5B%5D%2C%22__mpap%22%3A%5B%5D%2C%22%24user_id%22%3A%22d805eded-4357-4c59-8d3a-15ed7ede624a%22%7D; cf_clearance=kmCv_.IdJrzWfetGsoCwW6k2HBykmf3FrNa6TNB.ZHU-1784902940-1.2.1.1-dOE2nKx2bQ0HNiKNR0OeS_gHPsao4cjsaYNiOVISQfQnW8cyZ9czQZfAnRXGY3ODlx8o49YOpgiCGut1xgtGjI6_A6.h3uO3ubYEqgxXRNd4P.LCD17nUaOFOJpm7rUHRwc4RHGeI5nRqX2PZABoDVVDa85SQ0j1MLzs8XOhhvJ3yGlILaSeGtzolAIOcgUMSGAOvSJ3rWUPAPZs3IxPTtHZyKZy3MYPY_c3owXoP72llNFk1CbFLBy.qwBhsd.VMoIC_w6CqrSKOCYgrUr8jDVndRaJhTZWK7MINWHXJESeixpvpcliePPvIjFG8hoXdH1IbpUtvEDjdxnhrrbJwA; __stripe_sid=e10ffa42-aa7c-491f-b3a0-29d9bed958883087d2; __cf_bm=CZieJLljlhO.fceP0esyW9fGE4YwcANPvdqi1Gst_7w-1784904079.3795376-1.0.1.1-qIFXyaGKRLYjcbujIiQmkMR9YWGFk9XCvQpCkb0I2G0Jqj_NyVL8xVbcNZ6WdAfBonW801YECRKOEP3wSjOTxhWIBO.Qiiq8zZBWqHLv5OtBi8H5jMRCp1FVMytEkkQO
+X-Xai-Request-Id: aed531fc-bc7f-47c6-ab79-ab23e32fc9b7
+Sec-Ch-Ua-Platform: "Windows"
+Accept-Language: en-US,en;q=0.9
+Sec-Ch-Ua: "Not;A=Brand";v="8", "Chromium";v="150"
+Sec-Ch-Ua-Mobile: ?0
+Baggage: sentry-environment=production,sentry-release=72e82fc9d2ccaec0e5ecebe9432bfe3035792a64,sentry-public_key=b311e0f2690c81f25e2c4cf6d4f7ce1c,sentry-trace_id=6b972e5c3ead4664ba4f9140fc5ea4d9,sentry-org_id=4508179396558848,sentry-transaction=%2F%3Aslug*%3F,sentry-sampled=false,sentry-sample_rand=0.47220585052720565,sentry-sample_rate=0
+Sentry-Trace: 6b972e5c3ead4664ba4f9140fc5ea4d9-b39065f20394d23d-0
+Traceparent: 00-26bbc333895aa79c0ebb428c673e1f2d-0a009ebf67d176e7-00
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+X-Statsig-Id: jFnyv89usdzISiojoqbWY2bXt6xr/wVdtfmplZbxglOc3Oe7TxFIXxEmDTK3ge5wtteamIoc+TxFRV+mKThW6afrNxdijw
+Accept: */*
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: https://grok.com/imagine
+Accept-Encoding: gzip, deflate, br
+Priority: u=1, i
+
+RESPONSE DARI GET :
+HTTP/2 200 OK
+Date: Fri, 24 Jul 2026 14:42:25 GMT
+Content-Type: application/json
+Vary: Origin
+Vary: origin, access-control-request-method, access-control-request-headers
+X-Trace-Id: 26bbc333895aa79c0ebb428c673e1f2d
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+Speculation-Rules: "/cdn-cgi/speculation"
+Cf-Cache-Status: DYNAMIC
+Server: cloudflare
+Cf-Ray: a203b0feafc0fd81-SIN
+Alt-Svc: h3=":443"; ma=86400
+
+{"assetId":"91c6c93b-6cae-4784-994b-4732e0fd76c0", "mimeType":"image/jpeg", "name":"ChatGPT Image Jul 6, 2026, 02_56_50 PM.png", "sizeBytes":2097949, "createTime":"2026-07-23T15:31:35.330Z", "lastUseTime":"2026-07-23T23:51:35.307Z", "summary":"", "previewImageKey":"", "key":"users/d805eded-4357-4c59-8d3a-15ed7ede624a/91c6c93b-6cae-4784-994b-4732e0fd76c0/content", "auxKeys":{"image_edit_is_root_user_uploaded":"true", "r_rated":"false", "thumbhash":"WigGDAJXA75HxWWYmLsvT7AgJg=="}, "responseId":"019f9164-446c-74a2-8a0d-0761555ea027", "isDeleted":false, "fileSource":"IMAGINE_SELF_UPLOAD_FILE_SOURCE", "rootAssetId":"91c6c93b-6cae-4784-994b-4732e0fd76c0", "sourceConversationId":"019f9164-445e-7ac0-aeb1-48c0c9ecba35", "isModelGenerated":false, "updateTime":"2026-07-23T23:51:35.307Z", "isLatest":true, "inlineStatus":"DEFAULT_ARTIFACT_INLINE_STATUS", "isRootAssetCreatedByModel":false, "rootAssetSourceConversationId":"019f9164-445e-7ac0-aeb1-48c0c9ecba35", "sharedWithTeam":false, "sharedWithUserIds":[], "isPublic":false, "thumbhash":"WigGDAJXA75HxWWYmLsvT7AgJg==", "ownerUserId":"d805eded-4357-4c59-8d3a-15ed7ede624a"}
+
+SELANG LAMA SETELAH ITU DAPAT INI HASIL :
+
+GET /users/d805eded-4357-4c59-8d3a-15ed7ede624a/generated/70f98d67-cebf-4a51-8fca-bbc62d62a3d4/generated_video.mp4?cache=1 HTTP/2
+Host: assets.grok.com
+Cookie: _gcl_au=1.1.676304110.1784850532; _twpid=tw.1784850531963.53166386242064007; grok_device_id=b97aa6a8-3951-468a-aa42-0e9f4063cb6b; i18nextLng=id; __stripe_mid=c80d51ab-9c3c-4ca0-b717-2a182801ba37109652; sso-rw=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uX2lkIjoiZjViZThiZjUtODc0Yy00MTM3LWIxMTktMzYyZmZiODMzYmM5In0.Yi7p8pJ3rybO6Fm0wecOZiHXNELNe9ixRSGcW0fpgXI; sso=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzZXNzaW9uX2lkIjoiZjViZThiZjUtODc0Yy00MTM3LWIxMTktMzYyZmZiODMzYmM5In0.Yi7p8pJ3rybO6Fm0wecOZiHXNELNe9ixRSGcW0fpgXI; OptanonAlertBoxClosed=2026-07-23T23:51:39.916Z; OptanonConsent=isGpcEnabled=0&datestamp=Fri+Jul+24+2026+07%3A08%3A56+GMT%2B0700+(Western+Indonesia+Time)&version=202603.1.0&browserGpcFlag=0&isDntEnabled=0&isIABGlobal=false&hosts=&consentId=d805eded-4357-4c59-8d3a-15ed7ede624a&interactionCount=2&isAnonUser=0&prevHadToken=0&landingPath=NotLandingPage&groups=C0001%3A1%2CC0004%3A0%2CC0002%3A0&crTime=1784850700576&AwaitingReconsent=false&intType=3&geolocation=ID%3BKI; x-userid=d805eded-4357-4c59-8d3a-15ed7ede624a; mp_ea93da913ddb66b6372b89d97b1029ac_mixpanel=%7B%22distinct_id%22%3A%22d805eded-4357-4c59-8d3a-15ed7ede624a%22%2C%22%24device_id%22%3A%229fc10f60-47ba-414c-9ecb-a77e3ffe277d%22%2C%22%24search_engine%22%3A%22google%22%2C%22%24initial_referrer%22%3A%22https%3A%2F%2Fwww.google.com%2F%22%2C%22%24initial_referring_domain%22%3A%22www.google.com%22%2C%22__mps%22%3A%7B%7D%2C%22__mpso%22%3A%7B%7D%2C%22__mpus%22%3A%7B%7D%2C%22__mpa%22%3A%7B%7D%2C%22__mpu%22%3A%7B%7D%2C%22__mpr%22%3A%5B%5D%2C%22__mpap%22%3A%5B%5D%2C%22%24user_id%22%3A%22d805eded-4357-4c59-8d3a-15ed7ede624a%22%7D; cf_clearance=kmCv_.IdJrzWfetGsoCwW6k2HBykmf3FrNa6TNB.ZHU-1784902940-1.2.1.1-dOE2nKx2bQ0HNiKNR0OeS_gHPsao4cjsaYNiOVISQfQnW8cyZ9czQZfAnRXGY3ODlx8o49YOpgiCGut1xgtGjI6_A6.h3uO3ubYEqgxXRNd4P.LCD17nUaOFOJpm7rUHRwc4RHGeI5nRqX2PZABoDVVDa85SQ0j1MLzs8XOhhvJ3yGlILaSeGtzolAIOcgUMSGAOvSJ3rWUPAPZs3IxPTtHZyKZy3MYPY_c3owXoP72llNFk1CbFLBy.qwBhsd.VMoIC_w6CqrSKOCYgrUr8jDVndRaJhTZWK7MINWHXJESeixpvpcliePPvIjFG8hoXdH1IbpUtvEDjdxnhrrbJwA; __stripe_sid=e10ffa42-aa7c-491f-b3a0-29d9bed958883087d2; __cf_bm=ktCDZ4yg4Kn3K8m93dHj.G8f08bpN9wUn2lq_j4bNhw-1784902997.6701572-1.0.1.1-uUGnzLtm8kmbC_VHEWwpXNFTKZK8Sm6ZhcVcQU7gQiY1LM8q7j7H_u4ns.aYaVJTWwN8RuuQG_W2a5gkHDwsobRbCgEwuBJyQfyVqeSLPeG2NqF08J4KHScSs_83L0qC
+Sec-Ch-Ua-Platform: "Windows"
+Accept-Encoding: gzip, deflate, br
+Accept-Language: en-US,en;q=0.9
+Sec-Ch-Ua: "Not;A=Brand";v="8", "Chromium";v="150"
+User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36
+Sec-Ch-Ua-Mobile: ?0
+Accept: */*
+Sec-Fetch-Site: same-site
+Sec-Fetch-Mode: no-cors
+Sec-Fetch-Dest: video
+Referer: https://grok.com/
+Range: bytes=0-
+Priority: i
+

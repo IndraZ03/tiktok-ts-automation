@@ -3,6 +3,7 @@ import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { execa } from 'execa';
+import { exec, execSync } from 'child_process';
 import ffmpegPath from 'ffmpeg-static';
 
 export interface UploadConfig {
@@ -437,7 +438,7 @@ async function uploadSingleVideo(
   if (config.addProduct && config.productNameRadio) {
     log('🛒 STEP 5: Menambahkan produk...');
     try {
-      const addBtn = page.locator('button').filter({ hasText: /^Add$/i });
+      const addBtn = page.locator('button').filter({ hasText: /^Add$|^Tambah$|^Add link$|^Tambah tautan$|^Product$|^Produk$/i });
       await addBtn.click({ timeout: 10000 });
       log('✓ Tombol Add diklik');
       await waitAndLog(page, log, 2000, 'dialog produk');
@@ -470,155 +471,241 @@ async function uploadSingleVideo(
       await waitAndLog(page, log, 2000, 'tab produk');
 
       try {
-        const myShopTab = page.locator('button').filter({ hasText: 'My shop' });
-        if (await myShopTab.isVisible({ timeout: 3000 }).catch(() => false)) {
-          const showcaseTab = page.locator('button').filter({ hasText: 'Showcase products' });
-          await showcaseTab.click({ force: true });
-          log('✓ Tab "Showcase products" diklik');
-          await page.waitForTimeout(2000);
-        }
-      } catch {
-        log('ℹ Tab My shop tidak terdeteksi');
-      }
-
-      // Search product using page-level locator
-      const searchInput = page.getByPlaceholder(/Search products|Cari produk/i);
-      await searchInput.fill(config.productNameRadio);
-      log(`✓ Mencari produk: ${config.productNameRadio}`);
-
-      try {
-        await page.locator('.product-search-icon, [class*="product-search-icon"]').click({ force: true, timeout: 5000 });
-      } catch {
-        await searchInput.press('Enter');
-      }
-      await waitAndLog(page, log, 3000, 'hasil pencarian');
-
-      // Select radio button — use the proven Python approach:
-      // Find radio by name attribute (= product name), then click its parent wrapper
-      try {
-        log('🔍 Mencari radio produk berdasarkan nama...');
+        log('🔍 Mencari tab Showcase / Etalase...');
+        const showcaseTab = page.locator('button, div[role="tab"]').filter({ 
+          hasText: /Showcase products|Produk showcase|Etalase|Showcase|Afiliasi|Affiliate/i 
+        }).first();
         
-        let checked = false;
+        if (await showcaseTab.isVisible({ timeout: 4000 }).catch(() => false)) {
+          await showcaseTab.click({ force: true });
+          log('✓ Tab "Showcase / Etalase" diklik');
+          await page.waitForTimeout(2000);
+        } else {
+          log('ℹ Tab Showcase tidak terdeteksi khusus, melanjutkan pencarian produk...');
+        }
+      } catch (err: any) {
+        log(`ℹ Skip tab showcase: ${err.message}`);
+      }
 
-        // Method 1 (Primary): Find radio by name attribute matching product name, click parent wrapper
-        // This is exactly how the Python script does it and it works
+      // Search product using exact TikTok Studio DOM selectors & robust multi-locator wait
+      log('🔍 Mencari input pencarian produk (TUXInputBox / TUXTextInputCore)...');
+      
+      const searchInputLocators = [
+        'input.TUXTextInputCore-input',
+        '.TUXInputBox input',
+        '.TUXTextInputCore input',
+        'input[placeholder="Cari produk"]',
+        'input[placeholder*="Cari" i]',
+        'input[placeholder*="Search" i]',
+        'input[placeholder*="produk" i]',
+        '[role="dialog"] input[type="text"]',
+        '[class*="modal"] input[type="text"]'
+      ];
+
+      let searchInput = null;
+      for (const sel of searchInputLocators) {
         try {
-          const radioByName = page.locator(`input[type="radio"][name="${config.productNameRadio}"]`);
-          const count = await radioByName.count();
-          log(`  Radio dengan name match: ${count} ditemukan`);
-          
-          if (count > 0) {
-            // Click the parent div (TUXRadioStandalone) — same as Python: radio.find_element(By.XPATH, "./..")
-            const wrapper = radioByName.first().locator('..');
-            
-            // Scroll wrapper into view within the dialog (not the page)
-            await wrapper.evaluate((el: HTMLElement) => {
-              el.scrollIntoView({ block: 'center' });
-            });
-            await page.waitForTimeout(1000);
-            
-            // Try clicking the wrapper (standard click)
-            try {
-              await wrapper.click({ timeout: 3000 });
-              log('  Klik wrapper produk (standar)');
-            } catch {
-              // Fallback: JS click on wrapper
-              await wrapper.evaluate((el: HTMLElement) => el.click());
-              log('  Klik wrapper produk (JS)');
-            }
-            await page.waitForTimeout(1000);
-            
-            checked = await radioByName.first().isChecked().catch(() => false);
-            if (checked) {
-              log('✓ Radio produk dipilih (Metode 1: name attribute + parent click)');
-            } else {
-              log('ℹ Metode 1: wrapper diklik tapi radio belum tercentang, mencoba metode lain...');
-            }
+          const loc = page.locator(sel).first();
+          if (await loc.count() > 0) {
+            await loc.waitFor({ state: 'attached', timeout: 5000 });
+            searchInput = loc;
+            log(`✓ Input ditemukan dengan selector: "${sel}"`);
+            break;
           }
-        } catch (err: any) {
-          log(`ℹ Metode 1 gagal: ${err.message}`);
+        } catch {}
+      }
+
+      if (!searchInput || await searchInput.count() === 0) {
+        log('ℹ Fallback: Mengambil input teks pertama di dialog...');
+        searchInput = page.locator('[role="dialog"] input, [class*="modal"] input, input[type="text"]').first();
+      }
+
+      if (searchInput && await searchInput.count() > 0) {
+        log(`✓ Mengisi nama produk: "${config.productNameRadio}"`);
+        
+        // 1. Scroll into view & focus
+        await searchInput.evaluate((el: HTMLElement) => el.scrollIntoView({ block: 'center' })).catch(() => {});
+        await page.waitForTimeout(300);
+
+        // 2. Click container .TUXInputBox / .TUXTextInputCore or input
+        try {
+          const box = page.locator('.TUXInputBox, .TUXTextInputCore').first();
+          if (await box.count() > 0) {
+            await box.click({ force: true }).catch(() => {});
+          } else {
+            await searchInput.click({ force: true }).catch(() => {});
+          }
+        } catch {
+          await searchInput.click({ force: true }).catch(() => {});
         }
 
-        // Method 2: Click the TUXRadioStandalone div directly
-        if (!checked) {
-          try {
-            const tuxRadio = page.locator('.TUXRadioStandalone').first();
-            if (await tuxRadio.count() > 0) {
-              await tuxRadio.evaluate((el: HTMLElement) => {
-                el.scrollIntoView({ block: 'center' });
-              });
-              await page.waitForTimeout(500);
-              await tuxRadio.click({ force: true, timeout: 3000 });
-              await page.waitForTimeout(500);
-              
-              const firstRadio = page.locator('input[type="radio"]').first();
-              checked = await firstRadio.isChecked().catch(() => false);
-              if (checked) log('✓ Radio produk dipilih (Metode 2: TUXRadioStandalone click)');
-            }
-          } catch (err: any) {
-            log(`ℹ Metode 2 gagal: ${err.message}`);
-          }
+        // 3. Clear existing text
+        await searchInput.evaluate((el: HTMLInputElement) => {
+          el.focus();
+          el.value = '';
+        }).catch(() => {});
+        await page.keyboard.press('Control+A').catch(() => {});
+        await page.keyboard.press('Backspace').catch(() => {});
+        await page.waitForTimeout(200);
+
+        // 4. Fill text via Playwright fill AND via keyboard type
+        try {
+          await searchInput.fill(config.productNameRadio);
+        } catch {
+          await page.keyboard.type(config.productNameRadio, { delay: 50 });
         }
 
-        // Method 3: Click the product-tb-row (table row containing the radio)
-        if (!checked) {
-          try {
-            const productRow = page.locator('tr.product-tb-row').first();
-            if (await productRow.count() > 0) {
-              await productRow.evaluate((el: HTMLElement) => {
-                el.scrollIntoView({ block: 'center' });
-              });
-              await page.waitForTimeout(500);
-              await productRow.click({ force: true, timeout: 3000 });
-              await page.waitForTimeout(500);
-              
-              const firstRadio = page.locator('input[type="radio"]').first();
-              checked = await firstRadio.isChecked().catch(() => false);
-              if (checked) log('✓ Radio produk dipilih (Metode 3: product-tb-row click)');
-            }
-          } catch (err: any) {
-            log(`ℹ Metode 3 gagal: ${err.message}`);
+        // 5. Inject React native value setter & dispatch synthetic events
+        await searchInput.evaluate((el: HTMLInputElement, val: string) => {
+          el.focus();
+          const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+          if (nativeSetter) {
+            nativeSetter.call(el, val);
+          } else {
+            el.value = val;
           }
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+          el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', bubbles: true }));
+        }, config.productNameRadio).catch(() => {});
+
+        await page.waitForTimeout(500);
+
+        // 6. Trigger Search by clicking search icon & pressing Enter
+        log('🔍 Mengklik icon pencarian (product-search-icon)...');
+        let iconClicked = false;
+        try {
+          const searchIcon = page.locator('.product-search-icon, .TUXTextInputCore-trailingIconWrapper, [class*="product-search-icon"]').first();
+          if (await searchIcon.count() > 0) {
+            await searchIcon.click({ force: true, timeout: 3000 });
+            iconClicked = true;
+            log('✓ Icon .product-search-icon / trailingIconWrapper diklik');
+          }
+        } catch {}
+
+        if (!iconClicked) {
+          try {
+            await searchInput.press('Enter');
+            log('✓ Tekan Enter untuk cari');
+          } catch {}
+        }
+      } else {
+        log('❌ Gagal menemukan input pencarian produk di halaman!');
+      }
+
+      log('⏳ Menunggu hasil pencarian di tbody...');
+      await waitAndLog(page, log, 3000, 'memuat hasil tabel produk');
+
+      // Select radio button inside tbody table rows
+      try {
+        log('🔍 Mencari hasil produk di tbody...');
+        
+        // Wait for tbody table rows to appear
+        const rows = page.locator('tbody tr.product-tb-row, tbody tr, tr.product-tb-row');
+        let rowCount = 0;
+        try {
+          await rows.first().waitFor({ state: 'visible', timeout: 10000 });
+          rowCount = await rows.count();
+        } catch {
+          log('⚠ Tidak ada baris tabel produk muncul di tbody dalam 10s');
         }
 
-        // Method 4: Click the label associated with the radio (via for attribute)
-        if (!checked) {
-          try {
-            const firstRadio = page.locator('input[type="radio"]').first();
-            const radioId = await firstRadio.getAttribute('id');
-            if (radioId) {
-              const label = page.locator(`label[for="${radioId}"]`);
-              if (await label.count() > 0) {
-                await label.click({ force: true, timeout: 3000 });
-                await page.waitForTimeout(500);
-                checked = await firstRadio.isChecked().catch(() => false);
-                if (checked) log('✓ Radio produk dipilih (Metode 4: label for click)');
+        log(`📋 Ditemukan ${rowCount} baris produk di tabel`);
+
+        let targetRow = null;
+        if (rowCount > 0) {
+          const searchTerm = config.productNameRadio.toLowerCase().trim();
+          const searchKeywords = searchTerm.split(' ').filter(k => k.length > 2);
+
+          // Find row matching full search term or any keyword
+          for (let i = 0; i < rowCount; i++) {
+            const row = rows.nth(i);
+            const text = (await row.textContent().catch(() => '')) || '';
+            const textLower = text.toLowerCase();
+
+            if (textLower.includes(searchTerm)) {
+              targetRow = row;
+              log(`✓ Baris cocok sempurna di index ${i + 1}`);
+              break;
+            }
+            for (const kw of searchKeywords) {
+              if (textLower.includes(kw)) {
+                targetRow = row;
+                log(`✓ Baris cocok dengan kata kunci "${kw}" di index ${i + 1}`);
+                break;
               }
             }
-          } catch (err: any) {
-            log(`ℹ Metode 4 gagal: ${err.message}`);
+            if (targetRow) break;
           }
-        }
 
-        // Method 5: JS click directly on the radio input + dispatchEvent
-        if (!checked) {
+          if (!targetRow) {
+            log('ℹ Menggunakan baris produk pertama dari hasil pencarian');
+            targetRow = rows.first();
+          }
+
+          // Locate radio input & wrapper inside targetRow
+          const radioInput = targetRow.locator('input[type="radio"], .TUXRadioStandalone-input').first();
+          const radioWrapper = targetRow.locator('.TUXRadioStandalone, .TUXRadio, .product-info-cell').first();
+          const radioLabel = targetRow.locator('label.TUXRadio-label, label').first();
+
+          await targetRow.evaluate((el: HTMLElement) => el.scrollIntoView({ block: 'center' }));
+          await page.waitForTimeout(500);
+
+          let checked = false;
+
+          // Method 1: Click .TUXRadioStandalone / .TUXRadio
           try {
-            const firstRadio = page.locator('input[type="radio"]').first();
-            await firstRadio.evaluate((el: HTMLInputElement) => {
-              el.scrollIntoView({ block: 'center' });
-            });
-            await page.waitForTimeout(500);
-            await firstRadio.dispatchEvent('click');
-            await page.waitForTimeout(500);
-            checked = await firstRadio.isChecked().catch(() => false);
-            if (checked) log('✓ Radio produk dipilih (Metode 5: dispatchEvent click)');
-          } catch (err: any) {
-            log(`ℹ Metode 5 gagal: ${err.message}`);
-          }
-        }
+            if (await radioWrapper.count() > 0) {
+              await radioWrapper.click({ force: true, timeout: 3000 });
+              await page.waitForTimeout(500);
+              checked = await radioInput.isChecked().catch(() => false);
+              if (checked) log('✓ Radio produk tercentang (via .TUXRadioStandalone)');
+            }
+          } catch {}
 
-        if (!checked) {
-          throw new Error('Semua metode pemilihan produk gagal — radio tidak tercentang.');
+          // Method 2: Click label for radio
+          if (!checked) {
+            try {
+              if (await radioLabel.count() > 0) {
+                await radioLabel.click({ force: true, timeout: 3000 });
+                await page.waitForTimeout(500);
+                checked = await radioInput.isChecked().catch(() => false);
+                if (checked) log('✓ Radio produk tercentang (via label)');
+              }
+            } catch {}
+          }
+
+          // Method 3: Direct JS click on radio input
+          if (!checked) {
+            try {
+              await radioInput.evaluate((el: HTMLInputElement) => {
+                el.click();
+                el.dispatchEvent(new Event('change', { bubbles: true }));
+              });
+              await page.waitForTimeout(500);
+              checked = await radioInput.isChecked().catch(() => false);
+              if (checked) log('✓ Radio produk tercentang (via JS click)');
+            } catch {}
+          }
+
+          // Method 4: Click target row
+          if (!checked) {
+            try {
+              await targetRow.click({ force: true, timeout: 3000 });
+              await page.waitForTimeout(500);
+              checked = await radioInput.isChecked().catch(() => false);
+              if (checked) log('✓ Radio produk tercentang (via row click)');
+            } catch {}
+          }
+
+          if (checked) {
+            log('✓ Radio produk BERHASIL dipilih & tercentang!');
+          } else {
+            log('ℹ Radio diklik, melanjutkan ke tombol Next');
+          }
+        } else {
+          log('❌ Tidak ada baris produk ditemukan di tbody');
         }
       } catch (e: any) {
         log('⚠ Gagal memilih radio produk: ' + e.message);
@@ -645,51 +732,65 @@ async function uploadSingleVideo(
 
   if (!isRunning) { log('⛔ Dibatalkan'); return false; }
 
-  // ── STEP 7: Switches (skip branded content etc) ──
+  // ── STEP 7: Switches (AI-generated content & Pemeriksaan konten ringan) ──
   if (!config.skipSwitches) {
     log('🔀 STEP 6: Toggle switches...');
     try {
-      const advSettings = page.locator('[data-e2e="advanced_settings_container"]');
-      await advSettings.scrollIntoViewIfNeeded();
-      await advSettings.click({ timeout: 5000 });
-      log('✓ Advanced settings dibuka');
-      await page.waitForTimeout(2000);
-
+      // 1. Open Advanced Settings if present
       try {
-        const discloseSwitch = page.locator('[data-e2e="disclose_content_container"] .Switch__content');
-        await discloseSwitch.click({ force: true });
-        log('✓ Disclose switch diklik');
-      } catch { log('⚠ Disclose switch gagal'); }
-
-      try {
-        const brandedLabel = page.locator("span:has-text('Branded content')").locator('xpath=preceding-sibling::label');
-        await brandedLabel.click({ force: true });
-        log('✓ Branded content diklik');
-      } catch { log('⚠ Branded content gagal'); }
-
-      try {
-        const aigcSwitch = page.locator('[data-e2e="aigc_container"] .Switch__content');
-        await aigcSwitch.click({ force: true });
-        log('✓ AI-generated diklik');
-
-        // Tunggu apakah modal "Labeling AI-generated content" muncul
-        try {
-          const turnOnBtn = page.locator('.TUXModal, [class*="modal"], [role="dialog"]')
-            .filter({ hasText: /Labeling AI-generated content|AI-generated/i })
-            .locator('button')
-            .filter({ hasText: /^Turn on$/i });
-          
-          if (await turnOnBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await turnOnBtn.click();
-            log('✓ Pop-up "Labeling AI-generated content" diklik Turn on');
-            await page.waitForTimeout(1000);
-          }
-        } catch (eModal) {
-          log('ℹ Tidak ada pop-up labeling AI-generated content atau gagal handle');
+        const advSettings = page.locator('[data-e2e="advanced_settings_container"]');
+        if (await advSettings.isVisible({ timeout: 3000 }).catch(() => false)) {
+          await advSettings.scrollIntoViewIfNeeded().catch(() => {});
+          await advSettings.click({ timeout: 3000 });
+          log('✓ Advanced settings dibuka');
+          await page.waitForTimeout(1500);
         }
-      } catch { log('⚠ AI-generated gagal'); }
+      } catch {}
+
+      // 2. AI-generated Content Switch ("Konten yang dihasilkan AI")
+      try {
+        log('🔍 Mencari switch "Konten yang dihasilkan AI"...');
+        const aigcLocators = [
+          page.locator('[data-e2e="aigc_container"] .Switch__content'),
+          page.locator('[data-e2e="aigc_container"] input[role="switch"]'),
+          page.locator('div, label').filter({ hasText: /Konten yang dihasilkan AI|AI-generated content|AIGC/i }).locator('.Switch__content, .Switch__root, input[role="switch"]').first()
+        ];
+
+        let aigcClicked = false;
+        for (const loc of aigcLocators) {
+          try {
+            if (await loc.count() > 0) {
+              await loc.scrollIntoViewIfNeeded().catch(() => {});
+              await loc.click({ force: true });
+              aigcClicked = true;
+              log('✓ Switch "Konten yang dihasilkan AI" diklik');
+              break;
+            }
+          } catch {}
+        }
+
+        if (aigcClicked) {
+          // Check for pop-up modal "Labeling AI-generated content" / "Turn on" / "Aktifkan"
+          try {
+            const turnOnBtn = page.locator('.TUXModal, [class*="modal"], [role="dialog"]')
+              .filter({ hasText: /Labeling AI-generated content|AI-generated|Konten yang dihasilkan AI/i })
+              .locator('button')
+              .filter({ hasText: /^Turn on$|^Aktifkan$/i });
+            
+            if (await turnOnBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+              await turnOnBtn.click({ force: true });
+              log('✓ Pop-up "Labeling AI-generated content" diklik Turn on / Aktifkan');
+              await page.waitForTimeout(1000);
+            }
+          } catch {}
+        } else {
+          log('ℹ Switch AI-generated tidak terdeteksi atau sudah aktif');
+        }
+      } catch (err: any) {
+        log(`⚠ AI-generated switch: ${err.message}`);
+      }
     } catch (e: any) {
-      log('⚠ Switches: ' + e.message);
+      log('⚠ Toggle switches: ' + e.message);
     }
   }
 
@@ -699,12 +800,70 @@ async function uploadSingleVideo(
   if (scheduleDate && scheduleTime) {
     log(`📅 STEP 7: Mengatur schedule (${scheduleDate} ${scheduleTime})...`);
     try {
-      await page.locator('//*[contains(text(),"When to post")]').waitFor({ timeout: 15000 });
+      // 1. Wait for schedule section or input
+      try {
+        await page.locator('//*[contains(text(),"When to post") or contains(text(),"Waktu posting")] | input[name="postSchedule"]').first().waitFor({ timeout: 15000 });
+      } catch {
+        log('⚠ Header Waktu posting/When to post tidak terdeteksi dalam 15s, mencoba mencari radio Jadwalkan...');
+      }
 
-      const scheduleRadio = page.locator("input[name='postSchedule'][value='schedule']").locator('xpath=ancestor::label');
-      await scheduleRadio.scrollIntoViewIfNeeded();
-      await scheduleRadio.click({ force: true });
-      log('✓ Schedule radio dipilih');
+      // 2. Click "Jadwalkan" / "Schedule" radio button
+      let scheduleRadioClicked = false;
+
+      // Method 1: JS direct click on input[value='schedule'] and its closest label
+      try {
+        const jsClicked = await page.evaluate(() => {
+          const radio = document.querySelector("input[name='postSchedule'][value='schedule']") as HTMLInputElement;
+          if (radio) {
+            const label = radio.closest('label') || radio.parentElement;
+            if (label) (label as HTMLElement).click();
+            radio.click();
+            radio.checked = true;
+            radio.setAttribute('aria-checked', 'true');
+            radio.dispatchEvent(new Event('change', { bubbles: true }));
+            radio.dispatchEvent(new Event('input', { bubbles: true }));
+            return true;
+          }
+          // Scan for label with text 'Jadwalkan'
+          const labels = Array.from(document.querySelectorAll('label'));
+          for (const l of labels) {
+            if (l.textContent?.trim().includes('Jadwalkan') || l.textContent?.trim().includes('Schedule')) {
+              l.click();
+              return true;
+            }
+          }
+          return false;
+        });
+        if (jsClicked) {
+          scheduleRadioClicked = true;
+          log('✓ Schedule radio ("Jadwalkan") dipilih via JS');
+        }
+      } catch {}
+
+      // Method 2: Playwright click on label containing 'Jadwalkan' or 'Schedule'
+      if (!scheduleRadioClicked) {
+        try {
+          const scheduleLabel = page.locator('label').filter({ hasText: /Jadwalkan|Schedule/i }).first();
+          if (await scheduleLabel.isVisible({ timeout: 3000 }).catch(() => false)) {
+            await scheduleLabel.click({ force: true });
+            scheduleRadioClicked = true;
+            log('✓ Schedule radio ("Jadwalkan") dipilih via label locator');
+          }
+        } catch {}
+      }
+
+      // Method 3: Playwright click on input[name='postSchedule'][value='schedule']
+      if (!scheduleRadioClicked) {
+        try {
+          const radioInput = page.locator("input[name='postSchedule'][value='schedule']").first();
+          if (await radioInput.count() > 0) {
+            await radioInput.click({ force: true });
+            scheduleRadioClicked = true;
+            log('✓ Schedule radio ("Jadwalkan") dipilih via input locator');
+          }
+        } catch {}
+      }
+
       await page.waitForTimeout(2000);
 
       // Parse time
@@ -839,117 +998,92 @@ async function uploadSingleVideo(
 
   if (!isRunning) { log('⛔ Dibatalkan'); return false; }
 
-  // ── STEP 9: Content Check Lite Switch — turn OFF if ON ──
+  // ── STEP 9: Content Check Lite Switch — ensure ALWAYS turned OFF ──
   log('🔍 STEP 8: Memeriksa Content Check Lite switch...');
   try {
     let contentCheckClicked = false;
 
-    // Strategy 1: Find Switch near "Content check" text
+    // Direct JS matching exact DOM structure: .headline-wrapper -> .headline-switch -> .Switch__content
     try {
-      const switchEl = page.locator(
-        "//span[contains(translate(text(),'ABCDEFGHIJKLMNOPQRSTUVWXYZ','abcdefghijklmnopqrstuvwxyz'),'content check')]/ancestor::div[1]//div[contains(@class,'Switch__content')]"
-      ).first();
-
-      if (await switchEl.isVisible({ timeout: 5000 }).catch(() => false)) {
-        const cls = await switchEl.getAttribute('class') || '';
-        const aria = await switchEl.getAttribute('aria-checked') || '';
-        const isOn = cls.includes('checked-true') || aria === 'true';
-        log(`  Switch ditemukan: class=${cls.substring(0, 60)}, aria-checked=${aria}, is_on=${isOn}`);
-
-        if (isOn) {
-          await switchEl.scrollIntoViewIfNeeded();
-          await switchEl.click({ force: true });
-          await page.waitForTimeout(1000);
-          contentCheckClicked = true;
-          log('✓ Content Check Lite dimatikan (Strategy 1)');
-        } else {
-          contentCheckClicked = true;
-          log('ℹ Content Check Lite sudah OFF');
-        }
-      }
-    } catch (e1: any) {
-      log(`  Strategy 1 gagal: ${e1.message}`);
-    }
-
-    // Strategy 2: Find all ON switches, match with "content check" text
-    if (!contentCheckClicked) {
-      try {
-        const onSwitches = page.locator(
-          "div[class*='Switch__content'][class*='checked-true'], div[aria-checked='true'][class*='Switch']"
-        );
-        const count = await onSwitches.count();
-        for (let i = 0; i < count; i++) {
-          const sw = onSwitches.nth(i);
-          const ancestor = sw.locator('xpath=ancestor::div[position()<=5]');
-          const ancestorCount = await ancestor.count();
-          for (let j = 0; j < ancestorCount; j++) {
-            const txt = (await ancestor.nth(j).textContent().catch(() => '')) || '';
-            if (txt.toLowerCase().includes('content check')) {
-              await sw.scrollIntoViewIfNeeded();
-              await sw.click({ force: true });
-              await page.waitForTimeout(1000);
-              contentCheckClicked = true;
-              log('✓ Content Check Lite dimatikan (Strategy 2)');
-              break;
-            }
-          }
-          if (contentCheckClicked) break;
-        }
-      } catch (e2: any) {
-        log(`  Strategy 2 gagal: ${e2.message}`);
-      }
-    }
-
-    // Strategy 3: JavaScript injection
-    if (!contentCheckClicked) {
-      try {
-        const result = await page.evaluate(() => {
-          const spans = document.querySelectorAll('span, div, label, p');
-          for (const span of spans) {
-            const txt = (span.textContent || '').toLowerCase().trim();
-            if (txt.includes('content check')) {
-              const parent = (span as HTMLElement).closest('div[class*="jsx-"], div[class*="container"], div[class*="row"], div[class*="setting"]') || span.parentElement;
-              if (!parent) continue;
-              let switchEl = parent.querySelector('div[class*="Switch__content"], div[role="switch"], input[role="switch"]') as HTMLElement | null;
-              if (!switchEl) {
-                const siblings = parent.querySelectorAll('div[class*="Switch"]');
-                if (siblings.length > 0) switchEl = siblings[0] as HTMLElement;
-              }
-              if (switchEl) {
-                const cls = switchEl.className || '';
-                const aria = switchEl.getAttribute('aria-checked') || '';
-                const rootEl = switchEl.closest('div[class*="Switch__root"]');
-                const rootCls = rootEl ? rootEl.className : '';
-                if (cls.includes('checked-true') || rootCls.includes('checked-true') || aria === 'true') {
-                  switchEl.scrollIntoView({ block: 'center' });
-                  switchEl.click();
-                  return 'clicked';
-                } else {
-                  return 'already_off';
-                }
+      const result = await page.evaluate(() => {
+        // 1. Target exact DOM structure from user: div.headline-wrapper containing "Pemeriksaan konten"
+        const headlineWrappers = document.querySelectorAll('.headline-wrapper, [class*="headline-wrapper"]');
+        for (const hw of headlineWrappers) {
+          const txt = (hw.textContent || '').toLowerCase();
+          if (txt.includes('pemeriksaan konten') || txt.includes('content check')) {
+            const switchContent = hw.querySelector('.headline-switch .Switch__content, .Switch__content, .Switch__root, input[role="switch"]') as HTMLElement | null;
+            if (switchContent) {
+              const cls = switchContent.className || '';
+              const aria = switchContent.getAttribute('aria-checked') || '';
+              const dataState = switchContent.getAttribute('data-state') || '';
+              const isOn = cls.includes('checked-true') || aria === 'true' || dataState === 'checked';
+              if (isOn) {
+                switchContent.scrollIntoView({ block: 'center' });
+                switchContent.click();
+                return 'clicked_direct';
+              } else {
+                return 'already_off_direct';
               }
             }
           }
-          return 'not_found';
-        });
-
-        if (result === 'clicked') {
-          await page.waitForTimeout(1000);
-          contentCheckClicked = true;
-          log('✓ Content Check Lite dimatikan (Strategy 3 - JS)');
-        } else if (result === 'already_off') {
-          contentCheckClicked = true;
-          log('ℹ Content Check Lite sudah OFF (Strategy 3 - JS)');
-        } else {
-          log('ℹ Content Check Lite tidak ditemukan (Strategy 3 - JS)');
         }
-      } catch (e3: any) {
-        log(`  Strategy 3 gagal: ${e3.message}`);
+
+        // 2. Generic fallback scan for any element with text 'Pemeriksaan konten' or 'Content check'
+        const allEls = document.querySelectorAll('span, div, label, p');
+        for (const el of allEls) {
+          const txt = (el.textContent || '').toLowerCase().trim();
+          if (txt.includes('pemeriksaan konten') || txt.includes('content check')) {
+            const parent = el.closest('.headline-wrapper, [class*="headline-wrapper"], [class*="jsx-"], div[class*="container"], div[class*="row"]') || el.parentElement;
+            if (!parent) continue;
+            const switchEl = parent.querySelector('.Switch__content, .Switch__root, [role="switch"]') as HTMLElement | null;
+            if (switchEl) {
+              const cls = switchEl.className || '';
+              const aria = switchEl.getAttribute('aria-checked') || '';
+              const dataState = switchEl.getAttribute('data-state') || '';
+              const isOn = cls.includes('checked-true') || aria === 'true' || dataState === 'checked';
+              if (isOn) {
+                switchEl.scrollIntoView({ block: 'center' });
+                switchEl.click();
+                return 'clicked_fallback';
+              } else {
+                return 'already_off_fallback';
+              }
+            }
+          }
+        }
+        return 'not_found';
+      });
+
+      if (result === 'clicked_direct' || result === 'clicked_fallback') {
+        await page.waitForTimeout(1000);
+        contentCheckClicked = true;
+        log(`✓ Content Check Lite dimatikan (${result})`);
+      } else if (result === 'already_off_direct' || result === 'already_off_fallback') {
+        contentCheckClicked = true;
+        log(`ℹ Content Check Lite sudah OFF (${result})`);
+      } else {
+        log('ℹ Content Check Lite tidak ditemukan via JS evaluation');
       }
+    } catch (eJS: any) {
+      log(`  JS evaluation error: ${eJS.message}`);
     }
 
+    // Playwright locator fallback if JS didn't execute
     if (!contentCheckClicked) {
-      log('ℹ Content Check Lite sudah OFF atau tidak ditemukan');
+      try {
+        const switchEl = page.locator('.headline-wrapper').filter({ hasText: /Pemeriksaan konten|Content check/i }).locator('.Switch__content, .Switch__root').first();
+        if (await switchEl.isVisible({ timeout: 3000 }).catch(() => false)) {
+          const cls = await switchEl.getAttribute('class') || '';
+          const aria = await switchEl.getAttribute('aria-checked') || '';
+          if (cls.includes('checked-true') || aria === 'true') {
+            await switchEl.click({ force: true });
+            await page.waitForTimeout(1000);
+            log('✓ Content Check Lite dimatikan (Playwright fallback)');
+          } else {
+            log('ℹ Content Check Lite sudah OFF (Playwright fallback)');
+          }
+        }
+      } catch {}
     }
   } catch (e: any) {
     log(`⚠ Content Check Lite: ${e.message}`);
@@ -974,27 +1108,37 @@ async function uploadSingleVideo(
   log('🎬 STEP 10: Klik tombol Schedule/Post...');
   try {
     let clicked = false;
-    const schedBtn = page.locator("button[data-e2e='post_video_button']").filter({ hasText: /Schedule/i });
-    if (await schedBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
-      await schedBtn.scrollIntoViewIfNeeded();
-      await schedBtn.click({ force: true });
+
+    // Method 1: Target data-e2e="post_video_button" directly (matches "Posting", "Jadwalkan", "Schedule", etc.)
+    const postVideoBtn = page.locator("button[data-e2e='post_video_button']").first();
+    if (await postVideoBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await postVideoBtn.scrollIntoViewIfNeeded();
+      await postVideoBtn.click({ force: true });
       clicked = true;
-      log('✓ Tombol Schedule diklik');
+      log('✓ Tombol Post/Schedule diklik (data-e2e="post_video_button")');
     }
 
+    // Method 2: Fallback text filter matching Posting, Jadwalkan, Schedule, Post, Tayangkan
     if (!clicked) {
-      const fallbackBtn = page.locator('button').filter({ hasText: /Schedule/i }).first();
+      const fallbackBtn = page.locator('button').filter({ hasText: /Posting|Jadwalkan|Schedule|Tayangkan|^Post$/i }).first();
       if (await fallbackBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
         await fallbackBtn.click({ force: true });
         clicked = true;
-        log('✓ Tombol Schedule diklik (fallback)');
+        log('✓ Tombol Post/Schedule diklik (fallback text match)');
       }
     }
 
+    // Method 3: JS Direct Click on button[data-e2e="post_video_button"]
     if (!clicked) {
-      const postBtn = page.locator('button').filter({ hasText: /^Post$|^Tayangkan$/i });
-      await postBtn.click({ force: true });
-      log('✓ Tombol Post diklik');
+      clicked = await page.evaluate(() => {
+        const btn = document.querySelector('button[data-e2e="post_video_button"]') as HTMLButtonElement;
+        if (btn) {
+          btn.click();
+          return true;
+        }
+        return false;
+      });
+      if (clicked) log('✓ Tombol Post/Schedule diklik (JS fallback)');
     }
 
     await page.waitForTimeout(5000);
@@ -1094,30 +1238,95 @@ export async function runUpload(
   log('🚀 ═══════════════════════════════════════════');
 
   try {
-    // ── Launch browser ──
-    log('🌐 Membuka browser Chrome...');
-    activeBrowser = await chromium.launch({
-      headless: config.headless ?? false,
-      slowMo: 100,
-      channel: 'chrome',
-      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
-      ignoreDefaultArgs: ['--enable-automation'],
-    });
+    // ── Launch browser (Native Chrome CMD + CDP Connect) ──
+    const cleanStateName = (config.stateFile || 'default')
+      .replace(/^(tiktok|grok|facebook)-state-/, '')
+      .replace(/\.json$/i, '')
+      .replace(/[^a-zA-Z0-9_-]/g, '_');
+    const profileDir = path.join(config.statesDir ? path.dirname(config.statesDir) : __dirname, 'chrome-profiles', `tiktok_${cleanStateName}`);
+    if (!fs.existsSync(profileDir)) {
+      fs.mkdirSync(profileDir, { recursive: true });
+    }
 
-    activeContext = await activeBrowser.newContext({
-      viewport: { width: 1366, height: 768 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-      locale: 'en-US',
-      timezoneId: 'Asia/Makassar',
-      permissions: ['geolocation'],
-      extraHTTPHeaders: { 'Accept-Language': 'en-US,en;q=0.9' },
-      storageState: stateFilePath,
-    });
+    const cdpPort = 9222;
+    const targetUrl = 'https://www.tiktok.com/tiktokstudio/upload';
+    const isHeadless = config.headless ?? false;
+    const headlessFlag = isHeadless ? '--headless=new ' : '';
 
-    const page = await activeContext.newPage();
-    await page.addInitScript(() => {
+    log(`🌐 Membuka Chrome Native via CMD (Port CDP: ${cdpPort}, Headless: ${isHeadless})...`);
+
+    let connected = false;
+
+    // 1. Coba hubungkan ke Chrome Native yang SUDAH berjalan terlebih dahulu
+    try {
+      activeBrowser = await chromium.connectOverCDP(`http://localhost:${cdpPort}`, { timeout: 2000 });
+      connected = true;
+      log('✓ Terhubung ke Chrome Native yang sudah berjalan via CDP!');
+    } catch {
+      // 2. Jika belum ada Chrome berjalan di port CDP, bersihkan lock file profil & launch Chrome baru
+      const lockFile = path.join(profileDir, 'SingletonLock');
+      if (fs.existsSync(lockFile)) {
+        try { fs.unlinkSync(lockFile); } catch {}
+      }
+
+      // Launch Chrome via CMD
+      const chromePaths = [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+        path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+        path.join(process.env['ProgramFiles(x86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+      ];
+      let chromeExe = chromePaths.find(p => fs.existsSync(p));
+
+      if (chromeExe) {
+        const cmd = `"${chromeExe}" ${headlessFlag}--remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" "${targetUrl}"`;
+        exec(cmd, { shell: 'cmd.exe' });
+      } else {
+        const cmd = `start chrome ${headlessFlag}--remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" "${targetUrl}"`;
+        exec(cmd, { shell: 'cmd.exe' });
+      }
+
+      // Connect Playwright over CDP to Native Chrome (retry max 30x / 15s)
+      log('⏳ Menghubungkan Playwright ke Chrome Native via CDP...');
+      for (let attempt = 1; attempt <= 30; attempt++) {
+        try {
+          activeBrowser = await chromium.connectOverCDP(`http://localhost:${cdpPort}`, { timeout: 2000 });
+          connected = true;
+          log('✓ Playwright terhubung ke Chrome Native via CDP!');
+          break;
+        } catch {
+          await new Promise(r => setTimeout(r, 500));
+        }
+      }
+    }
+
+    if (!connected || !activeBrowser) {
+      throw new Error('Gagal menghubungkan Playwright ke Chrome Native via CDP port 9222');
+    }
+
+    activeContext = activeBrowser.contexts()[0];
+    await activeContext.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
     });
+
+    // Sync cookies from state file directly into active CDP context
+    if (fs.existsSync(stateFilePath)) {
+      try {
+        const stateContent = fs.readFileSync(stateFilePath, 'utf-8');
+        const stateData = JSON.parse(stateContent);
+        if (stateData.cookies && Array.isArray(stateData.cookies) && stateData.cookies.length > 0) {
+          await activeContext.addCookies(stateData.cookies);
+          log(`✓ Cookie (${stateData.cookies.length} item) disinkronkan ke context CDP`);
+        }
+      } catch (e: any) {
+        log(`⚠ Info cookie: ${e.message}`);
+      }
+    }
+    await activeContext.addInitScript(() => {
+      Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+    });
+
+    const page = activeContext.pages().length > 0 ? activeContext.pages()[0] : await activeContext.newPage();
 
     let uploadIndex = 0;
     let successCount = 0;

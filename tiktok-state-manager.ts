@@ -12,6 +12,8 @@ import { execa } from 'execa';
 import { runUpload, stopUploader, getIsRunning } from './tiktok-uploader.js';
 import { runFacebookUpload, stopFacebookUploader, getFacebookIsRunning } from './facebook-uploader.js';
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress, getGrokRateLimits, clearGrokRateLimit } from './grok-uploader.js';
+import { generateGrokVideoV2 } from './grok_api_client.js';
+import { postTikTokAffiliateVideoApi } from './tiktok_api_post.js';
 import multer from 'multer';
 import ffmpegPath from 'ffmpeg-static';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
@@ -45,6 +47,8 @@ const PORT = 5000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
 app.use('/bahan', express.static(path.join(__dirname, 'bahan')));
+app.use('/audio', express.static(path.join(__dirname, 'audio')));
+
 
 // Multer for bahan image uploads
 const bahanUpload = multer({ dest: path.join(__dirname, '_tmp_uploads') });
@@ -326,6 +330,9 @@ app.post('/api/start-login', async (req, res) => {
     // Stealth tambahan (hapus jejak automation)
     await page.addInitScript(() => {
       Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      (window as any).chrome = { runtime: {}, app: {}, csi: () => {}, loadTimes: () => {} };
+      Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
+      Object.defineProperty(navigator, 'languages', { get: () => ['id-ID', 'id', 'en-US', 'en'] });
     });
 
     const url = currentPlatform === 'grok' ? 'https://accounts.x.ai/sign-in?redirect=grok-com' : (currentPlatform === 'facebook' ? 'https://www.facebook.com' : 'https://www.tiktok.com');
@@ -441,11 +448,130 @@ app.post('/api/open-state', async (req, res) => {
     const url = platform === 'grok' ? 'https://grok.com' : (platform === 'facebook' ? 'https://www.facebook.com' : 'https://www.tiktok.com');
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-    console.log(`âœ… Browser dibuka dengan state: ${name}`);
+    console.log(`✅ Browser dibuka dengan state: ${name}`);
     res.json({ success: true, message: 'Browser berhasil dibuka' });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Gagal membuka browser: ' + err.message });
+  }
+});
+
+// Launch Google Chrome directly via CMD (without Playwright) + inject cookies from state JSON
+app.post('/api/start-native-chrome', async (req, res) => {
+  const { name, filename, platform = 'tiktok' } = req.body;
+  let stateName = name ? name.trim() : '';
+  if (!stateName && filename) {
+    stateName = filename.replace(/^(tiktok|grok|facebook)-state-/, '').replace(/\.json$/i, '');
+  }
+
+  if (!stateName) {
+    return res.status(400).json({ error: 'Nama state/session harus diisi!' });
+  }
+
+  const cleanStateName = stateName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const profileDir = path.join(__dirname, 'chrome-profiles', `${platform}_${cleanStateName}`);
+  if (!fs.existsSync(profileDir)) {
+    fs.mkdirSync(profileDir, { recursive: true });
+  }
+
+  // Find state file to inject cookies into Chrome profile if exists
+  const dir = platform === 'grok' ? GROK_STATES_DIR : (platform === 'facebook' ? FB_STATES_DIR : STATES_DIR);
+  let stateFilePath = '';
+  if (filename) {
+    stateFilePath = path.join(dir, filename);
+  } else if (stateName) {
+    const prefix = platform === 'grok' ? 'grok-state-' : (platform === 'facebook' ? 'facebook-state-' : 'tiktok-state-');
+    stateFilePath = path.join(dir, `${prefix}${stateName}.json`);
+  }
+
+  if (stateFilePath && fs.existsSync(stateFilePath)) {
+    try {
+      console.log(`[NATIVE CHROME CMD] Menginjeksi cookie dari ${path.basename(stateFilePath)} ke profil Chrome...`);
+      const stateContent = fs.readFileSync(stateFilePath, 'utf-8');
+      const stateData = JSON.parse(stateContent);
+
+      if (stateData.cookies && Array.isArray(stateData.cookies) && stateData.cookies.length > 0) {
+        const pContext = await chromium.launchPersistentContext(profileDir, {
+          headless: true,
+          channel: 'chrome',
+          args: ['--no-sandbox']
+        });
+        await pContext.addCookies(stateData.cookies);
+        await pContext.close();
+        console.log(`✓ Cookie (${stateData.cookies.length} item) berhasil diinjeksi ke profil Chrome CMD!`);
+      }
+    } catch (e: any) {
+      console.error(`⚠ Gagal menginjeksi cookie dari file JSON: ${e.message}`);
+    }
+  }
+
+  const targetUrl = platform === 'grok' 
+    ? 'https://grok.com' 
+    : (platform === 'facebook' ? 'https://www.facebook.com' : 'https://www.tiktok.com/tiktokstudio/upload');
+
+  const chromePaths = [
+    'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+    'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+    path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+    path.join(process.env['ProgramFiles(x86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
+  ];
+
+  let chromeExe = chromePaths.find(p => fs.existsSync(p));
+
+  try {
+    let command = '';
+    if (chromeExe) {
+      command = `"${chromeExe}" --user-data-dir="${profileDir}" "${targetUrl}"`;
+    } else {
+      command = `start chrome --user-data-dir="${profileDir}" "${targetUrl}"`;
+    }
+
+    console.log(`[NATIVE CHROME CMD] Running: ${command}`);
+    exec(command, { shell: 'cmd.exe' }, (err) => {
+      if (err) console.error('[NATIVE CHROME CMD ERROR]', err);
+    });
+
+    res.json({
+      success: true,
+      message: `✅ Chrome Native (CMD tanpa Playwright) terbuka!\nProfile: chrome-profiles/${platform}_${cleanStateName}\n\nSession/Cookies telah dimuat dari file state! Silakan gunakan dengan normal.`
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Gagal menjalankan Chrome via CMD: ' + err.message });
+  }
+});
+
+// Sync/Export Chrome CMD profile session back to state JSON file
+app.post('/api/sync-native-chrome', async (req, res) => {
+  const { filename, name, platform = 'tiktok' } = req.body;
+  let stateName = name ? name.trim() : '';
+  if (!stateName && filename) {
+    stateName = filename.replace(/^(tiktok|grok|facebook)-state-/, '').replace(/\.json$/i, '');
+  }
+
+  if (!stateName) return res.status(400).json({ error: 'Nama state/session harus diisi!' });
+
+  const cleanStateName = stateName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const profileDir = path.join(__dirname, 'chrome-profiles', `${platform}_${cleanStateName}`);
+  const dir = platform === 'grok' ? GROK_STATES_DIR : (platform === 'facebook' ? FB_STATES_DIR : STATES_DIR);
+  const prefix = platform === 'grok' ? 'grok-state-' : (platform === 'facebook' ? 'facebook-state-' : 'tiktok-state-');
+  const targetFilename = filename || `${prefix}${stateName}.json`;
+  const targetFilepath = path.join(dir, targetFilename);
+
+  try {
+    const pContext = await chromium.launchPersistentContext(profileDir, {
+      headless: true,
+      channel: 'chrome',
+      args: ['--no-sandbox']
+    });
+    await pContext.storageState({ path: targetFilepath });
+    await pContext.close();
+
+    res.json({
+      success: true,
+      message: `✅ Sesi dari Chrome CMD berhasil disinkronkan & disimpan ke ${targetFilename}!`
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Gagal mengekspor sesi dari Chrome CMD: ' + err.message });
   }
 });
 
@@ -2009,6 +2135,86 @@ app.get('/api/grok/audio-folders', (req, res) => {
   res.json({ folders });
 });
 
+// Create a new audio folder
+app.post('/api/grok/audio/create-folder', (req, res) => {
+  const { folderName } = req.body;
+  if (!folderName) return res.status(400).json({ error: 'Nama folder diperlukan' });
+  const cleanFolderName = folderName.replace(/[^a-zA-Z0-9_-]/g, '_');
+  const targetDir = path.join(AUDIO_DIR, cleanFolderName);
+  if (fs.existsSync(targetDir)) {
+    return res.status(400).json({ error: 'Folder sudah ada' });
+  }
+  try {
+    fs.mkdirSync(targetDir, { recursive: true });
+    res.json({ success: true, message: `Berhasil membuat folder ${cleanFolderName}` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// List files inside an audio folder
+app.get('/api/grok/audio/:folderName', (req, res) => {
+  const { folderName } = req.params;
+  const targetDir = path.join(AUDIO_DIR, folderName);
+  if (!fs.existsSync(targetDir)) {
+    return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  }
+  try {
+    const files = fs.readdirSync(targetDir).filter(f => {
+      const p = path.join(targetDir, f);
+      return fs.statSync(p).isFile();
+    });
+    res.json({ files });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a specific file inside an audio folder
+app.delete('/api/grok/audio/:folderName/:fileName', (req, res) => {
+  const { folderName, fileName } = req.params;
+  const filePath = path.join(AUDIO_DIR, folderName, fileName);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File tidak ditemukan' });
+  }
+  try {
+    fs.unlinkSync(filePath);
+    res.json({ success: true, message: `Berhasil menghapus ${fileName}` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Delete a whole audio folder (recursive)
+app.delete('/api/grok/audio/:folderName', (req, res) => {
+  const { folderName } = req.params;
+  const targetDir = path.join(AUDIO_DIR, folderName);
+  if (!fs.existsSync(targetDir)) {
+    return res.status(404).json({ error: 'Folder tidak ditemukan' });
+  }
+  try {
+    fs.rmSync(targetDir, { recursive: true, force: true });
+    res.json({ success: true, message: `Berhasil menghapus folder ${folderName}` });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Upload audio files
+app.post('/api/grok/audio/upload', bahanUpload.array('audio', 100), (req: any, res) => {
+  const folderName = req.body.folderName;
+  if (!folderName) return res.status(400).json({ error: 'folderName diperlukan' });
+  const targetDir = path.join(AUDIO_DIR, folderName);
+  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+  const files = req.files as Express.Multer.File[];
+  if (!files || files.length === 0) return res.status(400).json({ error: 'Tidak ada file' });
+  for (const f of files) {
+    const dest = path.join(targetDir, f.originalname);
+    fs.renameSync(f.path, dest);
+  }
+  res.json({ success: true, count: files.length });
+});
+
 // Save prompt
 app.post('/api/grok/prompts/save', (req: Request, res: Response) => {
   const { name, prompt } = req.body;
@@ -2382,6 +2588,161 @@ app.post('/api/grok/delete-video', (req, res) => {
   }
 
   res.json({ success: true, deletedCount, errors: errors.length > 0 ? errors : undefined });
+});
+
+// ═══════════════════════════════════════════════════════════
+//  GROK V2 TEST APIs (/grokv2test)
+// ═══════════════════════════════════════════════════════════
+app.get('/grokv2test', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'grokv2test.html'));
+});
+
+app.get('/api/grokv2test/prompts', (req, res) => {
+  if (!fs.existsSync(PROMPT_DIR)) fs.mkdirSync(PROMPT_DIR, { recursive: true });
+  const files = fs.readdirSync(PROMPT_DIR).filter(f => f.endsWith('.json'));
+  res.json({ files });
+});
+
+app.get('/api/grokv2test/prompt-content/:filename', (req, res) => {
+  const { filename } = req.params;
+  const filePath = path.join(PROMPT_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File prompt tidak ditemukan' });
+  }
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    let content = data.prompt || '';
+    if (!content && Array.isArray(data.prompts) && data.prompts.length > 0) {
+      content = data.prompts[0];
+    }
+    res.json({ success: true, prompt: content, fullData: data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/grokv2test/bahan', (req, res) => {
+  if (!fs.existsSync(BAHAN_DIR)) fs.mkdirSync(BAHAN_DIR, { recursive: true });
+  const folders = fs.readdirSync(BAHAN_DIR).filter(f => {
+    try {
+      return fs.statSync(path.join(BAHAN_DIR, f)).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+  const bahanMap: Record<string, string[]> = {};
+  const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.bmp'];
+
+  for (const folder of folders) {
+    const folderPath = path.join(BAHAN_DIR, folder);
+    const files = fs.readdirSync(folderPath).filter(f => imageExts.includes(path.extname(f).toLowerCase()));
+    bahanMap[folder] = files;
+  }
+  res.json({ folders, bahanMap });
+});
+
+app.post('/api/grokv2test/generate', async (req, res) => {
+  const { stateName, promptText, bahanFolder, bahanFile, resolution, duration, aspectRatio, mode } = req.body;
+
+  if (!promptText || promptText.trim() === '') {
+    return res.status(400).json({ error: 'Prompt teks harus diisi' });
+  }
+
+  let imagePath: string | undefined = undefined;
+  if (bahanFolder && bahanFile) {
+    imagePath = path.join(BAHAN_DIR, bahanFolder, bahanFile);
+    if (!fs.existsSync(imagePath)) {
+      return res.status(400).json({ error: `File gambar bahan tidak ditemukan di: ${imagePath}` });
+    }
+  }
+
+  try {
+    console.log(`[GROK_V2_TEST] Memulai generate video (State: ${stateName || 'indra'}, Res: ${resolution}, Dur: ${duration}, Aspect: ${aspectRatio})...`);
+    
+    const result = await generateGrokVideoV2({
+      stateName: stateName || 'indra',
+      promptText,
+      imagePath,
+      resolution: resolution || '720p',
+      duration: duration || '5s',
+      aspectRatio: aspectRatio || '9:16',
+      mode: mode || 'Video'
+    }, (msg, progress) => {
+      console.log(`[GROK_V2_TEST] ${msg} (${progress}%)`);
+    });
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (err: any) {
+    console.error(`[GROK_V2_TEST ERROR] ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ═══════════════════════════════════════════════════════════
+//  TIKTOK V2 TEST APIs (/tiktokv2test)
+// ═══════════════════════════════════════════════════════════
+app.get('/tiktokv2test', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'tiktokv2test.html'));
+});
+
+app.get('/api/tiktokv2test/states', (req, res) => {
+  res.json(getSavedStates('tiktok'));
+});
+
+app.post('/api/tiktokv2test/post-affiliate', bahanUpload.single('videoFile'), async (req: any, res) => {
+  const { stateFile, description, hashtags, productId, productTitle, scheduleDate, scheduleTime, videoId } = req.body;
+  const file = req.file as Express.Multer.File;
+
+  if (!stateFile) return res.status(400).json({ error: 'State account harus dipilih' });
+  if (!description) return res.status(400).json({ error: 'Deskripsi harus diisi' });
+
+  let fullDescription = description;
+  if (hashtags) {
+    const formattedTags = hashtags.split(',').map((t: string) => t.trim()).filter(Boolean).map((t: string) => t.startsWith('#') ? t : `#${t}`).join(' ');
+    fullDescription = `${description} ${formattedTags}`;
+  }
+
+  let scheduleEpoch = 0;
+  if (scheduleDate && scheduleTime) {
+    try {
+      const dt = new Date(`${scheduleDate}T${scheduleTime}:00`);
+      if (!isNaN(dt.getTime())) {
+        scheduleEpoch = Math.floor(dt.getTime() / 1000);
+      }
+    } catch {}
+  }
+
+  try {
+    console.log(`[TIKTOK_V2_TEST] Post Affiliate Request (State: ${stateFile}, Product: ${productTitle} [${productId}])...`);
+
+    const result = await postTikTokAffiliateVideoApi({
+      stateFile,
+      videoPath: file ? file.path : undefined,
+      videoId: videoId || undefined,
+      description: fullDescription,
+      productTitle: productTitle || 'ini nama produk',
+      productId: productId || '1729748856299095594',
+      scheduleTime: scheduleEpoch
+    });
+
+    if (file && fs.existsSync(file.path)) {
+      try { fs.unlinkSync(file.path); } catch {}
+    }
+
+    res.json({
+      success: true,
+      result
+    });
+  } catch (err: any) {
+    if (file && fs.existsSync(file.path)) {
+      try { fs.unlinkSync(file.path); } catch {}
+    }
+    console.error(`[TIKTOK_V2_TEST ERROR] ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // ═══════════════════════════════════════════════════════════
@@ -3767,6 +4128,19 @@ function saveGrokbotData(data: GrokbotData) {
   fs.writeFileSync(GROKBOT_DATA_FILE, JSON.stringify(data, null, 2));
 }
 
+function isHeadlessEnabled(stateFile?: string): boolean {
+  const data = loadGrokbotData();
+  // 1. Jika global config di-uncheck (false) di UI, maka headless HARUS false
+  if (data.globalConfig && data.globalConfig.headless === false) {
+    return false;
+  }
+  // 2. Jika per-state config di-uncheck (false), maka headless HARUS false
+  if (stateFile && data.states && data.states[stateFile] && data.states[stateFile].headless === false) {
+    return false;
+  }
+  return data.globalConfig?.headless !== false;
+}
+
 // Wrapper functions for WhatsApp notifications based on global config
 function sendWAMessage(msg: string) {
   const data = loadGrokbotData();
@@ -4011,6 +4385,7 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
   res.json({ success: true, message: `Mulai generate ${needed} video utama` });
   
   grokbotLog(`🚀 Memulai Generate Stok Utama untuk ${tiktokStateName}. Dibutuhkan: ${needed} video (raw: ${totalRawToGenerate})`);
+  sendWAMessage(`🚀 [${tiktokStateName}] Memulai Generate Stok Utama (dibutuhkan: ${needed} video, raw: ${totalRawToGenerate}).`);
   
   const grokConfig = {
     stateFile: cfg.grokState,
@@ -4023,7 +4398,7 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
     resolution: cfg.resolution || '720p',
     duration: cfg.duration || '10s',
     aspectRatio: cfg.aspectRatio || '9:16',
-    headless: data.globalConfig?.headless !== false,
+    headless: isHeadlessEnabled(stateFile),
     downloadDir: GROK_DOWNLOAD_DIR,
     customDownloadDir: stateDownloadDir,
     totalVideos: totalRawToGenerate,
@@ -4064,9 +4439,12 @@ app.post('/api/grokbot/generate-utama', async (req, res) => {
     grokbotProgress.merge = 100;
     grokbotBroadcastProgress();
     grokbotLog('===== GENERATE UTAMA FINISHED =====');
+    const stats = getGrokStats();
+    sendWAMessage(`✅ [${tiktokStateName}] Generate Stok Utama Selesai! Berhasil: ${stats.success}, Gagal: ${stats.failed}, Merged: ${stats.saved}/${needed}`);
   }).catch(e => {
     clearInterval(poll);
     grokbotLog('❌ Fatal Utama Gen: ' + e.message);
+    sendWAMessage(`❌ [${tiktokStateName}] Gagal Generate Stok Utama: ${e.message}`);
   }).finally(() => {
     grokbotRunning = false;
     grokbotQueue = [];
@@ -4099,6 +4477,7 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
   res.json({ success: true, message: `Mulai generate 30 video cadangan (merged)` });
   
   grokbotLog(`🚀 Memulai Generate Stok Cadangan (30 video merged, 60 raw) untuk ${tiktokStateName}`);
+  sendWAMessage(`🚀 [${tiktokStateName}] Memulai Generate Stok Cadangan (30 video merged, 60 raw).`);
   
   const grokConfig = {
     stateFile: cfg.grokState,
@@ -4111,7 +4490,7 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
     resolution: cfg.resolution || '720p',
     duration: cfg.duration || '10s',
     aspectRatio: cfg.aspectRatio || '9:16',
-    headless: data.globalConfig?.headless !== false,
+    headless: isHeadlessEnabled(stateFile),
     downloadDir: GROK_DOWNLOAD_DIR,
     customDownloadDir: cadanganDir,
     totalVideos: 60, // 30 merged videos require 60 raw
@@ -4148,9 +4527,12 @@ app.post('/api/grokbot/generate-cadangan', async (req, res) => {
     grokbotProgress.merge = 100;
     grokbotBroadcastProgress();
     grokbotLog('===== GENERATE CADANGAN FINISHED =====');
+    const stats = getGrokStats();
+    sendWAMessage(`✅ [${tiktokStateName}] Generate Stok Cadangan Selesai! Berhasil: ${stats.success}, Gagal: ${stats.failed}, Merged: ${stats.saved}/30`);
   }).catch(e => {
     clearInterval(poll);
     grokbotLog('❌ Fatal Cadangan Gen: ' + e.message);
+    sendWAMessage(`❌ [${tiktokStateName}] Gagal Generate Stok Cadangan: ${e.message}`);
   }).finally(() => {
     grokbotRunning = false;
     grokbotQueue = [];
@@ -4303,7 +4685,7 @@ app.post('/api/grokbot/schedule-only', async (req, res) => {
       productTitle: cfg.productTitle || '',
       productDescription: cfg.productDescription || '',
       skipSwitches: false,
-      headless: data.globalConfig?.headless !== false,
+      headless: isHeadlessEnabled(stateFile),
       scheduleDate: schedDate,
       scheduleTime: schedTime,
       intervalMinutes: intervalMin,
@@ -4395,6 +4777,7 @@ app.post('/api/grokbot/merge-only', async (req, res) => {
 
   grokbotLog(`✂ [Merge Saja] Memulai merge ${pairsCount} pasang raw video untuk ${tiktokStateName}`);
   grokbotLog(`📂 Raw dir: grok-downloads/${tiktokStateName}/raw/ (${rawFiles.length} file)`);
+  sendWAMessage(`✂ [${tiktokStateName}] Memulai Merge Saja (${pairsCount} pasang raw video).`);
 
   try {
     if (!fs.existsSync(stateDownloadDir)) fs.mkdirSync(stateDownloadDir, { recursive: true });
@@ -4459,8 +4842,10 @@ app.post('/api/grokbot/merge-only', async (req, res) => {
     }
 
     grokbotLog(`✅ [Merge Saja] Selesai. ${mergedCount} video merged ke grok-downloads/${tiktokStateName}/`);
+    sendWAMessage(`✅ [${tiktokStateName}] Merge Saja Selesai! Berhasil menggabungkan ${mergedCount} video.`);
   } catch (e: any) {
     grokbotLog(`❌ Fatal Merge Only: ${e.message}`);
+    sendWAMessage(`❌ [${tiktokStateName}] Gagal Merge Saja: ${e.message}`);
   } finally {
     grokbotRunning = false;
     resetGrokbotProgress();
@@ -4568,6 +4953,7 @@ async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<v
         grokbotLog(`ℹ [Full Auto] Menggunakan stok yang tersedia: ${pendingUtamaVideos.length} video.`);
       } else if (needed > 0) {
         grokbotLog(`ℹ Stok utama kurang ${needed} video. Memulai auto-generate via Grok...`);
+        sendWAMessage(`🤖 [${tiktokStateName}] Stok utama kurang ${needed} video. Memulai auto-generate via Grok...`);
         if (!cfg.grokState) {
           grokbotLog(`❌ Gagal: Grok State belum diatur untuk TikTok state ${tiktokStateName}`);
           success = false;
@@ -4598,7 +4984,7 @@ async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<v
           resolution: cfg.resolution || '720p',
           duration: cfg.duration || '10s',
           aspectRatio: cfg.aspectRatio || '9:16',
-          headless: data.globalConfig?.headless !== false, // Headless mode sesuai config
+          headless: isHeadlessEnabled(stateFile), // Headless mode sesuai state/global config
           downloadDir: GROK_DOWNLOAD_DIR,
           customDownloadDir: stateDownloadDir,
           totalVideos: totalRawToGenerate,
@@ -4637,6 +5023,7 @@ async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<v
           await runGrokGenerator(grokConfig as any, grokbotLog, __dirname);
           clearInterval(poll);
           grokbotLog(`✓ Auto-generate selesai!`);
+          sendWAMessage(`✅ [${tiktokStateName}] Auto-generate selesai!`);
           
           grokbotProgress.generate = 100;
           grokbotProgress.merge = 100;
@@ -4651,6 +5038,7 @@ async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<v
         } catch (err: any) {
           clearInterval(poll);
           grokbotLog(`❌ Gagal auto-generate via Grok: ${err.message}`);
+          sendWAMessage(`❌ [${tiktokStateName}] Gagal auto-generate via Grok: ${err.message}`);
           success = false;
           lastError = err.message;
           break;
@@ -4722,7 +5110,7 @@ async function grokbotRunState(stateFile: string, isFullAuto = false): Promise<v
         productTitle: cfg.productTitle || '',
         productDescription: cfg.productDescription || '',
         skipSwitches: false, // jangan centang skip switches
-        headless: data.globalConfig?.headless !== false, // headless mode sesuai config
+        headless: isHeadlessEnabled(stateFile), // headless mode sesuai state/global config
         scheduleDate: schedDate,
         scheduleTime: schedTime,
         intervalMinutes: intervalMin,
@@ -4835,14 +5223,17 @@ app.post('/api/grokbot/schedule', async (req, res) => {
   const { stateFile } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
 
+  const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
   grokbotRunning = true;
   grokbotQueue = [];
   res.json({ success: true, message: 'Jadwal dimulai' });
+  sendWAMessage(`🚀 [${tiktokStateName}] Jadwalkan & Upload dimulai! (Memeriksa stok...)`);
 
   try {
     await grokbotRunState(stateFile);
   } catch (e: any) {
     grokbotLog(`❌ Fatal: ${e.message}`);
+    sendWAMessage(`❌ [${tiktokStateName}] Fatal error saat Jadwalkan & Upload: ${e.message}`);
   } finally {
     grokbotRunning = false;
     resetGrokbotProgress();
@@ -5203,7 +5594,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       promptFile: cfg.promptFile, promptDir: PROMPT_DIR,
       mode: cfg.mode || 'Video', resolution: cfg.resolution || '720p',
       duration: cfg.duration || '10s', aspectRatio: cfg.aspectRatio || '9:16',
-      headless: loadGrokbotData().globalConfig?.headless !== false, downloadDir: GROK_DOWNLOAD_DIR,
+      headless: isHeadlessEnabled(`tiktok-state-${tiktokStateName}.json`), downloadDir: GROK_DOWNLOAD_DIR,
       customDownloadDir: stateDownloadDir, totalVideos: totalRawToGenerate,
       merge: mergeEnabled, audioFolder: cfg.audioFolder || '',
       parallelBrowsers: loadGrokbotData().globalConfig?.parallelBrowsers || 1,
@@ -5260,7 +5651,7 @@ async function grokbotRunInfinite(stateFiles: string[]): Promise<void> {
       promptFile: cfg.promptFile, promptDir: PROMPT_DIR,
       mode: cfg.mode || 'Video', resolution: cfg.resolution || '720p',
       duration: cfg.duration || '10s', aspectRatio: cfg.aspectRatio || '9:16',
-      headless: loadGrokbotData().globalConfig?.headless !== false, downloadDir: GROK_DOWNLOAD_DIR,
+      headless: isHeadlessEnabled(`tiktok-state-${tiktokStateName}.json`), downloadDir: GROK_DOWNLOAD_DIR,
       customDownloadDir: cadanganDir, totalVideos: totalRawToGenerate,
       merge: mergeEnabled, audioFolder: cfg.audioFolder || '',
       parallelBrowsers: loadGrokbotData().globalConfig?.parallelBrowsers || 1,
@@ -5527,6 +5918,584 @@ app.get('/api/grokbot/logs', (req, res) => {
     if (idx >= 0) grokbotSseClients.splice(idx, 1);
   });
 });
+
+
+// ═══════════════════════════════════════════════════════════
+//  GROKBOT V2 CONSTANTS & PERSISTENCE
+// ═══════════════════════════════════════════════════════════
+const GROKBOTV2_DATA_FILE = path.join(__dirname, 'grokbotv2-data.json');
+
+interface GrokbotV2Data {
+  states: Record<string, GrokbotStateConfig>;
+  globalConfig?: {
+    parallelBrowsers?: number;
+    headless?: boolean;
+    sendWhatsApp?: boolean;
+    fullAuto?: {
+      enableCustomScheduler?: boolean;
+      customIntervalHours?: number;
+      customUploadCount?: number;
+      headless?: boolean;
+    };
+  };
+}
+
+function loadGrokbotV2Data(): GrokbotV2Data {
+  try {
+    return JSON.parse(fs.readFileSync(GROKBOTV2_DATA_FILE, 'utf-8'));
+  } catch {
+    return { states: {} };
+  }
+}
+
+function saveGrokbotV2Data(data: GrokbotV2Data) {
+  fs.writeFileSync(GROKBOTV2_DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+function isHeadlessEnabledV2(stateFile?: string): boolean {
+  const data = loadGrokbotV2Data();
+  if (data.globalConfig && data.globalConfig.headless === false) {
+    return false;
+  }
+  if (stateFile && data.states && data.states[stateFile] && data.states[stateFile].headless === false) {
+    return false;
+  }
+  return data.globalConfig?.headless !== false;
+}
+
+// Global state for Grokbot V2 SSE & Orchestration
+const grokbotv2SseClients: Response[] = [];
+let grokbotv2Running = false;
+let infiniteGenV2Running = false;
+let grokbotv2FullAutoRunning = false;
+let infiniteGenV2WaitInfo: { rateLimitTime: string; resumeTime: string; targetState: string } | null = null;
+let grokbotv2Queue: Array<{ stateName: string; stateFile: string; videoCount: number; scheduleStart: string; scheduleEnd: string; active: boolean }> = [];
+let grokbotv2Progress: {
+  generate: number;
+  merge: number;
+  upload: number;
+  currentState: string;
+  browsers: BrowserProgress[];
+  uploadedCount: number;
+  uploadTotal: number;
+  mergedCount: number;
+  mergeTotal: number;
+} = {
+  generate: 0,
+  merge: 0,
+  upload: 0,
+  currentState: '',
+  browsers: [],
+  uploadedCount: 0,
+  uploadTotal: 0,
+  mergedCount: 0,
+  mergeTotal: 0,
+};
+
+function grokbotv2Log(msg: string) {
+  console.log(`[GROKBOTV2] ${msg}`);
+  grokbotv2SseClients.forEach(c => c.write(`data: ${msg}
+
+`));
+}
+
+function grokbotv2BroadcastQueue() {
+  grokbotv2SseClients.forEach(c => c.write(`data: [QUEUE_UPDATE]:${JSON.stringify(grokbotv2Queue)}
+
+`));
+}
+
+function grokbotv2BroadcastProgress() {
+  grokbotv2Progress.browsers = getBrowserProgress();
+  const progressWithRateLimits = {
+    ...grokbotv2Progress,
+    rateLimits: getGrokRateLimits()
+  };
+  grokbotv2SseClients.forEach(c => c.write(`data: [PROGRESS_UPDATE]:${JSON.stringify(progressWithRateLimits)}
+
+`));
+}
+
+function resetGrokbotv2Progress(overrides: Partial<typeof grokbotv2Progress> = {}) {
+  grokbotv2Progress = {
+    generate: 0, merge: 0, upload: 0, currentState: '',
+    browsers: [], uploadedCount: 0, uploadTotal: 0,
+    mergedCount: 0, mergeTotal: 0,
+    ...overrides
+  };
+}
+
+// ── GROKBOT V2 GENERATOR FUNCTION USING generateGrokVideoV2 ──
+async function runGrokGeneratorV2(config: {
+  stateFile: string;
+  grokState: string;
+  bahanFolder: string;
+  promptFile: string;
+  mode: string;
+  resolution: string;
+  duration: string;
+  aspectRatio: string;
+  headless: boolean;
+  totalVideos: number;
+  merge?: boolean;
+  audioFolder?: string;
+}, log: (msg: string) => void): Promise<void> {
+  const grokStateName = (config.grokState || 'indra').replace('grok-state-', '').replace('.json', '');
+  const tiktokStateName = config.stateFile.replace('tiktok-state-', '').replace('.json', '');
+  const targetDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+  const rawDir = path.join(targetDir, 'raw');
+
+  if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+  if (config.merge && !fs.existsSync(rawDir)) fs.mkdirSync(rawDir, { recursive: true });
+
+  const mergeEnabled = config.merge !== false;
+  const totalRawToGenerate = mergeEnabled ? config.totalVideos * 2 : config.totalVideos;
+
+  log(`🚀 [GROK_V2_GENERATOR] Memulai generasi ${config.totalVideos} video (${totalRawToGenerate} raw) untuk TikTok State ${tiktokStateName} (Grok Account: ${grokStateName})...`);
+
+  // Load Prompt File
+  let promptText = 'A stunning video sequence';
+  if (config.promptFile) {
+    const promptPath = path.join(PROMPT_DIR, config.promptFile);
+    if (fs.existsSync(promptPath)) {
+      try {
+        const pData = JSON.parse(fs.readFileSync(promptPath, 'utf-8'));
+        promptText = pData.prompt || (Array.isArray(pData.prompts) ? pData.prompts[0] : promptText);
+      } catch {}
+    }
+  }
+
+  // Load Bahan Image List
+  let bahanImages: string[] = [];
+  if (config.bahanFolder) {
+    const folderPath = path.join(BAHAN_DIR, config.bahanFolder);
+    if (fs.existsSync(folderPath)) {
+      const exts = ['.jpg', '.jpeg', '.png', '.webp', '.bmp'];
+      try {
+        bahanImages = fs.readdirSync(folderPath).filter(f => exts.includes(path.extname(f).toLowerCase()));
+      } catch {}
+    }
+  }
+
+  for (let i = 0; i < totalRawToGenerate; i++) {
+    if (!grokbotv2Running && !infiniteGenV2Running && !grokbotv2FullAutoRunning) {
+      log(`⛔ Generasi V2 dihentikan pengguna.`);
+      break;
+    }
+
+    let imagePath: string | undefined = undefined;
+    if (bahanImages.length > 0) {
+      const pickedImg = bahanImages[i % bahanImages.length];
+      imagePath = path.join(BAHAN_DIR, config.bahanFolder, pickedImg);
+    }
+
+    log(`🎬 [GROK_V2] Memulai generate raw #${i + 1}/${totalRawToGenerate} via Grok V2 API...`);
+
+    try {
+      const res = await generateGrokVideoV2({
+        stateName: grokStateName,
+        promptText,
+        imagePath,
+        resolution: config.resolution || '720p',
+        duration: config.duration || '10s',
+        aspectRatio: config.aspectRatio || '9:16',
+        mode: config.mode || 'Video',
+        headless: config.headless ?? true
+      }, (msg, pct) => {
+        const overallGen = Math.round(((i + (pct / 100)) / totalRawToGenerate) * 100);
+        grokbotv2Progress.generate = Math.min(99, overallGen);
+        grokbotv2BroadcastProgress();
+      });
+
+      if (res && res.savePath && fs.existsSync(res.savePath)) {
+        const destDir = mergeEnabled ? rawDir : targetDir;
+        const newFilename = mergeEnabled
+          ? `grok_raw_${Date.now()}_${i + 1}.mp4`
+          : `grok_${Date.now()}_${i + 1}.mp4`;
+        const finalPath = path.join(destDir, newFilename);
+
+        fs.copyFileSync(res.savePath, finalPath);
+        try { fs.unlinkSync(res.savePath); } catch {}
+
+        log(`✓ [GROK_V2] Raw video #${i + 1} tersimpan ke: ${newFilename}`);
+
+        grokbotv2Progress.generate = Math.round(((i + 1) / totalRawToGenerate) * 100);
+        grokbotv2BroadcastProgress();
+
+        if (mergeEnabled) {
+          const rawFiles = fs.readdirSync(rawDir).filter(f => f.endsWith('.mp4')).sort();
+          if (rawFiles.length >= 2) {
+            log(`[MERGER_V2] Menggabungkan 2 raw video...`);
+            const v1 = path.join(rawDir, rawFiles[0]);
+            const v2 = path.join(rawDir, rawFiles[1]);
+
+            let audioPath: string | undefined = undefined;
+            if (config.audioFolder) {
+              const audioDir = path.join(__dirname, 'audio', config.audioFolder);
+              if (fs.existsSync(audioDir)) {
+                const aFiles = fs.readdirSync(audioDir).filter(f => ['.mp3', '.wav'].includes(path.extname(f).toLowerCase()));
+                if (aFiles.length > 0) {
+                  audioPath = path.join(audioDir, aFiles[Math.floor(Math.random() * aFiles.length)]);
+                }
+              }
+            }
+
+            const mergedFilename = `grok_merged_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
+            const mergedOutputPath = path.join(targetDir, mergedFilename);
+
+            try {
+              await mergeVideosCopyWithOptionalAudio([v1, v2], mergedOutputPath, audioPath, { tempDir: path.join(__dirname, '_tmp_uploads') });
+              log(`[MERGER_V2] ✅ Berhasil merge ke ${mergedFilename}`);
+              try { fs.unlinkSync(v1); } catch {}
+              try { fs.unlinkSync(v2); } catch {}
+              grokbotv2Progress.mergedCount = (grokbotv2Progress.mergedCount || 0) + 1;
+              grokbotv2Progress.merge = Math.min(99, Math.round((grokbotv2Progress.mergedCount / config.totalVideos) * 100));
+              grokbotv2BroadcastProgress();
+            } catch (mergeErr: any) {
+              log(`[MERGER_V2] ❌ Error merge: ${mergeErr.message}`);
+            }
+          }
+        }
+      } else {
+        log(`❌ [GROK_V2] Gagal generate raw #${i + 1}`);
+      }
+    } catch (err: any) {
+      log(`❌ [GROK_V2 ERROR] ${err.message}`);
+    }
+  }
+
+  grokbotv2Progress.generate = 100;
+  grokbotv2Progress.merge = 100;
+  grokbotv2BroadcastProgress();
+  log(`✅ [GROK_V2_GENERATOR] Selesai memproses generasi video V2 untuk ${tiktokStateName}`);
+}
+
+// ── GROKBOT V2 API ROUTES ──
+app.get('/grokbotv2', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'grokbotv2.html'));
+});
+
+app.get('/api/grokbotv2/config', (req, res) => {
+  res.json(loadGrokbotV2Data());
+});
+
+app.post('/api/grokbotv2/config/save', (req, res) => {
+  const { stateFile, grokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, addProduct, productNameRadio, productTitle, productDescription, headless, threeUploadsPerHour, lastUploadDate, lastUploadTime } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
+  const data = loadGrokbotV2Data();
+  if (!data.states[stateFile]) {
+    data.states[stateFile] = {
+      grokState: '', promptFile: '', bahanFolder: '', mode: 'Video',
+      resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
+      audioFolder: '', description: '', hashtags: '', scheduleDate: '',
+      scheduleTime: '', intervalMinutes: 60,
+      addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
+      headless: true, threeUploadsPerHour: false, lastUploadDate: '', lastUploadTime: ''
+    };
+  }
+  const s = data.states[stateFile];
+  if (grokState !== undefined) s.grokState = grokState;
+  if (promptFile !== undefined) s.promptFile = promptFile;
+  if (bahanFolder !== undefined) s.bahanFolder = bahanFolder;
+  if (mode !== undefined) s.mode = mode;
+  if (resolution !== undefined) s.resolution = resolution;
+  if (duration !== undefined) s.duration = duration;
+  if (aspectRatio !== undefined) s.aspectRatio = aspectRatio;
+  if (merge !== undefined) s.merge = merge;
+  if (audioFolder !== undefined) s.audioFolder = audioFolder;
+  if (description !== undefined) s.description = description;
+  if (hashtags !== undefined) s.hashtags = hashtags;
+  if (scheduleDate !== undefined) s.scheduleDate = scheduleDate;
+  if (scheduleTime !== undefined) s.scheduleTime = scheduleTime;
+  if (intervalMinutes !== undefined) s.intervalMinutes = intervalMinutes;
+  if (addProduct !== undefined) s.addProduct = addProduct;
+  if (productNameRadio !== undefined) s.productNameRadio = productNameRadio;
+  if (productTitle !== undefined) s.productTitle = productTitle;
+  if (productDescription !== undefined) s.productDescription = productDescription;
+  if (headless !== undefined) s.headless = headless;
+  if (threeUploadsPerHour !== undefined) s.threeUploadsPerHour = threeUploadsPerHour;
+  if (lastUploadDate !== undefined) s.lastUploadDate = lastUploadDate;
+  if (lastUploadTime !== undefined) s.lastUploadTime = lastUploadTime;
+  saveGrokbotV2Data(data);
+  res.json({ success: true });
+});
+
+app.post('/api/grokbotv2/global-config/save', (req, res) => {
+  const { headless, sendWhatsApp } = req.body;
+  const data = loadGrokbotV2Data();
+  if (!data.globalConfig) data.globalConfig = {};
+  if (headless !== undefined) data.globalConfig.headless = headless;
+  if (sendWhatsApp !== undefined) data.globalConfig.sendWhatsApp = sendWhatsApp;
+  saveGrokbotV2Data(data);
+  res.json({ success: true });
+});
+
+app.post('/api/grokbotv2/full-auto-settings/save', (req, res) => {
+  const { enableCustomScheduler, customIntervalHours, customUploadCount } = req.body;
+  const data = loadGrokbotV2Data();
+  if (!data.globalConfig) data.globalConfig = {};
+  if (!data.globalConfig.fullAuto) data.globalConfig.fullAuto = {};
+  if (enableCustomScheduler !== undefined) data.globalConfig.fullAuto.enableCustomScheduler = enableCustomScheduler;
+  if (customIntervalHours !== undefined) data.globalConfig.fullAuto.customIntervalHours = customIntervalHours;
+  if (customUploadCount !== undefined) data.globalConfig.fullAuto.customUploadCount = customUploadCount;
+  saveGrokbotV2Data(data);
+  res.json({ success: true });
+});
+
+app.get('/api/grokbotv2/stock', (req, res) => {
+  const stateFile = req.query.state as string;
+  if (!stateFile) return res.json({ raw: 0, utama: 0, cadangan: 0 });
+  const stateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+  const stateDir = path.join(GROK_DOWNLOAD_DIR, stateName);
+  const rawDir = path.join(stateDir, 'raw');
+  const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+
+  let rawCount = 0;
+  if (fs.existsSync(rawDir)) {
+    try { rawCount = fs.readdirSync(rawDir).filter(f => exts.includes(path.extname(f).toLowerCase())).length; } catch {}
+  }
+
+  let mergedFiles: string[] = [];
+  if (fs.existsSync(stateDir)) {
+    try { mergedFiles = fs.readdirSync(stateDir).filter(f => f.startsWith('grok_merged_') && exts.includes(path.extname(f).toLowerCase())); } catch {}
+  }
+
+  const marksFile = path.join(stateDir, '.downloaded.json');
+  let marks: Record<string, boolean> = {};
+  try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+
+  const unuploaded = mergedFiles.filter(f => !marks[f]);
+  res.json({ raw: rawCount, utama: unuploaded.length, cadangan: 0 });
+});
+
+app.post('/api/grokbotv2/generate-utama', async (req, res) => {
+  if (grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning) return res.status(400).json({ error: 'Grokbot V2 sedang berjalan!' });
+  const { stateFile } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
+
+  const data = loadGrokbotV2Data();
+  const cfg = data.states[stateFile];
+  if (!cfg) return res.status(400).json({ error: 'Config tidak ditemukan' });
+
+  const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+  const stateDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+  const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+  const marksFile = path.join(stateDir, '.downloaded.json');
+  let marks: Record<string, boolean> = {};
+  try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+
+  let pendingCount = 0;
+  if (fs.existsSync(stateDir)) {
+    try { pendingCount = fs.readdirSync(stateDir).filter(f => f.startsWith('grok_merged_') && exts.includes(path.extname(f).toLowerCase()) && !marks[f]).length; } catch {}
+  }
+
+  const needed = Math.max(1, 30 - pendingCount);
+
+  res.json({ success: true, message: `Generasi Stok Utama V2 dimulai untuk ${tiktokStateName} (butuh ${needed} video)` });
+
+  grokbotv2Running = true;
+  grokbotv2Queue = [{ stateName: tiktokStateName, stateFile, videoCount: needed, scheduleStart: 'Utama Gen V2', scheduleEnd: 'Utama Gen V2', active: true }];
+  grokbotv2BroadcastQueue();
+  resetGrokbotv2Progress({ currentState: tiktokStateName, mergeTotal: cfg.merge !== false ? needed : 0 });
+  grokbotv2BroadcastProgress();
+
+  grokbotv2Log(`🚀 Memulai Generate Stok Utama V2 untuk ${tiktokStateName}. Dibutuhkan: ${needed} video`);
+
+  try {
+    await runGrokGeneratorV2({
+      stateFile,
+      grokState: cfg.grokState,
+      bahanFolder: cfg.bahanFolder,
+      promptFile: cfg.promptFile,
+      mode: cfg.mode || 'Video',
+      resolution: cfg.resolution || '720p',
+      duration: cfg.duration || '10s',
+      aspectRatio: cfg.aspectRatio || '9:16',
+      headless: isHeadlessEnabledV2(stateFile),
+      totalVideos: needed,
+      merge: cfg.merge,
+      audioFolder: cfg.audioFolder
+    }, grokbotv2Log);
+    grokbotv2Log('===== GENERATE UTAMA V2 FINISHED =====');
+  } catch (e: any) {
+    grokbotv2Log('❌ Fatal Utama Gen V2: ' + e.message);
+  } finally {
+    grokbotv2Running = false;
+    grokbotv2Queue = [];
+    grokbotv2BroadcastQueue();
+  }
+});
+
+app.post('/api/grokbotv2/generate-cadangan', async (req, res) => {
+  if (grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning) return res.status(400).json({ error: 'Grokbot V2 sedang berjalan!' });
+  const { stateFile } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
+
+  const data = loadGrokbotV2Data();
+  const cfg = data.states[stateFile];
+  if (!cfg) return res.status(400).json({ error: 'Config tidak ditemukan' });
+
+  const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+
+  res.json({ success: true, message: `Generasi Stok Cadangan V2 dimulai untuk ${tiktokStateName}` });
+
+  grokbotv2Running = true;
+  grokbotv2Queue = [{ stateName: tiktokStateName, stateFile, videoCount: 30, scheduleStart: 'Cadangan Gen V2', scheduleEnd: 'Cadangan Gen V2', active: true }];
+  grokbotv2BroadcastQueue();
+  resetGrokbotv2Progress({ currentState: tiktokStateName, mergeTotal: 30 });
+  grokbotv2BroadcastProgress();
+
+  grokbotv2Log(`🚀 Memulai Generate Stok Cadangan V2 (30 video) untuk ${tiktokStateName}`);
+
+  try {
+    await runGrokGeneratorV2({
+      stateFile,
+      grokState: cfg.grokState,
+      bahanFolder: cfg.bahanFolder,
+      promptFile: cfg.promptFile,
+      mode: cfg.mode || 'Video',
+      resolution: cfg.resolution || '720p',
+      duration: cfg.duration || '10s',
+      aspectRatio: cfg.aspectRatio || '9:16',
+      headless: isHeadlessEnabledV2(stateFile),
+      totalVideos: 30,
+      merge: cfg.merge,
+      audioFolder: cfg.audioFolder
+    }, grokbotv2Log);
+    grokbotv2Log('===== GENERATE CADANGAN V2 FINISHED =====');
+  } catch (e: any) {
+    grokbotv2Log('❌ Fatal Cadangan Gen V2: ' + e.message);
+  } finally {
+    grokbotv2Running = false;
+    grokbotv2Queue = [];
+    grokbotv2BroadcastQueue();
+  }
+});
+
+app.post('/api/grokbotv2/schedule-only', async (req, res) => {
+  if (grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning) return res.status(400).json({ success: false, error: 'Grokbot V2 sedang berjalan!' });
+  const { stateFile } = req.body;
+  if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
+
+  const data = loadGrokbotV2Data();
+  const cfg = data.states[stateFile];
+  if (!cfg) return res.status(400).json({ error: 'Config tidak ditemukan' });
+
+  const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+  const stateDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+  const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+  const marksFile = path.join(stateDir, '.downloaded.json');
+  let marks: Record<string, boolean> = {};
+  try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+
+  let allVideos = fs.readdirSync(stateDir).filter(f => exts.includes(path.extname(f).toLowerCase())).sort();
+  let pendingVideos = allVideos.filter(v => !marks[v]);
+
+  if (pendingVideos.length === 0) {
+    return res.status(400).json({ success: false, error: 'Tidak ada video pending untuk diupload' });
+  }
+
+  res.json({ success: true, message: `Upload dimulai untuk ${pendingVideos.length} video` });
+
+  grokbotv2Running = true;
+  const batch = pendingVideos.slice(0, 30);
+  const schedDate = cfg.scheduleDate || new Date().toISOString().split('T')[0];
+  const schedTime = cfg.scheduleTime || new Date().toTimeString().slice(0, 5);
+
+  const uploadConfig = {
+    videoFolder: stateDir,
+    startFromVideo: batch[0],
+    description: cfg.description || '',
+    hashtags: cfg.hashtags || '',
+    addProduct: !!cfg.addProduct,
+    productNameRadio: cfg.productNameRadio || '',
+    productTitle: cfg.productTitle || '',
+    productDescription: cfg.productDescription || '',
+    skipSwitches: true,
+    headless: isHeadlessEnabledV2(stateFile),
+    scheduleDate: schedDate,
+    scheduleTime: schedTime,
+    intervalMinutes: cfg.intervalMinutes || 60,
+    stateFile: stateFile,
+    statesDir: STATES_DIR
+  };
+
+  let uploadedCount = 0;
+  const onVideoUploaded = (videoFilename: string) => {
+    let m: Record<string, boolean> = {};
+    try { m = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+    m[videoFilename] = true;
+    fs.writeFileSync(marksFile, JSON.stringify(m, null, 2));
+    grokbotv2Log(`✅ [${tiktokStateName}] ${videoFilename} terupload`);
+
+    const videoPath = path.join(stateDir, videoFilename);
+    if (fs.existsSync(videoPath)) {
+      try { fs.unlinkSync(videoPath); } catch {}
+    }
+
+    uploadedCount++;
+    grokbotv2Progress.uploadedCount = uploadedCount;
+    grokbotv2Progress.uploadTotal = batch.length;
+    grokbotv2Progress.upload = Math.round((uploadedCount / batch.length) * 100);
+    grokbotv2BroadcastProgress();
+  };
+
+  try {
+    await runUpload(uploadConfig, grokbotv2Log, onVideoUploaded);
+  } catch (err: any) {
+    grokbotv2Log(`❌ Upload error: ${err.message}`);
+  } finally {
+    grokbotv2Running = false;
+    resetGrokbotv2Progress();
+    grokbotv2BroadcastProgress();
+    grokbotv2Queue = [];
+    grokbotv2BroadcastQueue();
+    grokbotv2Log('===== JADWALKAN SAJA V2 FINISHED =====');
+  }
+});
+
+app.post('/api/grokbotv2/status', (req, res) => {
+  res.json({ running: grokbotv2Running, infiniteGenRunning: infiniteGenV2Running, infiniteGenWaitInfo: infiniteGenV2WaitInfo, grokbotFullAutoRunning: grokbotv2FullAutoRunning, queue: grokbotv2Queue, progress: grokbotv2Progress, rateLimits: getGrokRateLimits() });
+});
+
+app.get('/api/grokbotv2/status', (req, res) => {
+  res.json({ running: grokbotv2Running, infiniteGenRunning: infiniteGenV2Running, infiniteGenWaitInfo: infiniteGenV2WaitInfo, grokbotFullAutoRunning: grokbotv2FullAutoRunning, queue: grokbotv2Queue, progress: grokbotv2Progress, rateLimits: getGrokRateLimits() });
+});
+
+app.post('/api/grokbotv2/stop', async (req, res) => {
+  grokbotv2FullAutoRunning = false;
+  grokbotv2Running = false;
+  infiniteGenV2Running = false;
+  resetGrokbotv2Progress();
+  grokbotv2BroadcastProgress();
+  grokbotv2Log('⛔ ===== GROKBOT V2 STOPPED =====');
+  res.json({ success: true });
+});
+
+app.post('/api/grokbotv2/stop-full-auto', (req, res) => {
+  grokbotv2FullAutoRunning = false;
+  grokbotv2Log('⛔ ===== FULL AUTO V2 STANDBY STOPPED =====');
+  res.json({ success: true });
+});
+
+app.post('/api/grokbotv2/stop-infinite-generate', async (req, res) => {
+  infiniteGenV2Running = false;
+  grokbotv2Log('⛔ ===== INFINITE GENERATE V2 STOPPED =====');
+  res.json({ success: true });
+});
+
+app.get('/api/grokbotv2/logs', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+  grokbotv2SseClients.push(res);
+  req.on('close', () => {
+    const idx = grokbotv2SseClients.indexOf(res);
+    if (idx >= 0) grokbotv2SseClients.splice(idx, 1);
+  });
+});
+
 
 // ═══════════════════════════════════════════════════════════
 //  LEONARDO AI INTEGRATION APIs
@@ -5949,6 +6918,7 @@ app.listen(PORT, () => {
   console.log(`🧠 Grok Imagine Generator: http://localhost:${PORT}/grok`);
   console.log(`🤖 YT to TikTok Bot: http://localhost:${PORT}/ytbot`);
   console.log(`🤖 Grok to TikTok Bot: http://localhost:${PORT}/grokbot`);
+  console.log(`🤖 Grok V2 to TikTok Bot: http://localhost:${PORT}/grokbotv2`);
   console.log(`📁 Folder state: ${STATES_DIR} & ${GROK_STATES_DIR}`);
 });
 

@@ -1,3 +1,78 @@
 {
-  "states": {}
+  "states": {
+    "tiktok-state-tabletmurahindonesia.json": {
+      "grokState": "grok-state-indra.json",
+      "promptFile": "xprime-s24.json",
+      "bahanFolder": "tab_xprime",
+      "mode": "Video",
+      "resolution": "720p",
+      "duration": "10s",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "",
+      "description": "",
+      "hashtags": "",
+      "scheduleDate": "2026-07-02",
+      "scheduleTime": "23:03",
+      "intervalMinutes": 60,
+      "addProduct": false,
+      "productNameRadio": "",
+      "productTitle": "",
+      "productDescription": "",
+      "headless": false
+    },
+    "tiktok-state-Rekomendasi_Tablet_Murah.json": {
+      "grokState": "grok-state-indra.json",
+      "promptFile": "xprime-s24.json",
+      "bahanFolder": "tab_xprime",
+      "mode": "Video",
+      "resolution": "720p",
+      "duration": "10s",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "",
+      "description": "",
+      "hashtags": "",
+      "scheduleDate": "2026-07-06",
+      "scheduleTime": "12:03",
+      "intervalMinutes": 60,
+      "addProduct": false,
+      "productNameRadio": "",
+      "productTitle": "",
+      "productDescription": "",
+      "headless": false
+    },
+    "tiktok-state-herbalily.json": {
+      "grokState": "grok-state-groknya indra.json",
+      "promptFile": "ginosel.json",
+      "bahanFolder": "herbalily",
+      "mode": "Video",
+      "resolution": "720p",
+      "duration": "10s",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "ginosel",
+      "description": "Suplemen ginosel sirup, untuk tetap aktif tanpa keluhan Neuropati Botol",
+      "hashtags": "neuropati, ginosel, suplemen",
+      "scheduleDate": "2026-07-25",
+      "scheduleTime": "13:00",
+      "intervalMinutes": 300,
+      "addProduct": true,
+      "productNameRadio": "Suplemen ginosel sirup, untuk tetap aktif tanpa keluhan Neuropati Botol",
+      "productTitle": "BELI DISINI SEBELUM KEHABISAN",
+      "productDescription": "",
+      "headless": false
+    }
+  },
+  "globalConfig": {
+    "fullAuto": {
+      "enableCustomScheduler": false,
+      "customIntervalHours": 10,
+      "customUploadCount": 5,
+      "headless": false
+    },
+    "headless": false,
+    "sendWhatsApp": false,
+    "parallelBrowsers": 1
+  }
 }
