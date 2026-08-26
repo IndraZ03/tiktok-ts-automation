@@ -1,0 +1,28 @@
+{
+  "states": {
+    "tiktok-state-Kandra9599.json": {
+      "promptFile": "xprime-s24.json",
+      "bahanFolder": "xprime-lily-s24",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "xprime-vidabot",
+      "description": "",
+      "hashtags": "",
+      "scheduleDate": "2026-08-26",
+      "scheduleTime": "06:07",
+      "intervalMinutes": 60,
+      "addProduct": false,
+      "productNameRadio": "",
+      "productTitle": "",
+      "productDescription": "",
+      "headless": true,
+      "threeUploadsPerHour": false,
+      "lastUploadDate": "",
+      "lastUploadTime": ""
+    }
+  },
+  "globalConfig": {
+    "headless": false,
+    "sendWhatsApp": false
+  }
+}

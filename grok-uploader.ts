@@ -59,6 +59,9 @@ export function getBrowserProgress(): BrowserProgress[] { return browserProgress
 let grokRateLimits: Record<string, { availableAt: string | null; detectedAt: number }> = {};
 export function getGrokRateLimits() { return { ...grokRateLimits }; }
 export function clearGrokRateLimit(stateFile: string) { delete grokRateLimits[stateFile]; }
+export function setGrokRateLimit(stateKey: string, availableAt: string | null) {
+  grokRateLimits[stateKey] = { availableAt, detectedAt: Date.now() };
+}
 
 export async function stopGrokGenerator() {
   isRunning = false;

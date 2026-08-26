@@ -7,6 +7,16 @@ import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// ── Typed error untuk Rate Limit ──
+export class RateLimitError extends Error {
+  availableAt: string | null;
+  constructor(availableAt: string | null) {
+    super(`Rate limit reached${availableAt ? '. Tersedia kembali: ' + availableAt : ''}`);
+    this.name = 'RateLimitError';
+    this.availableAt = availableAt;
+  }
+}
+
 export interface GrokApiOptions {
   stateName?: string;
   prompt: string;
@@ -134,11 +144,19 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
 
     const genPromise = page.evaluate(async (cfg: any) => (window as any).__grokGenerate(cfg), genCfg);
 
+    // Track rate-limit detection from polling (in case result comes late)
+    let rateLimitDetectedAt: { availableAt: string | null } | null = null;
+
     const poll = setInterval(async () => {
       try {
         const st = await page.evaluate(() => (window as any).__grokGetState());
         if (st && st.progress >= 0) {
           log(`Proses generate: ${st.progress}%`, Math.min(90, 35 + Math.floor(st.progress * 0.55)));
+        }
+        // ── Deteksi rate limit dari polling ──
+        if (st && st.status === 'rate_limited') {
+          rateLimitDetectedAt = { availableAt: st.availableAt || null };
+          log(`🚫 [POLL] Rate limit terdeteksi! availableAt: ${st.availableAt || 'tidak diketahui'}`);
         }
       } catch {}
     }, 2500);
@@ -148,6 +166,14 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
       result = await genPromise;
     } finally {
       clearInterval(poll);
+    }
+
+    // ── Tangkap Rate Limit dari result maupun polling ──
+    if ((result as any)?.status === 'rate_limited' || rateLimitDetectedAt) {
+      const rlInfo = rateLimitDetectedAt as { availableAt: string | null } | null;
+      const availableAt = (result as any)?.availableAt || (rlInfo ? rlInfo.availableAt : null) || null;
+      log(`🚫 Rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
+      throw new RateLimitError(availableAt);
     }
 
     if (!result || result.status !== 'done') {

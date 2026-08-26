@@ -17,6 +17,9 @@ export function getBrowserProgress() { return browserProgress.map(b => ({ ...b }
 let grokRateLimits = {};
 export function getGrokRateLimits() { return { ...grokRateLimits }; }
 export function clearGrokRateLimit(stateFile) { delete grokRateLimits[stateFile]; }
+export function setGrokRateLimit(stateKey, availableAt) {
+    grokRateLimits[stateKey] = { availableAt, detectedAt: Date.now() };
+}
 export async function stopGrokGenerator() {
     isRunning = false;
     for (const b of activeBrowsers) {

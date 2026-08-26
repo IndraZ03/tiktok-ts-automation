@@ -5,6 +5,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// ── Typed error untuk Rate Limit ──
+export class RateLimitError extends Error {
+    constructor(availableAt) {
+        super(`Rate limit reached${availableAt ? '. Tersedia kembali: ' + availableAt : ''}`);
+        this.name = 'RateLimitError';
+        this.availableAt = availableAt;
+    }
+}
+
 export async function checkGrokQuota(stateName = 'indra') {
     const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
     if (!fs.existsSync(statePath)) {
@@ -95,11 +105,20 @@ export async function generateGrokVideoV2(options, onProgress) {
             aspectRatio: options.aspectRatio || '9:16',
         };
         const genPromise = page.evaluate(async (cfg) => window.__grokGenerate(cfg), genCfg);
+
+        // Track rate-limit detection dari polling (deteksi lebih awal sebelum result kembali)
+        let rateLimitDetectedAt = null;
+
         const poll = setInterval(async () => {
             try {
                 const st = await page.evaluate(() => window.__grokGetState());
                 if (st && st.progress >= 0) {
                     log(`Proses generate: ${st.progress}%`, Math.min(90, 35 + Math.floor(st.progress * 0.55)));
+                }
+                // ── Deteksi rate limit dari polling ──
+                if (st && st.status === 'rate_limited') {
+                    rateLimitDetectedAt = { availableAt: st.availableAt || null };
+                    log(`🚫 [POLL] Rate limit terdeteksi! availableAt: ${st.availableAt || 'tidak diketahui'}`);
                 }
             }
             catch { }
@@ -111,6 +130,15 @@ export async function generateGrokVideoV2(options, onProgress) {
         finally {
             clearInterval(poll);
         }
+
+        // ── Tangkap Rate Limit dari result maupun dari polling interval ──
+        if (result?.status === 'rate_limited' || rateLimitDetectedAt) {
+            const availableAt = result?.availableAt || rateLimitDetectedAt?.availableAt || null;
+            log(`🚫 Rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
+            await browser.close();
+            throw new RateLimitError(availableAt);
+        }
+
         if (!result || result.status !== 'done') {
             throw new Error(result?.error || 'Generasi video gagal di Grok');
         }
