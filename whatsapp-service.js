@@ -1,8 +1,8 @@
 import fs from 'fs';
 import { getGrokRateLimits } from './grok-uploader.js';
-const ID_INSTANCE = "7103957889";
-const API_TOKEN = "8eca423d65e444f3b9234c41252c4b8764533d7f18c643a8ad";
-const API_URL = "https://7103.api.greenapi.com";
+const ID_INSTANCE = "710722699619";
+const API_TOKEN = "d3e8eb4c801e4247b77a7a7bd678ead98ef8c7b8efaa447a83";
+const API_URL = "https://7107.api.greenapi.com";
 const TARGET_GROUP = "120363426226443899@g.us";
 export async function sendWAMessage(msg) {
     const urlSend = `${API_URL}/waInstance${ID_INSTANCE}/sendMessage/${API_TOKEN}`;

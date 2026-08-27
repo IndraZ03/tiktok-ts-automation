@@ -7636,9 +7636,9 @@ app.post('/api/vidabot/generate-utama', async (req, res) => {
     } catch {}
   }
 
-  const needed = Math.max(0, 3 - currentUtamaCount);
+  const needed = Math.max(0, 30 - currentUtamaCount);
   if (needed === 0) {
-    return res.json({ success: true, message: 'Stok utama sudah penuh (minimal 3 video)' });
+    return res.json({ success: true, message: 'Stok utama sudah penuh (minimal 30 video)' });
   }
 
   const mergeEnabled = cfg.merge !== false;
@@ -7726,9 +7726,9 @@ app.post('/api/vidabot/generate-cadangan', async (req, res) => {
     } catch {}
   }
 
-  const needed = Math.max(0, 3 - currentCadanganCount);
+  const needed = Math.max(0, 30 - currentCadanganCount);
   if (needed === 0) {
-    return res.json({ success: true, message: 'Stok cadangan sudah penuh (minimal 3 video)' });
+    return res.json({ success: true, message: 'Stok cadangan sudah penuh (minimal 30 video)' });
   }
 
   const mergeEnabled = cfg.merge !== false;
@@ -8103,7 +8103,7 @@ app.post('/api/vidabot/infinite-generate', async (req, res) => {
             }).length;
           }
 
-          const needed = Math.max(0, 3 - currentUtamaCount);
+          const needed = Math.max(0, 30 - currentUtamaCount);
           if (needed > 0) {
             anyGenerated = true;
             vidabotRunning = true;

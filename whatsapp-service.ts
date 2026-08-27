@@ -2,9 +2,9 @@ import fs from 'fs';
 import path from 'path';
 import { getGrokRateLimits } from './grok-uploader.js';
 
-const ID_INSTANCE = "7103957889";
-const API_TOKEN = "8eca423d65e444f3b9234c41252c4b8764533d7f18c643a8ad";
-const API_URL = "https://7103.api.greenapi.com";
+const ID_INSTANCE = "710722699619";
+const API_TOKEN = "d3e8eb4c801e4247b77a7a7bd678ead98ef8c7b8efaa447a83";
+const API_URL = "https://7107.api.greenapi.com";
 const TARGET_GROUP = "120363426226443899@g.us";
 
 export async function sendWAMessage(msg: string) {
@@ -43,7 +43,7 @@ export function notifyScheduleStarted(firstUploadTime: string, lastUploadTime: s
       const reminderMs = lastUploadDate.getTime() - (5 * 60 * 60 * 1000);
       const reminderDate = new Date(reminderMs);
       // Format as YYYY-MM-DD HH:mm
-      reminderTime = `${reminderDate.getFullYear()}-${String(reminderDate.getMonth()+1).padStart(2,'0')}-${String(reminderDate.getDate()).padStart(2,'0')} ${String(reminderDate.getHours()).padStart(2,'0')}:${String(reminderDate.getMinutes()).padStart(2,'0')}`;
+      reminderTime = `${reminderDate.getFullYear()}-${String(reminderDate.getMonth() + 1).padStart(2, '0')}-${String(reminderDate.getDate()).padStart(2, '0')} ${String(reminderDate.getHours()).padStart(2, '0')}:${String(reminderDate.getMinutes()).padStart(2, '0')}`;
     }
   } catch (e) {
     console.error("Error calculating reminder time:", e);
@@ -99,7 +99,7 @@ export function startWAPolling() {
 
   // Start polling incoming messages
   const urlReceive = `${API_URL}/waInstance${ID_INSTANCE}/receiveNotification/${API_TOKEN}?receiveTimeout=5`;
-  
+
   (async () => {
     console.log("WhatsApp polling started...");
     while (true) {
@@ -109,19 +109,19 @@ export function startWAPolling() {
           await new Promise(r => setTimeout(r, 10000));
           continue;
         }
-        
+
         const data = await response.json() as any;
         if (data && data.receiptId) {
           const receiptId = data.receiptId;
           const body = data.body;
-          
+
           if (body) {
             console.log(`[WA_POLL] Webhook type: ${body.typeWebhook}`);
             if (body.typeWebhook === 'incomingMessageReceived') {
               const chatId = body.senderData?.chatId;
               const messageData = body.messageData;
               console.log(`[WA_POLL] Msg from: ${chatId}, type: ${messageData?.typeMessage}`);
-              
+
               if (chatId === TARGET_GROUP && messageData && messageData.typeMessage === 'textMessage') {
                 const text = messageData.textMessageData?.textMessage?.trim();
                 console.log(`[WA_POLL] Message text: "${text}"`);
@@ -143,30 +143,30 @@ export function startWAPolling() {
                     const rateLimits = getGrokRateLimits();
                     const keys = Object.keys(rateLimits);
                     console.log(`[WA_POLL] keys length: ${keys.length}`);
-                  
-                  if (keys.length === 0) {
-                    await sendWAMessage("🤖 Status Grok: Available");
-                  } else {
-                    let msg = "🤖 Status Grok Rate Limit:\n";
-                    for (const key of keys) {
-                      const limit = rateLimits[key];
-                      const name = key.replace('grok-state-', '').replace('.json', '');
-                      const avail = limit.availableAt || "tidak diketahui";
-                      msg += `- State ${name}: Limit sampai ${avail}\n`;
+
+                    if (keys.length === 0) {
+                      await sendWAMessage("🤖 Status Grok: Available");
+                    } else {
+                      let msg = "🤖 Status Grok Rate Limit:\n";
+                      for (const key of keys) {
+                        const limit = rateLimits[key];
+                        const name = key.replace('grok-state-', '').replace('.json', '');
+                        const avail = limit.availableAt || "tidak diketahui";
+                        msg += `- State ${name}: Limit sampai ${avail}\n`;
+                      }
+                      await sendWAMessage(msg);
                     }
-                    await sendWAMessage(msg);
+                  } catch (e: any) {
+                    await sendWAMessage(`Gagal mengambil status Grok: ${e.message}`);
                   }
-                } catch (e: any) {
-                  await sendWAMessage(`Gagal mengambil status Grok: ${e.message}`);
                 }
               }
             }
           }
-          }
-          
+
           // Delete notification to acknowledge
           const urlDelete = `${API_URL}/waInstance${ID_INSTANCE}/deleteNotification/${API_TOKEN}/${receiptId}`;
-          await fetch(urlDelete, { method: 'DELETE' }).catch(() => {});
+          await fetch(urlDelete, { method: 'DELETE' }).catch(() => { });
         }
       } catch (e) {
         await new Promise(r => setTimeout(r, 5000));
