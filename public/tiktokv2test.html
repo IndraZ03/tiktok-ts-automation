@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TikTok Affiliate Direct API Tester (/tiktokv2test)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #090d16;
+      --panel-bg: rgba(22, 27, 38, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.1);
+      --accent-tiktok: #ff0050;
+      --accent-cyan: #00f2fe;
+      --accent-emerald: #10b981;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --input-bg: #111827;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(255, 0, 80, 0.12) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(0, 242, 254, 0.12) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .header h1 {
+      font-size: 2.2rem;
+      font-weight: 700;
+      background: linear-gradient(135deg, #ff0050, #00f2fe);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 20px;
+      padding: 2rem;
+      box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .card-title {
+      font-size: 1.2rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #f1f5f9;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.25rem;
+    }
+
+    @media (max-width: 640px) {
+      .grid-2 {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    select, input[type="text"], input[type="date"], input[type="time"], textarea {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 0.8rem;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent-tiktok);
+      box-shadow: 0 0 0 3px rgba(255, 0, 80, 0.25);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 85px;
+    }
+
+    .file-dropzone {
+      border: 2px dashed rgba(255, 255, 255, 0.15);
+      border-radius: 12px;
+      padding: 1.5rem;
+      text-align: center;
+      background: rgba(17, 24, 39, 0.6);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+    }
+
+    .file-dropzone:hover {
+      border-color: var(--accent-cyan);
+      background: rgba(17, 24, 39, 0.9);
+    }
+
+    .file-dropzone input[type="file"] {
+      display: none;
+    }
+
+    .file-info {
+      font-size: 0.85rem;
+      color: #38bdf8;
+      margin-top: 0.5rem;
+      font-weight: 500;
+    }
+
+    .btn-submit {
+      width: 100%;
+      background: linear-gradient(135deg, #ff0050, #00f2fe);
+      border: none;
+      border-radius: 12px;
+      padding: 1.1rem;
+      color: white;
+      font-weight: 700;
+      font-size: 1.05rem;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(255, 0, 80, 0.4);
+      transition: transform 0.2s, opacity 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.6rem;
+      margin-top: 1.5rem;
+    }
+
+    .btn-submit:hover {
+      opacity: 0.95;
+      transform: translateY(-2px);
+    }
+
+    .btn-submit:disabled {
+      background: #475569;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .response-card {
+      margin-top: 2rem;
+      display: none;
+    }
+
+    .response-json {
+      background: #040711;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 12px;
+      padding: 1rem;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #a7f3d0;
+      max-height: 250px;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      word-break: break-all;
+    }
+
+    .spinner {
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top: 3px solid white;
+      width: 22px;
+      height: 22px;
+      animation: spin 1s linear infinite;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>🛍️ TikTok Affiliate Direct API Tester (/tiktokv2test)</h1>
+    <p>Posting Video Affiliate TikTok secara Direct API (Bypass UI/DOM Click dengan Product Showcase Anchors)</p>
+  </div>
+
+  <div class="card">
+    <div class="card-title">📱 Form Uji Coba Post Affiliate</div>
+
+    <!-- State Select -->
+    <div class="form-group">
+      <label for="stateSelect">1. TikTok Account State</label>
+      <select id="stateSelect">
+        <option value="">-- Memuat Sesi TikTok --</option>
+      </select>
+    </div>
+
+    <!-- Video Upload / Select -->
+    <div class="form-group">
+      <label>2. File Video (.mp4)</label>
+      <div class="file-dropzone" onclick="document.getElementById('videoFileInput').click()">
+        <span style="font-size: 1.8rem; display: block; margin-bottom: 0.3rem;">📹</span>
+        <span style="font-size: 0.9rem; color: var(--text-main); font-weight: 500;">Klik untuk memilih file video (.mp4)</span>
+        <input type="file" id="videoFileInput" accept="video/mp4,video/*">
+        <div class="file-info" id="fileInfo">Belum ada file dipilih</div>
+      </div>
+    </div>
+
+    <!-- Deskripsi & Hashtag -->
+    <div class="grid-2">
+      <div class="form-group">
+        <label for="descInput">3. Deskripsi Video</label>
+        <textarea id="descInput" placeholder="Masukkan deskripsi postingan...">tes grok ini deskripsi</textarea>
+      </div>
+
+      <div class="form-group">
+        <label for="hashtagInput">4. Hashtag (Dipisahkan koma)</label>
+        <textarea id="hashtagInput" placeholder="contoh: fyp, viral, affiliate">fyp, affiliate, promo</textarea>
+      </div>
+    </div>
+
+    <!-- Showcase Product ID & Nama Produk -->
+    <div class="grid-2">
+      <div class="form-group">
+        <label for="productIdInput">5. Product ID (Showcase Affiliate)</label>
+        <input type="text" id="productIdInput" value="1729748856299095594" placeholder="Contoh: 1729748856299095594">
+      </div>
+
+      <div class="form-group">
+        <label for="productTitleInput">6. Nama Produk (Anchor Keyword)</label>
+        <input type="text" id="productTitleInput" value="ini nama produk" placeholder="Contoh: ini nama produk">
+      </div>
+    </div>
+
+    <!-- Schedule Date & Time -->
+    <div class="grid-2">
+      <div class="form-group">
+        <label for="scheduleDateInput">7. Jadwal Tanggal (Schedule Date)</label>
+        <input type="date" id="scheduleDateInput">
+      </div>
+
+      <div class="form-group">
+        <label for="scheduleTimeInput">8. Jadwal Jam (Schedule Time)</label>
+        <input type="time" id="scheduleTimeInput">
+      </div>
+    </div>
+
+    <button id="btnSubmit" class="btn-submit">
+      <span>🚀 Post Video Affiliate via Direct API</span>
+    </button>
+
+    <!-- RESPONSE OUTPUT -->
+    <div id="responseCard" class="response-card">
+      <div class="card-title" style="color: #67e8f9; margin-bottom: 0.75rem;">📡 Status Respons API TikTok</div>
+      <pre class="response-json" id="responseJson">Menunggu eksekusi request...</pre>
+    </div>
+  </div>
+</div>
+
+<script>
+  async function loadTikTokStates() {
+    try {
+      const res = await fetch('/api/tiktokv2test/states');
+      const states = await res.json();
+      const select = document.getElementById('stateSelect');
+      select.innerHTML = '';
+
+      if (states && states.length > 0) {
+        states.forEach(s => {
+          const opt = document.createElement('option');
+          opt.value = s.filename;
+          opt.textContent = `${s.name} (${s.filename})`;
+          select.appendChild(opt);
+        });
+      } else {
+        select.innerHTML = '<option value="">-- Tidak ada state TikTok tersimpan --</option>';
+      }
+    } catch (err) {
+      console.error('Failed to load TikTok states:', err);
+    }
+  }
+
+  // Set default schedule date to today and time to +1 hour
+  function setDefaultSchedule() {
+    const now = new Date();
+    const dateStr = now.toISOString().split('T')[0];
+    
+    now.setHours(now.getHours() + 1);
+    const timeStr = `${String(now.getHours()).padStart(2, '0')}:00`;
+
+    document.getElementById('scheduleDateInput').value = dateStr;
+    document.getElementById('scheduleTimeInput').value = timeStr;
+  }
+
+  // Handle File Select
+  document.getElementById('videoFileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    const fileInfo = document.getElementById('fileInfo');
+    if (file) {
+      const sizeMb = (file.size / (1024 * 1024)).toFixed(2);
+      fileInfo.textContent = `✅ ${file.name} (${sizeMb} MB)`;
+    } else {
+      fileInfo.textContent = 'Belum ada file dipilih';
+    }
+  });
+
+  // Submit Handler
+  document.getElementById('btnSubmit').addEventListener('click', async () => {
+    const stateFile = document.getElementById('stateSelect').value;
+    const videoFile = document.getElementById('videoFileInput').files[0];
+    const description = document.getElementById('descInput').value;
+    const hashtags = document.getElementById('hashtagInput').value;
+    const productId = document.getElementById('productIdInput').value;
+    const productTitle = document.getElementById('productTitleInput').value;
+    const scheduleDate = document.getElementById('scheduleDateInput').value;
+    const scheduleTime = document.getElementById('scheduleTimeInput').value;
+
+    if (!stateFile) {
+      alert('Silakan pilih TikTok Account State terlebih dahulu!');
+      return;
+    }
+
+    if (!description || description.trim() === '') {
+      alert('Silakan isi deskripsi video!');
+      return;
+    }
+
+    const btn = document.getElementById('btnSubmit');
+    const responseCard = document.getElementById('responseCard');
+    const responseJson = document.getElementById('responseJson');
+
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner"></div> <span>Mengirim API Request ke TikTok...</span>`;
+    responseCard.style.display = 'block';
+    responseJson.textContent = `[${new Date().toLocaleTimeString()}] Mengirim payload ke /api/tiktokv2test/post-affiliate...\nMohon tunggu proses penanganan browser context & SecSDK...`;
+
+    try {
+      const formData = new FormData();
+      formData.append('stateFile', stateFile);
+      if (videoFile) formData.append('videoFile', videoFile);
+      formData.append('description', description);
+      formData.append('hashtags', hashtags);
+      formData.append('productId', productId);
+      formData.append('productTitle', productTitle);
+      formData.append('scheduleDate', scheduleDate);
+      formData.append('scheduleTime', scheduleTime);
+
+      const res = await fetch('/api/tiktokv2test/post-affiliate', {
+        method: 'POST',
+        body: formData
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Request API Gagal');
+      }
+
+      responseJson.textContent = `[${new Date().toLocaleTimeString()}] ✅ POST AFFILIATE BERHASIL!\n\n` + JSON.stringify(data, null, 2);
+    } catch (err) {
+      responseJson.textContent = `[${new Date().toLocaleTimeString()}] ❌ ERROR: ${err.message}`;
+      alert(`Gagal posting: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<span>🚀 Post Video Affiliate via Direct API</span>`;
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', () => {
+    loadTikTokStates();
+    setDefaultSchedule();
+  });
+</script>
+
+</body>
+</html>

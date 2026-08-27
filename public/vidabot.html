@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Grok V2 to TikTok Bot</title>
+  <title>Vida to TikTok Bot</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
   <style>
@@ -27,7 +27,7 @@
       position: absolute; z-index: 50; top: 100%; left: 0; right: 0;
       max-height: 280px; overflow-y: auto;
       background: rgba(17, 24, 39, 0.95);
-      border: 1px solid rgba(236, 72, 153, 0.2);
+      border: 1px solid rgba(6, 182, 212, 0.2);
       border-radius: 16px;
       margin-top: 6px; padding: 8px;
       backdrop-filter: blur(16px);
@@ -40,8 +40,8 @@
       padding: 10px 14px; border-radius: 10px; cursor: pointer;
       transition: all 0.2s ease;
     }
-    .multiselect-item:hover { background: rgba(236, 72, 153, 0.1); }
-    .multiselect-item input { accent-color: #ec4899; width: 18px; height: 18px; }
+    .multiselect-item:hover { background: rgba(6, 182, 212, 0.1); }
+    .multiselect-item input { accent-color: #06b6d4; width: 18px; height: 18px; }
 
     .state-card {
       border: 1px solid rgba(255, 255, 255, 0.05);
@@ -50,8 +50,8 @@
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
     .state-card:hover {
-      border-color: rgba(236, 72, 153, 0.3);
-      box-shadow: 0 10px 30px -10px rgba(236, 72, 153, 0.15);
+      border-color: rgba(6, 182, 212, 0.3);
+      box-shadow: 0 10px 30px -10px rgba(6, 182, 212, 0.15);
       transform: translateY(-2px);
     }
 
@@ -68,13 +68,13 @@
     .running-pulse { animation: pulse-run 2s infinite; }
 
     .gradient-btn {
-      background: linear-gradient(135deg, #a855f7, #ec4899);
+      background: linear-gradient(135deg, #14b8a6, #06b6d4);
       transition: all 0.3s ease;
     }
     .gradient-btn:hover {
-      background: linear-gradient(135deg, #c084fc, #f472b6);
+      background: linear-gradient(135deg, #2dd4bf, #22d3ee);
       transform: translateY(-1px);
-      box-shadow: 0 10px 20px -10px rgba(236, 72, 153, 0.5);
+      box-shadow: 0 10px 20px -10px rgba(6, 182, 212, 0.5);
     }
     .gradient-btn:active { transform: scale(0.98); }
 
@@ -136,31 +136,31 @@
 </head>
 <body class="min-h-screen relative overflow-x-hidden flex bg-[#030712] text-[#f3f4f6]">
   <!-- Glowing Background Orbs -->
-  <div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-purple-900/5 blur-[120px] pointer-events-none"></div>
-  <div class="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-pink-900/5 blur-[120px] pointer-events-none"></div>
+  <div class="absolute top-[-10%] left-[-10%] w-[50vw] h-[50vw] rounded-full bg-teal-900/5 blur-[120px] pointer-events-none"></div>
+  <div class="absolute bottom-[-10%] right-[-10%] w-[50vw] h-[50vw] rounded-full bg-cyan-900/5 blur-[120px] pointer-events-none"></div>
 
   <!-- Sidebar -->
   <div class="w-20 min-h-screen bg-gray-950/80 border-r border-gray-800/80 flex flex-col items-center py-8 justify-between z-30 sticky top-0 backdrop-blur-xl shrink-0">
      <!-- Top Logo -->
      <div class="flex flex-col items-center gap-6 w-full">
-       <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-purple-600 to-pink-500 flex items-center justify-center font-extrabold text-white text-xl shadow-lg shadow-pink-500/25">
+       <div class="w-12 h-12 rounded-2xl bg-gradient-to-tr from-teal-600 to-cyan-500 flex items-center justify-center font-extrabold text-white text-xl shadow-lg shadow-cyan-500/25">
          🤖
        </div>
        
        <!-- Navigation Menu -->
        <div class="flex flex-col gap-4 w-full px-2">
          <!-- Nav Button: Dashboard -->
-         <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-pink-400 bg-pink-500/10 border border-pink-500/20 transition-all duration-300 group">
+         <button onclick="switchTab('dashboard')" id="nav-dashboard" class="nav-item active w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-cyan-400 bg-cyan-500/10 border border-cyan-500/20 transition-all duration-300 group">
            <span class="text-xl">📊</span>
            <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Dash</span>
          </button>
          <!-- Nav Button: Sesi -->
-         <button onclick="switchTab('states')" id="nav-states" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-purple-300 hover:bg-purple-500/5 hover:border-purple-500/10 transition-all duration-300 group">
+         <button onclick="switchTab('states')" id="nav-states" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-teal-300 hover:bg-teal-500/5 hover:border-teal-500/10 transition-all duration-300 group">
            <span class="text-xl">🔑</span>
            <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Sesi</span>
          </button>
          <!-- Nav Button: Bahan -->
-         <button onclick="switchTab('bahan')" id="nav-bahan" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-indigo-300 hover:bg-indigo-500/5 hover:border-indigo-500/10 transition-all duration-300 group">
+         <button onclick="switchTab('bahan')" id="nav-bahan" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-sky-300 hover:bg-sky-500/5 hover:border-sky-500/10 transition-all duration-300 group">
            <span class="text-xl">📁</span>
            <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Bahan</span>
          </button>
@@ -170,12 +170,12 @@
             <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Audio</span>
           </button>
           <!-- Nav Button: Prompt -->
-         <button onclick="switchTab('prompts')" id="nav-prompts" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-fuchsia-300 hover:bg-fuchsia-500/5 hover:border-fuchsia-500/10 transition-all duration-300 group">
+         <button onclick="switchTab('prompts')" id="nav-prompts" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-sky-300 hover:bg-sky-500/5 hover:border-sky-500/10 transition-all duration-300 group">
            <span class="text-xl">📝</span>
            <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Prompt</span>
          </button>
          <!-- Nav Button: Full Auto Config -->
-         <button onclick="switchTab('fullauto')" id="nav-fullauto" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-pink-300 hover:bg-pink-500/5 hover:border-pink-500/10 transition-all duration-300 group" title="Full Auto Settings">
+         <button onclick="switchTab('fullauto')" id="nav-fullauto" class="nav-item w-full py-3.5 rounded-2xl flex flex-col items-center justify-center gap-1 text-gray-400 border border-transparent hover:text-cyan-300 hover:bg-cyan-500/5 hover:border-cyan-500/10 transition-all duration-300 group" title="Full Auto Settings">
            <span class="text-xl">⚙️</span>
            <span class="text-[9px] font-bold tracking-wider uppercase opacity-80">Config</span>
          </button>
@@ -193,21 +193,20 @@
     <!-- Header -->
     <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 mb-8">
       <div>
-        <h1 class="text-4xl font-extrabold bg-gradient-to-r from-purple-400 via-fuchsia-500 to-pink-500 bg-clip-text text-transparent tracking-tight">
-          🤖 Grok V2 to TikTok Bot
+        <h1 class="text-4xl font-extrabold bg-gradient-to-r from-teal-400 via-sky-500 to-cyan-500 bg-clip-text text-transparent tracking-tight">
+          🤖 Vidabot to TikTok Bot
         </h1>
-        <p class="text-gray-400 text-sm mt-1">Generate stok video otomatis dengan Grok AI dan upload terjadwal ke TikTok</p>
+        <p class="text-gray-400 text-sm mt-1">Generate stok video otomatis dengan Vidabot AI dan upload terjadwal ke TikTok</p>
       </div>
       <div class="flex items-center gap-3 self-stretch md:self-auto justify-end">
         <span id="status-badge" class="text-xs px-3.5 py-2 rounded-full bg-gray-800 border border-gray-700 text-gray-400 font-semibold flex items-center gap-2">
           <span class="w-2 h-2 rounded-full bg-gray-500"></span> ⏸ Idle
         </span>
-        <button onclick="toggleSettingsSidebar()" class="text-xs px-3.5 py-2 rounded-xl bg-purple-900/40 hover:bg-purple-800/50 border border-purple-700/50 text-purple-200 hover:text-white transition font-semibold flex items-center gap-1.5 shadow-lg shadow-purple-500/10">
+        <button onclick="toggleSettingsSidebar()" class="text-xs px-3.5 py-2 rounded-xl bg-teal-900/40 hover:bg-teal-800/50 border border-teal-700/50 text-teal-200 hover:text-white transition font-semibold flex items-center gap-1.5 shadow-lg shadow-teal-500/10">
           ⚙️ Setelan Browser
         </button>
         <a href="/tiktok" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">TikTok Uploader →</a>
-        <a href="/grokbot" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">Grokbot V1 →</a>
-        <a href="/grok" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">Grok Imagine →</a>
+        <a href="/vidabotest" class="text-xs px-3.5 py-2 rounded-xl bg-teal-900/50 hover:bg-teal-800 border border-teal-700 text-teal-300 hover:text-white transition font-medium">Vidabot Test →</a>
         <a href="/namaproduk" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-emerald-400 hover:text-emerald-300 transition font-medium">Tokopedia Extractor →</a>
         <a href="/" class="text-xs px-3.5 py-2 rounded-xl bg-gray-900/80 hover:bg-gray-800 border border-gray-800 text-gray-300 hover:text-white transition font-medium">← State Manager</a>
       </div>
@@ -220,13 +219,13 @@
       <div id="tab-dashboard" class="tab-content space-y-8">
         <!-- State Selector -->
         <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl relative z-20">
-          <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-purple-300">
+          <h2 class="text-lg font-bold mb-3 flex items-center gap-2 text-teal-300">
             <span>🔑</span> Pilih TikTok State (Login Session)
           </h2>
           <p class="text-gray-400 text-xs mb-4">Setiap state TikTok yang Anda pilih di sini akan memunculkan satu kartu konfigurasi mandiri di bawah.</p>
           <div class="multiselect-dropdown" id="state-dropdown">
             <button onclick="toggleDropdown()" type="button"
-                    class="w-full bg-gray-950/80 border border-gray-800 hover:border-pink-500/50 rounded-2xl px-5 py-4 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-pink-500/20 transition-all duration-300">
+                    class="w-full bg-gray-950/80 border border-gray-800 hover:border-cyan-500/50 rounded-2xl px-5 py-4 text-sm text-left flex items-center justify-between focus:outline-none focus:ring-2 focus:ring-cyan-500/20 transition-all duration-300">
               <span id="dropdown-label" class="text-gray-400 truncate font-medium">-- Pilih State (bisa pilih banyak) --</span>
               <span class="text-gray-500 flex-shrink-0 ml-2">▾</span>
             </button>
@@ -235,14 +234,13 @@
         </div>
 
     <!-- Rate Limit Banner Container -->
-    <div id="grok-rate-limit-container" class="mb-8 hidden"></div>
 
     <!-- Real-time Connected Progress Tracker -->
     <div id="overall-progress-card" class="glass-panel rounded-3xl p-6 border border-gray-800/80 mb-8 shadow-xl hidden">
       <h2 class="text-lg font-bold mb-4 flex items-center justify-between">
-        <span class="flex items-center gap-2.5 text-pink-300">
+        <span class="flex items-center gap-2.5 text-cyan-300">
           <span>🔄</span> Progress Status Real-Time 
-          <span id="progress-state-badge" class="text-xs px-3 py-1 rounded-full bg-pink-500/20 text-pink-400 border border-pink-500/30 font-bold uppercase tracking-wider"></span>
+          <span id="progress-state-badge" class="text-xs px-3 py-1 rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/30 font-bold uppercase tracking-wider"></span>
         </span>
         <span class="text-xs font-semibold text-gray-400" id="progress-active-task">Idle</span>
       </h2>
@@ -250,17 +248,17 @@
       <!-- Contiguous 3-Segment Progress Bar -->
       <div class="bg-gray-950/80 rounded-2xl p-1.5 border border-gray-900 shadow-inner">
         <div class="h-14 w-full flex overflow-hidden rounded-xl bg-gray-900 shadow-inner">
-          <!-- Segment 1: Grok Generate (33.33%) -->
+          <!-- Segment 1: Vidabot Generate (33.33%) -->
           <div class="w-1/3 h-full bg-gray-950/30 relative border-r border-gray-800/50 flex items-center">
-            <div id="prog-generate" class="h-full bg-gradient-to-r from-purple-700 via-indigo-600 to-indigo-500 transition-all duration-500 relative" style="width: 0%;">
+            <div id="prog-generate" class="h-full bg-gradient-to-r from-teal-700 via-sky-600 to-sky-500 transition-all duration-500 relative" style="width: 0%;">
               <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] animate-shimmer opacity-20"></div>
             </div>
-            <span id="txt-generate" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">🧠 Grok Generate: 0%</span>
+            <span id="txt-generate" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">🎬 Vidabot Generate: 0%</span>
           </div>
           
           <!-- Segment 2: Video Merger (33.33%) -->
           <div class="w-1/3 h-full bg-gray-950/30 relative border-r border-gray-800/50 flex items-center">
-            <div id="prog-merge" class="h-full bg-gradient-to-r from-pink-600 via-fuchsia-600 to-purple-600 transition-all duration-500 relative" style="width: 0%;">
+            <div id="prog-merge" class="h-full bg-gradient-to-r from-cyan-600 via-sky-600 to-teal-600 transition-all duration-500 relative" style="width: 0%;">
               <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] animate-shimmer opacity-20"></div>
             </div>
             <span id="txt-merge" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">✂ Video Merger: 0%</span>
@@ -268,7 +266,7 @@
 
           <!-- Segment 3: TikTok Upload (33.33%) -->
           <div class="w-1/3 h-full bg-gray-950/30 relative flex items-center">
-            <div id="prog-upload" class="h-full bg-gradient-to-r from-pink-500 via-rose-500 to-orange-500 transition-all duration-500 relative" style="width: 0%;">
+            <div id="prog-upload" class="h-full bg-gradient-to-r from-cyan-500 via-rose-500 to-orange-500 transition-all duration-500 relative" style="width: 0%;">
               <div class="absolute inset-0 bg-[linear-gradient(45deg,rgba(255,255,255,0.15)_25%,transparent_25%,transparent_50%,rgba(255,255,255,0.15)_50%,rgba(255,255,255,0.15)_75%,transparent_75%,transparent)] animate-shimmer opacity-20"></div>
             </div>
             <span id="txt-upload" class="absolute inset-0 flex items-center justify-center text-xs font-extrabold text-white z-10 drop-shadow-[0_1px_2px_rgba(0,0,0,0.8)]">🚀 TikTok Upload: 0%</span>
@@ -280,12 +278,12 @@
       <div class="grid grid-cols-3 gap-4 mt-4 text-center">
         <div class="p-3.5 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-center transition-all hover:bg-gray-950/60">
           <div class="text-[10px] text-gray-500 uppercase tracking-widest font-extrabold mb-0.5">Langkah 1</div>
-          <div class="text-xs font-bold text-indigo-400 flex items-center justify-center gap-1">🧠 Grok Generate</div>
+          <div class="text-xs font-bold text-sky-400 flex items-center justify-center gap-1">🎬 Vidabot Generate</div>
           <div class="text-xs text-gray-400 mt-1" id="lbl-generate">Persiapan</div>
         </div>
         <div class="p-3.5 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-center transition-all hover:bg-gray-950/60">
           <div class="text-[10px] text-gray-500 uppercase tracking-widest font-extrabold mb-0.5">Langkah 2</div>
-          <div class="text-xs font-bold text-fuchsia-400 flex items-center justify-center gap-1">✂ Video Merger</div>
+          <div class="text-xs font-bold text-sky-400 flex items-center justify-center gap-1">✂ Video Merger</div>
           <div class="text-xs text-gray-400 mt-1" id="lbl-merge">Menunggu</div>
         </div>
         <div class="p-3.5 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-center transition-all hover:bg-gray-950/60">
@@ -314,16 +312,16 @@
       <div class="space-y-6 lg:sticky lg:top-6 self-start">
         <!-- Global Controls -->
         <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
-          <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-pink-400">
+          <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-cyan-400">
             <span>⚡</span> Kontrol Global
           </h2>
           <div class="space-y-3">
             <button id="btn-full-auto" onclick="startFullAuto()"
-                    class="w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-pink-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+                    class="w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-cyan-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
               🚀 Full Auto (Semua State Terpilih)
             </button>
             <button id="btn-infinite-generate" onclick="startInfiniteGenerate()"
-                    class="w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+                    class="w-full bg-gradient-to-r from-teal-600 via-sky-600 to-sky-700 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
               ♾️ Infinite Generate (Stok Utama & Cadangan)
             </button>
             <button id="btn-stop" onclick="stopBot()" disabled
@@ -335,7 +333,7 @@
 
         <!-- Schedule Queue -->
         <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
-          <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-purple-400">
+          <h2 class="text-lg font-bold mb-4 flex items-center gap-2 text-teal-400">
             <span>📋</span> Antrian Jadwal Bot
           </h2>
           <div id="queue-container" class="space-y-2 max-h-[220px] overflow-y-auto pr-1">
@@ -360,16 +358,16 @@
       <!-- TAB 2: SESI MANAGER -->
       <div id="tab-states" class="tab-content hidden space-y-6">
         <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
-          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-pink-500 bg-clip-text text-transparent flex items-center gap-2">
+          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-teal-400 to-cyan-500 bg-clip-text text-transparent flex items-center gap-2">
             <span>🔑</span> Manajemen Sesi & Login (StorageState)
           </h2>
-          <p class="text-gray-400 text-sm">Tambahkan akun TikTok atau Grok premium Anda menggunakan metode Buka Browser (Playwright) atau Paste Cookies JSON secara langsung.</p>
+          <p class="text-gray-400 text-sm">Tambahkan akun TikTok atau Vidabot premium Anda menggunakan metode Buka Browser (Playwright) atau Paste Cookies JSON secara langsung.</p>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <div class="grid grid-cols-1 gap-8">
           <!-- TikTok States Column -->
-          <div class="glass-panel rounded-3xl p-6 border border-pink-500/20 shadow-xl space-y-6">
-            <h3 class="text-xl font-bold text-pink-400 flex items-center gap-2 border-b border-gray-800 pb-3">
+          <div class="glass-panel rounded-3xl p-6 border border-cyan-500/20 shadow-xl space-y-6">
+            <h3 class="text-xl font-bold text-cyan-400 flex items-center gap-2 border-b border-gray-800 pb-3">
               <span>🎬</span> TikTok Sesi Manager
             </h3>
             
@@ -377,10 +375,10 @@
               <h4 class="text-sm font-bold text-gray-300">➕ Buat Sesi Login Baru</h4>
               <div class="space-y-3">
                 <input id="tiktok-state-name-tab" type="text" placeholder="Masukkan nama state (contoh: akun_utama)" 
-                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:border-pink-500 text-sm font-semibold text-white">
+                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:border-cyan-500 text-sm font-semibold text-white">
                 
                 <div class="grid grid-cols-2 gap-3">
-                  <button onclick="startLoginTab('tiktok')" class="bg-pink-600 hover:bg-pink-700 text-white py-3 rounded-xl font-bold text-xs transition duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
+                  <button onclick="startLoginTab('tiktok')" class="bg-cyan-600 hover:bg-cyan-700 text-white py-3 rounded-xl font-bold text-xs transition duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
                     🚀 Buka Browser
                   </button>
                   <button onclick="startNativeChromeTab('', 'tiktok')" class="bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-bold text-xs transition duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
@@ -391,19 +389,19 @@
                   </button>
                 </div>
                 <div class="mt-2">
-                  <button onclick="triggerImportTab('tiktok')" class="w-full bg-pink-900/40 hover:bg-pink-900/60 border border-pink-700/50 text-pink-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
+                  <button onclick="triggerImportTab('tiktok')" class="w-full bg-cyan-900/40 hover:bg-cyan-900/60 border border-cyan-700/50 text-cyan-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
                     📥 Impor Sesi (.json)
                   </button>
                   <input type="file" id="tiktok-import-file" class="hidden" accept=".json" onchange="handleImportFile('tiktok')">
-                  <button onclick="exportAllStates('tiktok')" class="w-full bg-pink-900/40 hover:bg-pink-900/60 border border-pink-700/50 text-pink-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
+                  <button onclick="exportAllStates('tiktok')" class="w-full bg-teal-900/40 hover:bg-teal-900/60 border border-teal-700/50 text-teal-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
                     📦 Ekspor Semua Sesi (.zip)
                   </button>
                 </div>
 
-                <div id="tiktok-paste-container-tab" class="hidden p-4 bg-pink-950/20 rounded-xl border border-pink-900/30 space-y-3">
+                <div id="tiktok-paste-container-tab" class="hidden p-4 bg-cyan-950/20 rounded-xl border border-cyan-900/30 space-y-3">
                   <textarea id="tiktok-cookies-text-tab" rows="6" placeholder='Paste JSON cookies di sini...' 
-                            class="w-full p-3 border border-pink-900/40 rounded-xl focus:outline-none focus:border-pink-500 font-mono text-xs bg-gray-950 text-gray-200 resize-none"></textarea>
-                  <button onclick="saveCookiesTab('tiktok')" class="w-full bg-pink-600 hover:bg-pink-700 text-white py-2.5 rounded-xl font-bold text-xs transition duration-200 active:scale-[0.99] shadow-md flex items-center justify-center gap-1.5">
+                            class="w-full p-3 border border-cyan-900/40 rounded-xl focus:outline-none focus:border-cyan-500 font-mono text-xs bg-gray-950 text-gray-200 resize-none"></textarea>
+                  <button onclick="saveCookiesTab('tiktok')" class="w-full bg-cyan-600 hover:bg-cyan-700 text-white py-2.5 rounded-xl font-bold text-xs transition duration-200 active:scale-[0.99] shadow-md flex items-center justify-center gap-1.5">
                     💾 Simpan State Cookies
                   </button>
                 </div>
@@ -424,86 +422,28 @@
               <div id="tiktok-state-list-tab" class="space-y-3 max-h-[400px] overflow-y-auto pr-1"></div>
             </div>
           </div>
-
-          <!-- Grok States Column -->
-          <div class="glass-panel rounded-3xl p-6 border border-blue-500/20 shadow-xl space-y-6">
-            <h3 class="text-xl font-bold text-blue-400 flex items-center gap-2 border-b border-gray-800 pb-3">
-              <span>🧠</span> Grok Sesi Manager
-            </h3>
-
-            <div class="space-y-4 bg-gray-950/40 p-5 rounded-2xl border border-gray-900">
-              <h4 class="text-sm font-bold text-gray-300">➕ Buat Sesi Login Baru</h4>
-              <div class="space-y-3">
-                <input id="grok-state-name-tab" type="text" placeholder="Masukkan nama state (contoh: grok_premium)" 
-                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 focus:outline-none focus:border-blue-500 text-sm font-semibold text-white">
-                
-                <div class="grid grid-cols-2 gap-3">
-                  <button onclick="startLoginTab('grok')" class="bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-bold text-xs transition duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
-                    🚀 Buka Browser
-                  </button>
-                  <button onclick="startNativeChromeTab('', 'grok')" class="bg-amber-600 hover:bg-amber-700 text-white py-3 rounded-xl font-bold text-xs transition duration-200 active:scale-95 flex items-center justify-center gap-1.5 shadow-md">
-                    💻 Chrome CMD
-                  </button>
-                  <button onclick="togglePasteAreaTab('grok')" class="col-span-2 bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
-                    📋 Paste Cookies
-                  </button>
-                </div>
-                <div class="mt-2">
-                  <button onclick="triggerImportTab('grok')" class="w-full bg-blue-900/40 hover:bg-blue-900/60 border border-blue-700/50 text-blue-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
-                    📥 Impor Sesi (.json)
-                  </button>
-                  <input type="file" id="grok-import-file" class="hidden" accept=".json" onchange="handleImportFile('grok')">
-                  <button onclick="exportAllStates('grok')" class="w-full bg-blue-900/40 hover:bg-blue-900/60 border border-blue-700/50 text-blue-200 py-2.5 rounded-xl font-bold text-xs transition duration-200 flex items-center justify-center gap-1.5">
-                    📦 Ekspor Semua Sesi (.zip)
-                  </button>
-                </div>
-
-                <div id="grok-paste-container-tab" class="hidden p-4 bg-blue-950/20 rounded-xl border border-blue-900/30 space-y-3">
-                  <textarea id="grok-cookies-text-tab" rows="6" placeholder='Paste JSON cookies di sini...' 
-                            class="w-full p-3 border border-blue-900/40 rounded-xl focus:outline-none focus:border-blue-500 font-mono text-xs bg-gray-950 text-gray-200 resize-none"></textarea>
-                  <button onclick="saveCookiesTab('grok')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-2.5 rounded-xl font-bold text-xs transition duration-200 active:scale-[0.99] shadow-md flex items-center justify-center gap-1.5">
-                    💾 Simpan State Cookies
-                  </button>
-                </div>
-              </div>
-
-              <div id="grok-in-progress-tab" class="hidden p-4 bg-yellow-950/20 border border-yellow-800/30 rounded-xl space-y-3">
-                <p class="text-yellow-400 text-xs font-semibold">
-                  ✅ Browser terbuka! Login manual di jendela browser, lalu klik tombol di bawah untuk menyimpan session.
-                </p>
-                <button onclick="saveLoginTab('grok')" class="w-full bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5">
-                  ✅ Sudah Login - Simpan Sesi
-                </button>
-              </div>
-            </div>
-
-            <div class="space-y-3">
-              <h4 class="text-sm font-bold text-gray-300">📋 Daftar Sesi Grok</h4>
-              <div id="grok-state-list-tab" class="space-y-3 max-h-[400px] overflow-y-auto pr-1"></div>
-            </div>
-          </div>
         </div>
       </div>
 
       <!-- TAB 3: BAHAN MANAGER -->
       <div id="tab-bahan" class="tab-content hidden space-y-6">
         <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
-          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2">
+          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-teal-400 to-sky-500 bg-clip-text text-transparent flex items-center gap-2">
             <span>📁</span> Manajemen Bahan & Media
           </h2>
-          <p class="text-gray-400 text-sm">Kelola folder bahan dan upload media (gambar/video) yang digunakan sebagai latar belakang generasi video Grokbot.</p>
+          <p class="text-gray-400 text-sm">Kelola folder bahan dan upload media (gambar/video) yang digunakan sebagai latar belakang generasi video Vidabot.</p>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
           <!-- Left Column: Folders List (1/4 width) -->
           <div class="lg:col-span-1 glass-panel rounded-3xl p-5 border border-gray-800/80 shadow-xl space-y-4">
-            <h3 class="text-sm font-extrabold uppercase tracking-widest text-indigo-400 mb-2">Folders</h3>
+            <h3 class="text-sm font-extrabold uppercase tracking-widest text-sky-400 mb-2">Folders</h3>
             
             <!-- Create Folder Input -->
             <div class="space-y-2">
               <input id="new-bahan-folder-name" type="text" placeholder="Folder baru..." 
-                     class="w-full bg-gray-950 border border-gray-805 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-indigo-500">
-              <button onclick="createBahanFolder()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
+                     class="w-full bg-gray-950 border border-gray-805 rounded-xl px-3 py-2 text-xs font-semibold text-white focus:outline-none focus:border-sky-500">
+              <button onclick="createBahanFolder()" class="w-full bg-sky-600 hover:bg-sky-700 text-white py-2 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1">
                 <span>➕</span> Buat Folder
               </button>
             </div>
@@ -517,14 +457,14 @@
           <div class="lg:col-span-3 glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl min-h-[500px] flex flex-col">
             <div id="bahan-folder-detail-header" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-gray-800 pb-4 mb-4">
               <div>
-                <h3 id="active-bahan-folder-title" class="text-xl font-bold text-indigo-300">Pilih Folder Bahan</h3>
+                <h3 id="active-bahan-folder-title" class="text-xl font-bold text-sky-300">Pilih Folder Bahan</h3>
                 <p id="active-bahan-folder-subtitle" class="text-xs text-gray-500">Silakan pilih folder di sebelah kiri untuk melihat isinya.</p>
               </div>
               
               <!-- Upload Form -->
               <div id="bahan-upload-container" class="hidden flex items-center gap-2">
                 <input type="file" id="bahan-files-input" multiple accept="image/*,video/*" class="hidden" onchange="uploadBahanFiles()">
-                <button onclick="document.getElementById('bahan-files-input').click()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+                <button onclick="document.getElementById('bahan-files-input').click()" class="bg-sky-600 hover:bg-sky-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
                   <span>📤</span> Upload Gambar/Video
                 </button>
                 <button onclick="deleteActiveBahanFolder()" class="bg-red-955/40 hover:bg-red-900/30 border border-red-900/50 text-red-400 px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
@@ -544,18 +484,18 @@
       <!-- TAB 4: PROMPT MANAGER -->
       <div id="tab-prompts" class="tab-content hidden space-y-6">
         <div class="glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl">
-          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-purple-400 to-fuchsia-500 bg-clip-text text-transparent flex items-center gap-2">
-            <span>📝</span> Manajemen Prompt Grok
+          <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-teal-400 to-sky-500 bg-clip-text text-transparent flex items-center gap-2">
+            <span>📝</span> Manajemen Prompt Vidabot
           </h2>
-          <p class="text-gray-400 text-sm">Tambah, edit, dan kelola template perintah (prompt) JSON yang digunakan oleh Grok AI untuk memproses konten video.</p>
+          <p class="text-gray-400 text-sm">Tambah, edit, dan kelola template perintah (prompt) JSON yang digunakan oleh Vidabot AI untuk memproses konten video.</p>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
           <!-- Left Column: Prompts List (1/4 width) -->
           <div class="lg:col-span-1 glass-panel rounded-3xl p-5 border border-gray-800/80 shadow-xl space-y-4">
             <div class="flex items-center justify-between mb-2">
-              <h3 class="text-sm font-extrabold uppercase tracking-widest text-fuchsia-400">Prompts</h3>
-              <button onclick="newPrompt()" class="bg-fuchsia-600 hover:bg-fuchsia-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1">
+              <h3 class="text-sm font-extrabold uppercase tracking-widest text-sky-400">Prompts</h3>
+              <button onclick="newPrompt()" class="bg-sky-600 hover:bg-sky-700 text-white px-2.5 py-1.5 rounded-lg text-[10px] font-bold transition flex items-center gap-1">
                 <span>➕</span> Tambah
               </button>
             </div>
@@ -567,7 +507,7 @@
 
           <!-- Right Column: Edit / Create Area (3/4 width) -->
           <div class="lg:col-span-3 glass-panel rounded-3xl p-6 border border-gray-800/80 shadow-xl flex flex-col min-h-[500px]">
-            <h3 id="prompt-editor-title" class="text-xl font-bold text-fuchsia-300 border-b border-gray-800 pb-4 mb-4 flex items-center gap-2">
+            <h3 id="prompt-editor-title" class="text-xl font-bold text-sky-300 border-b border-gray-800 pb-4 mb-4 flex items-center gap-2">
               <span>✍️</span> Edit / Buat Prompt Baru
             </h3>
 
@@ -576,12 +516,12 @@
                 <div>
                   <label class="text-xs text-gray-400 font-bold block mb-1">Nama File Prompt (tanpa .json)</label>
                   <input id="prompt-name-input" type="text" placeholder="Masukkan nama (misal: quotes_cinta)" 
-                         class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-fuchsia-500">
+                         class="w-full bg-gray-950 border border-gray-800 rounded-xl px-4 py-3 text-sm font-semibold text-white focus:outline-none focus:border-sky-500">
                 </div>
                 <div class="flex-1 flex flex-col">
                   <label class="text-xs text-gray-400 font-bold block mb-1">Isi Prompt / Instruksi</label>
-                  <textarea id="prompt-text-input" rows="12" placeholder="Tuliskan detail instruksi/prompt Grok di sini..." 
-                            class="w-full flex-1 bg-gray-950 border border-gray-800 rounded-xl p-4 font-mono text-sm text-gray-200 focus:outline-none focus:border-fuchsia-500 resize-none"></textarea>
+                  <textarea id="prompt-text-input" rows="12" placeholder="Tuliskan detail instruksi/prompt Vidabot di sini..." 
+                            class="w-full flex-1 bg-gray-950 border border-gray-800 rounded-xl p-4 font-mono text-sm text-gray-200 focus:outline-none focus:border-sky-500 resize-none"></textarea>
                 </div>
               </div>
 
@@ -589,7 +529,7 @@
                 <button id="btn-delete-prompt" onclick="deleteActivePrompt()" class="hidden bg-red-950/40 hover:bg-red-900/30 border border-red-900/50 text-red-400 px-6 py-3 rounded-xl text-xs font-bold transition">
                   🗑️ Hapus Prompt
                 </button>
-                <button onclick="saveActivePrompt()" class="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white px-8 py-3 rounded-xl text-xs font-bold transition shadow-lg shadow-pink-500/20 active:scale-95">
+                <button onclick="saveActivePrompt()" class="bg-gradient-to-r from-teal-600 to-cyan-500 hover:from-teal-500 hover:to-cyan-400 text-white px-8 py-3 rounded-xl text-xs font-bold transition shadow-lg shadow-cyan-500/20 active:scale-95">
                   💾 Simpan Prompt
                 </button>
               </div>
@@ -603,9 +543,9 @@
         
         <!-- CARD 1: Setelan Browser & Umum -->
         <div class="glass-panel rounded-3xl p-8 border border-gray-800/80 shadow-2xl relative overflow-hidden">
-          <div class="absolute top-0 right-0 w-80 h-80 bg-purple-500/5 rounded-full blur-3xl -z-10"></div>
+          <div class="absolute top-0 right-0 w-80 h-80 bg-teal-500/5 rounded-full blur-3xl -z-10"></div>
           
-          <h2 class="text-2xl font-extrabold mb-2 bg-gradient-to-r from-purple-400 to-indigo-500 bg-clip-text text-transparent flex items-center gap-2">
+          <h2 class="text-2xl font-extrabold mb-2 bg-gradient-to-r from-teal-400 to-sky-500 bg-clip-text text-transparent flex items-center gap-2">
             <span>🖥️</span> Setelan Browser & Umum
           </h2>
           <p class="text-gray-400 text-sm mb-6">Pengaturan browser global untuk semua proses pembuatan video (generate) dan penjadwalan (upload).</p>
@@ -619,7 +559,7 @@
               </div>
               <label class="relative inline-flex items-center cursor-pointer">
                 <input id="chk-globalHeadless" type="checkbox" class="sr-only peer" checked>
-                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
               </label>
             </div>
 
@@ -631,13 +571,13 @@
               </div>
               <label class="relative inline-flex items-center cursor-pointer">
                 <input id="chk-globalSendWhatsApp" type="checkbox" class="sr-only peer" checked>
-                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
               </label>
             </div>
 
             <div class="pt-4 border-t border-gray-800 flex justify-end">
               <button onclick="saveGlobalGeneralSettings()" 
-                      class="bg-gradient-to-r from-purple-600 to-indigo-500 hover:from-purple-500 hover:to-indigo-400 text-white px-8 py-3.5 rounded-2xl text-sm font-extrabold transition shadow-lg shadow-indigo-500/20 active:scale-95 flex items-center gap-2">
+                      class="bg-gradient-to-r from-teal-600 to-sky-500 hover:from-teal-500 hover:to-sky-400 text-white px-8 py-3.5 rounded-2xl text-sm font-extrabold transition shadow-lg shadow-sky-500/20 active:scale-95 flex items-center gap-2">
                 💾 Simpan Setelan Browser & Umum
               </button>
             </div>
@@ -646,9 +586,9 @@
 
         <!-- CARD 2: Pengaturan Khusus Full Auto -->
         <div class="glass-panel rounded-3xl p-8 border border-gray-800/80 shadow-2xl relative overflow-hidden">
-          <div class="absolute top-0 right-0 w-80 h-80 bg-pink-500/5 rounded-full blur-3xl -z-10"></div>
+          <div class="absolute top-0 right-0 w-80 h-80 bg-cyan-500/5 rounded-full blur-3xl -z-10"></div>
           
-          <h2 class="text-2xl font-extrabold mb-2 bg-gradient-to-r from-pink-400 to-purple-500 bg-clip-text text-transparent flex items-center gap-2">
+          <h2 class="text-2xl font-extrabold mb-2 bg-gradient-to-r from-cyan-400 to-teal-500 bg-clip-text text-transparent flex items-center gap-2">
             <span>⚙️</span> Pengaturan Khusus Full Auto
           </h2>
           <p class="text-gray-400 text-sm mb-6">Konfigurasi opsi scheduler kustom dan pengiriman batch terjadwal untuk mode Full Auto.</p>
@@ -662,7 +602,7 @@
               </div>
               <label class="relative inline-flex items-center cursor-pointer">
                 <input id="chk-enableCustomScheduler" type="checkbox" class="sr-only peer" onchange="toggleCustomFields()">
-                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-pink-600"></div>
+                <div class="w-11 h-6 bg-gray-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-gray-300 after:border-gray-350 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-cyan-600"></div>
               </label>
             </div>
 
@@ -671,21 +611,21 @@
               <div>
                 <label class="text-xs text-gray-400 font-bold block mb-2">⏱️ Interval Jam Antar Batch</label>
                 <input id="num-customIntervalHours" type="number" min="1" value="10" 
-                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-pink-500 transition font-semibold text-gray-200">
+                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-cyan-500 transition font-semibold text-gray-200">
                 <span class="text-[11px] text-gray-500 mt-1 block">Tentukan interval batch dalam jam (contoh: 10 jam sekali).</span>
               </div>
 
               <div>
                 <label class="text-xs text-gray-400 font-bold block mb-2">📹 Jumlah Video per Batch (Upload dalam 1 Jam)</label>
                 <input id="num-customUploadCount" type="number" min="1" max="12" value="5" 
-                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-pink-500 transition font-semibold text-gray-200">
+                       class="w-full bg-gray-900 border border-gray-800 rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-cyan-500 transition font-semibold text-gray-200">
                 <span class="text-[11px] text-gray-500 mt-1 block">Tentukan jumlah video yang diupload bersamaan di jam batch (contoh: 5 video).</span>
               </div>
             </div>
 
             <div class="pt-4 border-t border-gray-800 flex justify-end">
               <button onclick="saveFullAutoSettings()" 
-                      class="bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white px-8 py-3.5 rounded-2xl text-sm font-extrabold transition shadow-lg shadow-pink-500/20 active:scale-95 flex items-center gap-2">
+                      class="bg-gradient-to-r from-teal-600 to-cyan-500 hover:from-teal-500 hover:to-cyan-400 text-white px-8 py-3.5 rounded-2xl text-sm font-extrabold transition shadow-lg shadow-cyan-500/20 active:scale-95 flex items-center gap-2">
                 💾 Simpan Konfigurasi Full Auto
               </button>
             </div>
@@ -699,7 +639,7 @@
           <h2 class="text-2xl font-bold mb-2 bg-gradient-to-r from-emerald-400 to-teal-500 bg-clip-text text-transparent flex items-center gap-2">
             <span>🎵</span> Manajemen Audio & Sound
           </h2>
-          <p class="text-gray-400 text-sm">Kelola folder audio/sound dan upload musik (.mp3/.wav) yang digunakan untuk mengisi suara latar video Grokbot.</p>
+          <p class="text-gray-400 text-sm">Kelola folder audio/sound dan upload musik (.mp3/.wav) yang digunakan untuk mengisi suara latar video Vidabot.</p>
         </div>
 
         <div class="grid grid-cols-1 lg:grid-cols-4 gap-8 items-start">
@@ -759,9 +699,6 @@
     let allStates = [];          // TikTok states [{name, filename, expiry}]
     let selectedStates = [];     // Selected TikTok filenames [filename, ...]
     let stateConfigs = {};       // Saved configs { filename: configObj }
-    
-    // Loaded lists from Grok endpoints
-    let grokStates = [];         // [{filename, name, expiry}]
     let promptFiles = [];        // [filename, ...]
     let bahanFolders = [];       // [foldername, ...]
     let audioFolders = [];       // [foldername, ...]
@@ -776,7 +713,7 @@
     //  ONLOAD INIT
     // ═══════════════════════════════════════
     window.onload = async () => {
-      addLog('🔄 Mempersiapkan Grokbot Dashboard...');
+      addLog('🔄 Mempersiapkan Vidabot Dashboard...');
       await preloadOptions();
       await loadTikTokStates();
       await loadConfigs();
@@ -792,22 +729,19 @@
     // ═══════════════════════════════════════
     async function preloadOptions() {
       try {
-        const resGrok = await fetch('/api/states?platform=grok');
-        grokStates = await resGrok.json();
-        
-        const resPrompt = await fetch('/api/grok/prompts');
+        const resPrompt = await fetch('/api/vidabot/prompts');
         const dataPrompt = await resPrompt.json();
         promptFiles = dataPrompt.files || [];
         
-        const resBahan = await fetch('/api/grok/bahan');
+        const resBahan = await fetch('/api/vidabot/bahan');
         const dataBahan = await resBahan.json();
         bahanFolders = dataBahan.folders || [];
         
-        const resAudio = await fetch('/api/grok/audio-folders');
+        const resAudio = await fetch('/api/vidabot/audio-folders');
         const dataAudio = await resAudio.json();
         audioFolders = dataAudio.folders || [];
         
-        addLog(`✓ Memuat ${grokStates.length} Grok State, ${promptFiles.length} Prompt, ${bahanFolders.length} Bahan Folder, ${audioFolders.length} Audio Folder.`);
+        addLog(`✓ Memuat ${promptFiles.length} Prompt, ${bahanFolders.length} Bahan Folder, ${audioFolders.length} Audio Folder.`);
       } catch (e) {
         addLog('❌ Gagal preload options: ' + e.message);
       }
@@ -828,13 +762,13 @@
 
     async function loadConfigs() {
       try {
-        const res = await fetch('/api/grokbotv2/config');
+        const res = await fetch('/api/vidabot/config');
         const data = await res.json();
         stateConfigs = data.states || {};
         globalConfig = data.globalConfig || {};
         
         // Restore selected states from localStorage if any
-        const savedSelection = localStorage.getItem('grokbotv2_selected_states');
+        const savedSelection = localStorage.getItem('vidabot_selected_states');
         if (savedSelection) {
           try {
             const parsed = JSON.parse(savedSelection);
@@ -884,7 +818,7 @@
       } else {
         selectedStates.push(filename);
       }
-      localStorage.setItem('grokbotv2_selected_states', JSON.stringify(selectedStates));
+      localStorage.setItem('vidabot_selected_states', JSON.stringify(selectedStates));
       renderDropdown();
       renderAllCards();
     }
@@ -900,7 +834,7 @@
           return s ? s.name : f;
         });
         label.textContent = names.join(', ');
-        label.className = 'text-pink-400 font-bold truncate';
+        label.className = 'text-cyan-400 font-bold truncate';
       }
     }
 
@@ -925,8 +859,8 @@
         
         // Default configs mapping
         const cfg = stateConfigs[fn] || {
-          grokState: '', promptFile: '', bahanFolder: '', mode: 'Video',
-          resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
+          promptFile: '', bahanFolder: '',
+          aspectRatio: '9:16', merge: true,
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
           scheduleTime: '', intervalMinutes: 60,
           addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
@@ -939,7 +873,6 @@
         const nowTime = new Date().toTimeString().slice(0, 5);
 
         // Map drop down options
-        const grokStateOpts = grokStates.map(gs => `<option value="${gs.filename}" ${cfg.grokState === gs.filename ? 'selected' : ''}>${gs.name}</option>`).join('');
         const promptOpts = promptFiles.map(pf => `<option value="${pf}" ${cfg.promptFile === pf ? 'selected' : ''}>${pf.replace('.json', '')}</option>`).join('');
         const bahanOpts = bahanFolders.map(bf => `<option value="${bf}" ${cfg.bahanFolder === bf ? 'selected' : ''}>${bf}</option>`).join('');
         const audioOpts = audioFolders.map(af => `<option value="${af}" ${cfg.audioFolder === af ? 'selected' : ''}>${af}</option>`).join('');
@@ -947,8 +880,8 @@
         return `
         <div class="state-card rounded-3xl p-6 relative overflow-hidden" id="card-${fn}">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-            <h3 class="text-xl font-extrabold flex items-center gap-2.5 text-purple-300">
-              <span class="w-3 h-3 rounded-full bg-pink-500"></span>
+            <h3 class="text-xl font-extrabold flex items-center gap-2.5 text-teal-300">
+              <span class="w-3 h-3 rounded-full bg-cyan-500"></span>
               ${escHtml(name)}
             </h3>
             
@@ -968,86 +901,55 @@
 
           <!-- Configuration Inputs Group -->
           <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
-            <!-- Grok Setup -->
-            <div class="p-4 rounded-2xl bg-gray-950/40 border border-gray-900">
-              <h4 class="text-xs font-extrabold uppercase tracking-widest text-purple-400 mb-3 flex items-center gap-1.5">
-                <span>🧠</span> Generator Grok AI
-              </h4>
-              
-              <div class="space-y-3">
-                <div>
-                  <label class="text-xs text-gray-400 font-semibold block mb-1">Grok State (Session)</label>
-                  <select id="grokState-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-purple-500 transition-all font-semibold">
-                    <option value="">-- Pilih Grok State --</option>
-                    ${grokStateOpts}
-                  </select>
-                </div>
+            <!-- Vidabot Setup -->
+            <div class="p-4 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-between">
+              <div>
+                <h4 class="text-xs font-extrabold uppercase tracking-widest text-teal-400 mb-3 flex items-center gap-1.5">
+                  <span>🎬</span> Generator Vidabot AI
+                </h4>
                 
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">Folder Bahan</label>
-                    <select id="bahanFolder-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-purple-500 transition-all font-semibold">
-                      <option value="">-- Pilih Bahan --</option>
-                      ${bahanOpts}
-                    </select>
+                <div class="space-y-3">
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label class="text-xs text-gray-400 font-semibold block mb-1">Folder Bahan</label>
+                      <select id="bahanFolder-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-teal-500 transition-all font-semibold">
+                        <option value="">-- Pilih Bahan --</option>
+                        ${bahanOpts}
+                      </select>
+                    </div>
+                    <div>
+                      <label class="text-xs text-gray-400 font-semibold block mb-1">Prompt</label>
+                      <select id="promptFile-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-teal-500 transition-all font-semibold">
+                        <option value="">-- Pilih Prompt --</option>
+                        ${promptOpts}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">Prompt Grok</label>
-                    <select id="promptFile-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-purple-500 transition-all font-semibold">
-                      <option value="">-- Pilih Prompt --</option>
-                      ${promptOpts}
-                    </select>
-                  </div>
-                </div>
 
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">Mode</label>
-                    <select id="mode-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
-                      <option value="Video" ${cfg.mode === 'Video' ? 'selected' : ''}>Video</option>
-                      <option value="Image" ${cfg.mode === 'Image' ? 'selected' : ''}>Image</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">Resolusi</label>
-                    <select id="resolution-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
-                      <option value="720p" ${cfg.resolution === '720p' ? 'selected' : ''}>720p</option>
-                      <option value="480p" ${cfg.resolution === '480p' ? 'selected' : ''}>480p</option>
-                    </select>
-                  </div>
-                </div>
-
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">Durasi</label>
-                    <select id="duration-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
-                      <option value="10s" ${cfg.duration === '10s' ? 'selected' : ''}>10s</option>
-                      <option value="6s" ${cfg.duration === '6s' ? 'selected' : ''}>6s</option>
-                    </select>
-                  </div>
                   <div>
                     <label class="text-xs text-gray-400 font-semibold block mb-1">Aspect Ratio</label>
-                    <select id="aspectRatio-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
-                      <option value="9:16" ${cfg.aspectRatio === '9:16' ? 'selected' : ''}>9:16 (Vertikal)</option>
-                      <option value="16:9" ${cfg.aspectRatio === '16:9' ? 'selected' : ''}>16:9 (Horizontal)</option>
+                    <select id="aspectRatio-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-teal-500 transition-all font-semibold">
+                      <option value="9:16" ${cfg.aspectRatio === '9:16' ? 'selected' : ''}>9:16 (Vertikal / Portrait)</option>
+                      <option value="16:9" ${cfg.aspectRatio === '16:9' ? 'selected' : ''}>16:9 (Horizontal / Landscape)</option>
+                      <option value="1:1" ${cfg.aspectRatio === '1:1' ? 'selected' : ''}>1:1 (Square / Persegi)</option>
                     </select>
                   </div>
-                </div>
 
-                <div class="grid grid-cols-2 gap-2">
-                  <div>
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">Merge 2 Video</label>
-                    <select id="merge-${fn}" onchange="toggleAudioGroup('${fn}')" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
-                      <option value="true" ${cfg.merge !== false ? 'selected' : ''}>Ya</option>
-                      <option value="false" ${cfg.merge === false ? 'selected' : ''}>Tidak</option>
-                    </select>
-                  </div>
-                  <div id="audio-group-${fn}" style="display: ${cfg.merge !== false ? 'block' : 'none'}">
-                    <label class="text-xs text-gray-400 font-semibold block mb-1">Folder Audio</label>
-                    <select id="audioFolder-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-purple-500 transition font-semibold">
-                      <option value="">-- Pilih Audio --</option>
-                      ${audioOpts}
-                    </select>
+                  <div class="grid grid-cols-2 gap-2">
+                    <div>
+                      <label class="text-xs text-gray-400 font-semibold block mb-1">Merge 2 Video</label>
+                      <select id="merge-${fn}" onchange="toggleAudioGroup('${fn}')" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-teal-500 transition-all font-semibold">
+                        <option value="true" ${cfg.merge !== false ? 'selected' : ''}>Ya</option>
+                        <option value="false" ${cfg.merge === false ? 'selected' : ''}>Tidak</option>
+                      </select>
+                    </div>
+                    <div id="audio-group-${fn}" style="display: ${cfg.merge !== false ? 'block' : 'none'}">
+                      <label class="text-xs text-gray-400 font-semibold block mb-1">Folder Audio</label>
+                      <select id="audioFolder-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-teal-500 transition-all font-semibold">
+                        <option value="">-- Pilih Audio --</option>
+                        ${audioOpts}
+                      </select>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -1056,7 +958,7 @@
             <!-- TikTok Upload Setup -->
             <div class="p-4 rounded-2xl bg-gray-950/40 border border-gray-900 flex flex-col justify-between">
               <div>
-                <h4 class="text-xs font-extrabold uppercase tracking-widest text-pink-400 mb-3 flex items-center gap-1.5">
+                <h4 class="text-xs font-extrabold uppercase tracking-widest text-cyan-400 mb-3 flex items-center gap-1.5">
                   <span>🚀</span> TikTok Uploader
                 </h4>
                 
@@ -1064,29 +966,29 @@
                   <div>
                     <label class="text-xs text-gray-400 font-semibold block mb-1">📝 Deskripsi Video</label>
                     <textarea id="description-${fn}" rows="2.5" placeholder="Tuliskan deskripsi video TikTok Anda di sini..."
-                              class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-pink-500 resize-none transition-all">${escHtml(cfg.description || '')}</textarea>
+                              class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2 text-sm focus:outline-none focus:border-cyan-500 resize-none transition-all">${escHtml(cfg.description || '')}</textarea>
                   </div>
                   
                   <div>
                     <label class="text-xs text-gray-400 font-semibold block mb-1"># Hashtags (pisah koma)</label>
-                    <input id="hashtags-${fn}" type="text" placeholder="fyp, viral, grokbot" value="${escHtml(cfg.hashtags || '')}"
-                           class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-pink-500 transition-all font-semibold">
+                    <input id="hashtags-${fn}" type="text" placeholder="fyp, viral, vidabot" value="${escHtml(cfg.hashtags || '')}"
+                           class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-cyan-500 transition-all font-semibold">
                   </div>
 
                   <!-- Product Settings -->
                   <div class="bg-gray-900/60 p-3.5 rounded-xl border border-gray-800/60 space-y-2 mt-2">
                     <label class="flex items-center gap-2 cursor-pointer">
-                      <input id="chk-product-${fn}" type="checkbox" class="w-4 h-4 accent-pink-500" 
-                             ${cfg.addProduct ? 'checked' : ''} onchange="toggleProductGrokbot('${fn}')">
+                      <input id="chk-product-${fn}" type="checkbox" class="w-4 h-4 accent-cyan-500" 
+                             ${cfg.addProduct ? 'checked' : ''} onchange="toggleProductVidabot('${fn}')">
                       <span class="text-xs text-gray-200 font-bold">🛒 Tambahkan Product</span>
                     </label>
                     <div id="product-fields-${fn}" class="space-y-2" style="display: ${cfg.addProduct ? 'block' : 'none'}">
                       <input id="productNameRadio-${fn}" type="text" placeholder="Nama Produk (Radio)" value="${escHtml(cfg.productNameRadio || '')}"
-                             class="w-full bg-gray-950 border border-gray-850/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500 font-semibold text-gray-200">
+                             class="w-full bg-gray-950 border border-gray-850/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 font-semibold text-gray-200">
                       <input id="productTitle-${fn}" type="text" placeholder="Judul Produk" value="${escHtml(cfg.productTitle || '')}"
-                             class="w-full bg-gray-950 border border-gray-850/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500 font-semibold text-gray-200">
+                             class="w-full bg-gray-950 border border-gray-850/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 font-semibold text-gray-200">
                       <textarea id="productDescription-${fn}" placeholder="Deskripsi Produk" rows="2"
-                                class="w-full bg-gray-950 border border-gray-855/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500 resize-none font-semibold text-gray-200">${escHtml(cfg.productDescription || '')}</textarea>
+                                class="w-full bg-gray-950 border border-gray-855/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-cyan-500 resize-none font-semibold text-gray-200">${escHtml(cfg.productDescription || '')}</textarea>
                     </div>
                   </div>
 
@@ -1095,7 +997,7 @@
                   <!-- Three Uploads Per Hour Option -->
                   <div class="mt-2">
                     <label class="flex items-center gap-2 cursor-pointer">
-                      <input id="chk-threeUploads-${fn}" type="checkbox" class="w-4 h-4 accent-pink-500"
+                      <input id="chk-threeUploads-${fn}" type="checkbox" class="w-4 h-4 accent-cyan-500"
                              ${cfg.threeUploadsPerHour ? 'checked' : ''}>
                       <span class="text-xs text-gray-300 font-semibold">⏰ Interval Tetap (3x upload/jam, jeda 5 jam)</span>
                     </label>
@@ -1105,12 +1007,12 @@
                     <div>
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Upload Terakhir (Tanggal)</label>
                       <input id="lastUploadDate-${fn}" type="date" value="${cfg.lastUploadDate || ''}"
-                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-cyan-500 transition font-semibold">
                     </div>
                     <div>
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">⏰ Upload Terakhir (Jam)</label>
                       <input id="lastUploadTime-${fn}" type="time" value="${cfg.lastUploadTime || ''}"
-                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-cyan-500 transition font-semibold">
                     </div>
                   </div>
 
@@ -1118,17 +1020,17 @@
                     <div class="col-span-1">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Sched Date</label>
                       <input id="scheduleDate-${fn}" type="date" value="${cfg.scheduleDate || today}"
-                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-cyan-500 transition font-semibold">
                     </div>
                     <div class="col-span-1">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">⏰ Sched Time</label>
                       <input id="scheduleTime-${fn}" type="time" value="${cfg.scheduleTime || nowTime}"
-                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-cyan-500 transition font-semibold">
                     </div>
                     <div class="col-span-1">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">⏱ Interval (Min)</label>
                       <input id="intervalMinutes-${fn}" type="number" min="1" value="${cfg.intervalMinutes || 60}"
-                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
+                             class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-cyan-500 transition font-semibold">
                     </div>
                   </div>
                 </div>
@@ -1157,7 +1059,7 @@
               🚚 Impor Cadangan
             </button>
             <button onclick="mergeOnly('${fn}')"
-                    class="bg-gray-800 hover:bg-fuchsia-900/40 border border-fuchsia-800/30 hover:border-fuchsia-500/50 text-fuchsia-300 py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 transition-all">
+                    class="bg-gray-800 hover:bg-sky-900/40 border border-sky-800/30 hover:border-sky-500/50 text-sky-300 py-3 px-4 rounded-xl text-xs font-extrabold shadow flex items-center justify-center gap-1.5 transition-all">
               ✂ Merge Saja
             </button>
             <button onclick="scheduleOnly('${fn}')"
@@ -1184,7 +1086,7 @@
       document.getElementById(`audio-group-${fn}`).style.display = val === 'true' ? 'block' : 'none';
     }
 
-    function toggleProductGrokbot(fn) {
+    function toggleProductVidabot(fn) {
       const chk = document.getElementById(`chk-product-${fn}`);
       const fields = document.getElementById(`product-fields-${fn}`);
       if (chk && fields) {
@@ -1203,7 +1105,7 @@
 
     async function loadStateStock(fn) {
       try {
-        const res = await fetch(`/api/grokbotv2/stock?state=${encodeURIComponent(fn)}`);
+        const res = await fetch(`/api/vidabot/stock?state=${encodeURIComponent(fn)}`);
         const stock = await res.json();
         const badgeRaw = document.getElementById(`stock-raw-${fn}`);
         const badgeUtama = document.getElementById(`stock-utama-${fn}`);
@@ -1220,12 +1122,8 @@
     async function saveConfig(fn) {
       const cfg = {
         stateFile: fn,
-        grokState: document.getElementById(`grokState-${fn}`)?.value || '',
         promptFile: document.getElementById(`promptFile-${fn}`)?.value || '',
         bahanFolder: document.getElementById(`bahanFolder-${fn}`)?.value || '',
-        mode: document.getElementById(`mode-${fn}`)?.value || 'Video',
-        resolution: document.getElementById(`resolution-${fn}`)?.value || '720p',
-        duration: document.getElementById(`duration-${fn}`)?.value || '10s',
         aspectRatio: document.getElementById(`aspectRatio-${fn}`)?.value || '9:16',
         merge: document.getElementById(`merge-${fn}`)?.value === 'true',
         audioFolder: document.getElementById(`audioFolder-${fn}`)?.value || '',
@@ -1244,7 +1142,7 @@
       };
 
       try {
-        const res = await fetch('/api/grokbotv2/config/save', {
+        const res = await fetch('/api/vidabot/config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(cfg)
@@ -1272,7 +1170,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbotv2/generate-utama', {
+        const res = await fetch('/api/vidabot/generate-utama', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1295,7 +1193,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbotv2/generate-cadangan', {
+        const res = await fetch('/api/vidabot/generate-cadangan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1314,7 +1212,7 @@
     async function importCadangan(fn) {
       addLog(`⚙️ Memulai Impor Cadangan ke Stok Utama untuk state: ${getStateName(fn)}...`);
       try {
-        const res = await fetch('/api/grokbotv2/import-cadangan', {
+        const res = await fetch('/api/vidabot/import-cadangan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1338,7 +1236,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbotv2/schedule', {
+        const res = await fetch('/api/vidabot/schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1361,7 +1259,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbotv2/schedule-only', {
+        const res = await fetch('/api/vidabot/schedule-only', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1384,7 +1282,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbotv2/merge-only', {
+        const res = await fetch('/api/vidabot/merge-only', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFile: fn })
@@ -1413,7 +1311,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbotv2/full-auto', {
+        const res = await fetch('/api/vidabot/full-auto', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFiles: selectedStates })
@@ -1444,7 +1342,7 @@
       connectSSE();
 
       try {
-        const res = await fetch('/api/grokbotv2/infinite-generate', {
+        const res = await fetch('/api/vidabot/infinite-generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ stateFiles: selectedStates })
@@ -1463,8 +1361,8 @@
     }
 
     async function stopBot() {
-      addLog('⛔ Mengirim perintah stop ke Grokbot...');
-      await fetch('/api/grokbotv2/stop', { method: 'POST' });
+      addLog('⛔ Mengirim perintah stop ke Vidabot...');
+      await fetch('/api/vidabot/stop', { method: 'POST' });
       setBusy(false);
     }
 
@@ -1490,40 +1388,40 @@
       if (!btnFullAuto || !btnInfGen || !btnStopAll) return;
 
       // 1. Full Auto Toggle Control
-      if (data.grokbotFullAutoRunning) {
+      if (data.vidabotFullAutoRunning) {
         btnFullAuto.textContent = '⛔ Hentikan Full Auto';
         btnFullAuto.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnFullAuto.setAttribute('onclick', 'stopFullAuto()');
         btnFullAuto.disabled = false;
       } else {
         btnFullAuto.textContent = '🚀 Mulai Full Auto (Semua State)';
-        btnFullAuto.className = 'w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-pink-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnFullAuto.className = 'w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-cyan-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnFullAuto.setAttribute('onclick', 'startFullAuto()');
-        btnFullAuto.disabled = !data.grokbotFullAutoRunning && data.running;
+        btnFullAuto.disabled = !data.vidabotFullAutoRunning && data.running;
       }
 
       // 2. Infinite Generate Toggle Control
-      if (data.infiniteGenRunning) {
+      if (data.vidaInfiniteGenRunning) {
         btnInfGen.textContent = '⛔ Hentikan Infinite Gen';
         btnInfGen.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'stopInfiniteGenerate()');
         btnInfGen.disabled = false;
       } else {
         btnInfGen.textContent = '♾️ Infinite Generate (Stok Utama & Cadangan)';
-        btnInfGen.className = 'w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnInfGen.className = 'w-full bg-gradient-to-r from-teal-600 via-sky-600 to-sky-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'startInfiniteGenerate()');
-        btnInfGen.disabled = !data.infiniteGenRunning && data.running;
+        btnInfGen.disabled = !data.vidaInfiniteGenRunning && data.running;
       }
 
       // 3. Force Stop All Control
-      const anyActive = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning;
+      const anyActive = data.running || data.vidaInfiniteGenRunning || data.vidabotFullAutoRunning;
       btnStopAll.disabled = !anyActive;
       btnStopAll.textContent = '⛔ Force Stop Semua';
     }
 
-    function updateStatusBadge(running, infiniteGenRunning, waitInfo, fullAutoRunning) {
+    function updateStatusBadge(running, vidaInfiniteGenRunning, waitInfo, fullAutoRunning) {
       const badge = document.getElementById('status-badge');
-      if (running || infiniteGenRunning || fullAutoRunning) {
+      if (running || vidaInfiniteGenRunning || fullAutoRunning) {
         if (waitInfo) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-yellow-500 running-pulse"></span> ⏳ Wait Limit`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-yellow-950/40 border border-yellow-800 text-yellow-400 font-semibold flex items-center gap-2';
@@ -1531,11 +1429,11 @@
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-green-500 running-pulse"></span> 🟢 Generating`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-green-950/40 border border-green-800 text-green-400 font-semibold flex items-center gap-2';
         } else if (fullAutoRunning) {
-          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-pink-500 running-pulse"></span> 🚀 Standby (Full Auto)`;
-          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-pink-950/40 border border-pink-800 text-pink-400 font-semibold flex items-center gap-2';
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-cyan-500 running-pulse"></span> 🚀 Standby (Full Auto)`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-cyan-950/40 border border-cyan-800 text-cyan-400 font-semibold flex items-center gap-2';
         } else {
-          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-indigo-500 running-pulse"></span> ♾️ Checking Stock`;
-          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-indigo-950/40 border border-indigo-800 text-indigo-400 font-semibold flex items-center gap-2';
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-sky-500 running-pulse"></span> ♾️ Checking Stock`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-sky-950/40 border border-sky-800 text-sky-400 font-semibold flex items-center gap-2';
         }
       } else {
         badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-gray-500"></span> ⏸ Idle`;
@@ -1546,7 +1444,7 @@
     async function stopFullAuto() {
       addLog('⛔ Mengirim perintah hentikan Full Auto...');
       try {
-        const res = await fetch('/api/grokbotv2/stop-full-auto', { method: 'POST' });
+        const res = await fetch('/api/vidabot/stop-full-auto', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           addLog('✓ Full Auto standby loop berhasil dihentikan.');
@@ -1560,7 +1458,7 @@
     async function stopInfiniteGenerate() {
       addLog('⛔ Mengirim perintah hentikan Infinite Generate...');
       try {
-        const res = await fetch('/api/grokbotv2/stop-infinite-generate', { method: 'POST' });
+        const res = await fetch('/api/vidabot/stop-infinite-generate', { method: 'POST' });
         const data = await res.json();
         if (data.success) {
           addLog('✓ Infinite Generate loop berhasil dihentikan.');
@@ -1576,14 +1474,14 @@
     // ═══════════════════════════════════════
     function connectSSE() {
       if (eventSource) eventSource.close();
-      eventSource = new EventSource('/api/grokbotv2/logs');
+      eventSource = new EventSource('/api/vidabot/logs');
       eventSource.onmessage = (e) => {
         addLog(e.data);
         
-        if (e.data.includes('GROKBOT FINISHED') || e.data.includes('GROKBOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED') || e.data.includes('INFINITE GENERATE FINISHED') || e.data.includes('FULL AUTO FINISHED')) {
+        if (e.data.includes('VIDABOT FINISHED') || e.data.includes('VIDABOT STOPPED') || e.data.includes('GENERATE UTAMA FINISHED') || e.data.includes('GENERATE CADANGAN FINISHED') || e.data.includes('INFINITE GENERATE FINISHED') || e.data.includes('FULL AUTO FINISHED')) {
           currentWaitInfo = null;
           setBusy(false);
-          fetch('/api/grokbotv2/status').then(res => res.json()).then(data => updateControlsUI(data));
+          fetch('/api/vidabot/status').then(res => res.json()).then(data => updateControlsUI(data));
           loadConfigs().then(() => {
             selectedStates.forEach(fn => loadStateStock(fn));
           });
@@ -1593,8 +1491,8 @@
           try {
             const waitStr = e.data.substring('[INFINITE_WAIT]:'.length);
             currentWaitInfo = waitStr === 'null' ? null : JSON.parse(waitStr);
-            fetch('/api/grokbotv2/status').then(res => res.json()).then(data => {
-              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning);
+            fetch('/api/vidabot/status').then(res => res.json()).then(data => {
+              updateStatusBadge(data.running, data.vidaInfiniteGenRunning, currentWaitInfo, data.vidabotFullAutoRunning);
               if (data.queue) renderQueue(data.queue);
             });
           } catch {}
@@ -1611,7 +1509,6 @@
           try {
             const prog = JSON.parse(e.data.substring('[PROGRESS_UPDATE]:'.length));
             updateProgressUI(prog);
-            if (prog.rateLimits) renderRateLimits(prog.rateLimits);
             selectedStates.forEach(fn => loadStateStock(fn));
           } catch {}
         }
@@ -1624,22 +1521,21 @@
     // ═══════════════════════════════════════
     async function pollStatus() {
       try {
-        const res = await fetch('/api/grokbotv2/status');
+        const res = await fetch('/api/vidabot/status');
         const data = await res.json();
-        currentWaitInfo = data.infiniteGenWaitInfo;
+        currentWaitInfo = data.vidaInfiniteGenWaitInfo;
         if (data.globalConfig) {
           globalConfig = data.globalConfig;
         }
-        const active = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning;
+        const active = data.running || data.vidaInfiniteGenRunning || data.vidabotFullAutoRunning;
         setBusy(active);
         updateControlsUI(data);
         if (active) {
           connectSSE();
-          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning);
+          updateStatusBadge(data.running, data.vidaInfiniteGenRunning, currentWaitInfo, data.vidabotFullAutoRunning);
         }
         if (data.queue) renderQueue(data.queue);
         if (data.progress) updateProgressUI(data.progress);
-        if (data.rateLimits) renderRateLimits(data.rateLimits);
       } catch {}
     }
 
@@ -1649,33 +1545,12 @@
     function renderQueue(queue) {
       const container = document.getElementById('queue-container');
       if (!queue || queue.length === 0) {
-        if (currentWaitInfo) {
-          // Keep showing container even with empty queue list to display wait card
-        } else {
-          container.innerHTML = '<div class="text-sm text-gray-500 text-center py-6">Belum ada antrian aktif</div>';
-          return;
-        }
+        container.innerHTML = '<div class="text-sm text-gray-500 text-center py-6">Belum ada antrian aktif</div>';
+        return;
       }
-      
+
       let html = '';
-      if (currentWaitInfo) {
-        html += `
-          <div class="bg-red-950/40 border border-red-900/50 rounded-2xl p-4 mb-3 space-y-2">
-            <div class="flex items-center gap-2 font-bold text-xs text-red-400">
-              <span class="w-2 h-2 rounded-full bg-red-500 running-pulse"></span>
-              <span>Grok Rate Limit Wait</span>
-            </div>
-            <div class="text-xs text-gray-300 space-y-1">
-              <div>⏰ Tersedia: <span class="font-semibold text-gray-100">${escHtml(currentWaitInfo.rateLimitTime)}</span></div>
-              <div>🔄 Mulai lagi: <span class="font-semibold text-gray-100">${escHtml(currentWaitInfo.resumeTime)}</span></div>
-              <div>🎯 Target state: <span class="font-bold text-pink-400">${escHtml(currentWaitInfo.targetState)}</span></div>
-            </div>
-          </div>
-        `;
-      }
-      
-      if (queue && queue.length > 0) {
-        html += queue.map(q => `
+      html += queue.map(q => `
           <div class="flex items-center justify-between px-4 py-3 rounded-2xl bg-gray-950/60 border border-gray-900">
             <div class="flex items-center gap-2.5">
               <span class="w-2.5 h-2.5 rounded-full ${q.active ? 'bg-green-500 running-pulse' : 'bg-gray-600'}"></span>
@@ -1686,62 +1561,8 @@
             </div>
           </div>
         `).join('');
-      }
-      
+
       container.innerHTML = html;
-    }
-
-    // ═══════════════════════════════════════
-    //  RATE LIMIT DISPLAY RENDER
-    // ═══════════════════════════════════════
-    function renderRateLimits(rateLimits) {
-      const container = document.getElementById('grok-rate-limit-container');
-      const keys = Object.keys(rateLimits || {});
-      if (keys.length === 0) {
-        container.innerHTML = '';
-        container.classList.add('hidden');
-        return;
-      }
-
-      container.classList.remove('hidden');
-      container.innerHTML = keys.map(fn => {
-        const info = rateLimits[fn];
-        const stateName = fn.replace('grok-state-', '').replace('.json', '');
-        const availableAt = info.availableAt || 'tidak diketahui';
-        return `
-          <div class="bg-red-950/40 border border-red-900/60 rounded-3xl p-5 flex items-start gap-4 shadow-xl backdrop-blur-md animate-pulse mb-3">
-            <div class="p-3 bg-red-900/30 rounded-2xl border border-red-800 text-red-400 shrink-0">
-              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
-                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-            </div>
-            <div class="flex-1 min-w-0">
-              <h3 class="text-base font-bold text-red-200">Grok Rate Limit Terdeteksi</h3>
-              <p class="text-xs text-red-400/80 mt-1">Session <span class="font-bold text-red-300">${escHtml(stateName)}</span> telah mencapai batas limit. Tersedia kembali pukul <span class="font-extrabold text-red-100">${escHtml(availableAt)}</span>.</p>
-            </div>
-            <button onclick="clearRateLimit('${fn}')" class="text-xs px-3 py-1.5 rounded-xl bg-red-900/20 hover:bg-red-900/40 border border-red-900 text-red-400 hover:text-red-300 font-semibold transition shrink-0">
-              Reset Status
-            </button>
-          </div>
-        `;
-      }).join('');
-    }
-
-    async function clearRateLimit(stateFile) {
-      try {
-        const res = await fetch('/api/grok/clear-rate-limit', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stateFile })
-        });
-        const data = await res.json();
-        if (data.success) {
-          addLog(`✓ Status rate limit direset untuk state: ${stateFile}`);
-          pollStatus();
-        }
-      } catch (e) {
-        addLog(`❌ Gagal reset status rate limit: ${e.message}`);
-      }
     }
 
     // ═══════════════════════════════════════
@@ -1764,7 +1585,7 @@
       
       // Update bars width & texts
       document.getElementById('prog-generate').style.width = gen + '%';
-      document.getElementById('txt-generate').textContent = `🧠 Grok Generate: ${gen}%`;
+      document.getElementById('txt-generate').textContent = `🧠 Vidabot Generate: ${gen}%`;
       
       document.getElementById('prog-merge').style.width = mrg + '%';
       const mergedCount = prog.mergedCount || 0;
@@ -1794,7 +1615,7 @@
         lblGen.className = 'text-xs mt-1 text-gray-500';
       } else if (gen < 100) {
         lblGen.textContent = `Generasi (${gen}%)`;
-        lblGen.className = 'text-xs mt-1 text-purple-400 font-bold animate-pulse';
+        lblGen.className = 'text-xs mt-1 text-teal-400 font-bold animate-pulse';
       } else {
         lblGen.textContent = 'Selesai ✓';
         lblGen.className = 'text-xs mt-1 text-green-400 font-bold';
@@ -1806,7 +1627,7 @@
         lblMrg.className = 'text-xs mt-1 text-gray-500';
       } else if (mrg < 100) {
         lblMrg.textContent = mergeTotal > 0 ? `Merging (${mergedCount}/${mergeTotal})` : `Merging (${mrg}%)`;
-        lblMrg.className = 'text-xs mt-1 text-fuchsia-400 font-bold animate-pulse';
+        lblMrg.className = 'text-xs mt-1 text-sky-400 font-bold animate-pulse';
       } else {
         lblMrg.textContent = 'Selesai ✓';
         lblMrg.className = 'text-xs mt-1 text-green-400 font-bold';
@@ -1833,7 +1654,7 @@
       // Set active task description
       let activeTask = 'Idle';
       if (gen < 100) {
-        activeTask = `Sedang generate video mentah via Grok... (${gen}%)`;
+        activeTask = `Sedang generate video mentah via Vidabot... (${gen}%)`;
       } else if (mrg < 100) {
         activeTask = mergeTotal > 0
           ? `Sedang merge video... (${mergedCount}/${mergeTotal})`
@@ -1857,11 +1678,11 @@
           const barPct = Math.min(100, pct);
           let statusColor = 'bg-gray-600';
           let statusText = b.status;
-          let barGradient = 'bg-gradient-to-r from-indigo-600 to-purple-500';
+          let barGradient = 'bg-gradient-to-r from-sky-600 to-teal-500';
           if (b.status === 'running') {
             statusColor = 'bg-green-500 running-pulse';
             statusText = `${b.current}/${b.total} (gen: ${b.progress}%)`;
-            barGradient = 'bg-gradient-to-r from-indigo-600 to-purple-500';
+            barGradient = 'bg-gradient-to-r from-sky-600 to-teal-500';
           } else if (b.status === 'done') {
             statusColor = 'bg-blue-500';
             statusText = `Selesai (${b.total})`;
@@ -1909,7 +1730,7 @@
       
       // Reset navigation button active states
       document.querySelectorAll('.nav-item').forEach(el => {
-        el.classList.remove('active', 'text-pink-400', 'bg-pink-500/10', 'border-pink-500/20');
+        el.classList.remove('active', 'text-cyan-400', 'bg-cyan-500/10', 'border-cyan-500/20');
         el.classList.add('text-gray-400', 'border-transparent');
       });
       
@@ -1917,13 +1738,12 @@
       const activeNav = document.getElementById(`nav-${tabId}`);
       if (activeNav) {
         activeNav.classList.remove('text-gray-400', 'border-transparent');
-        activeNav.classList.add('active', 'text-pink-400', 'bg-pink-500/10', 'border-pink-500/20');
+        activeNav.classList.add('active', 'text-cyan-400', 'bg-cyan-500/10', 'border-cyan-500/20');
       }
 
       // Load tab specific data
       if (tabId === 'states') {
         loadStatesTab('tiktok');
-        loadStatesTab('grok');
       } else if (tabId === 'bahan') {
         loadBahanFoldersTab();
       } else if (tabId === 'prompts') {
@@ -1960,7 +1780,7 @@
         interval.value = fa.customIntervalHours !== undefined ? fa.customIntervalHours : 10;
         count.value = fa.customUploadCount !== undefined ? fa.customUploadCount : 5;
         headless.checked = globalConfig.headless !== false;
-        sendWhatsApp.checked = globalConfig.sendWhatsApp === true;
+        sendWhatsApp.checked = globalConfig.sendWhatsApp !== false;
         toggleCustomFields();
       }
     }
@@ -1969,7 +1789,7 @@
       const headless = document.getElementById('chk-globalHeadless').checked;
       const sendWhatsApp = document.getElementById('chk-globalSendWhatsApp').checked;
       try {
-        const res = await fetch('/api/grokbotv2/global-config/save', {
+        const res = await fetch('/api/vidabot/global-config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2005,7 +1825,7 @@
       const count = parseInt(document.getElementById('num-customUploadCount').value) || 5;
 
       try {
-        const res = await fetch('/api/grokbotv2/full-auto-settings/save', {
+        const res = await fetch('/api/vidabot/full-auto-settings/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
@@ -2056,7 +1876,7 @@
              badge = `<span class="px-2.5 py-1 text-[10px] font-bold bg-gray-950/40 border border-gray-800 text-gray-400 rounded-lg">⏳ Unknown</span>`;
           }
 
-          const btnTheme = platform === 'grok' ? 'gradient-btn-blue' : 'gradient-btn';
+          const btnTheme = 'gradient-btn';
 
           return `
             <div class="bg-gray-900/40 border border-gray-850 p-4 rounded-2xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -2075,7 +1895,7 @@
                 <button onclick="exportStateTab('${s.filename}', '${platform}')" class="bg-emerald-950/60 hover:bg-emerald-900 border border-emerald-800/40 text-emerald-300 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
                   📤 Ekspor
                 </button>
-                <button onclick="copyCodegenTab('${s.filename}', '${platform}')" class="bg-purple-950/60 hover:bg-purple-900 border border-purple-800/40 text-purple-300 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
+                <button onclick="copyCodegenTab('${s.filename}', '${platform}')" class="bg-teal-950/60 hover:bg-teal-900 border border-teal-800/40 text-teal-300 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
                   📋 Command
                 </button>
                 <button onclick="deleteStateTab('${s.filename}', '${platform}')" class="bg-red-955/60 hover:bg-red-900/60 border border-red-900/40 text-red-400 text-[10px] font-bold px-3 py-1.5 rounded-xl flex items-center gap-1">
@@ -2283,7 +2103,7 @@
           return;
         }
 
-        const defaultName = file.name.replace(/\.json$/i, '').replace(/^(tiktok|grok|facebook)-state-/, '');
+        const defaultName = file.name.replace(/\.json$/i, '').replace(/^(tiktok|facebook)-state-/, '');
         const sessionName = prompt(`Masukkan nama sesi untuk impor:`, defaultName);
         if (!sessionName || !sessionName.trim()) {
           alert('❌ Impor dibatalkan. Nama sesi harus diisi!');
@@ -2333,7 +2153,7 @@
     let activeAudioFolder = '';
     async function loadAudioFoldersTab() {
       try {
-        const res = await fetch('/api/grok/audio-folders');
+        const res = await fetch('/api/vidabot/audio-folders');
         const data = await res.json();
         const list = document.getElementById('audio-folders-list');
         const folders = data.folders || [];
@@ -2389,7 +2209,7 @@
       grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-10 animate-pulse">Memuat audio...</div>';
 
       try {
-        const res = await fetch(`/api/grok/audio/${encodeURIComponent(folderName)}`);
+        const res = await fetch(`/api/vidabot/audio/${encodeURIComponent(folderName)}`);
         const data = await res.json();
         const files = data.files || [];
 
@@ -2426,7 +2246,7 @@
     async function deleteAudioFile(folderName, fileName) {
       if (!confirm(`Hapus file audio "${fileName}"?`)) return;
       try {
-        const res = await fetch(`/api/grok/audio/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}`, {
+        const res = await fetch(`/api/vidabot/audio/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}`, {
           method: 'DELETE'
         });
         const data = await res.json();
@@ -2445,7 +2265,7 @@
       if (!confirm(`HAPUS SELURUH FOLDER AUDIO "${activeAudioFolder}" beserta semua file di dalamnya?`)) return;
       
       try {
-        const res = await fetch(`/api/grok/audio/${encodeURIComponent(activeAudioFolder)}`, {
+        const res = await fetch(`/api/vidabot/audio/${encodeURIComponent(activeAudioFolder)}`, {
           method: 'DELETE'
         });
         const data = await res.json();
@@ -2467,7 +2287,7 @@
       if (!name) return alert('Masukkan nama folder baru!');
 
       try {
-        const res = await fetch('/api/grok/audio/create-folder', {
+        const res = await fetch('/api/vidabot/audio/create-folder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ folderName: name })
@@ -2502,7 +2322,7 @@
       grid.innerHTML = `<div class="col-span-full text-center text-emerald-400 py-20 font-bold animate-pulse">Sedang mengupload ${files.length} file...</div>`;
 
       try {
-        const res = await fetch('/api/grok/audio/upload', {
+        const res = await fetch('/api/vidabot/audio/upload', {
           method: 'POST',
           body: formData
         });
@@ -2526,7 +2346,7 @@
     let activeBahanFolder = '';
     async function loadBahanFoldersTab() {
       try {
-        const res = await fetch('/api/grok/bahan');
+        const res = await fetch('/api/vidabot/bahan');
         const data = await res.json();
         const list = document.getElementById('bahan-folders-list');
         const folders = data.folders || [];
@@ -2543,7 +2363,7 @@
 
         list.innerHTML = folders.map(f => {
           const activeClass = f === activeBahanFolder 
-            ? 'bg-indigo-500/10 border-indigo-500/30 text-indigo-300 font-bold' 
+            ? 'bg-sky-500/10 border-sky-500/30 text-sky-300 font-bold' 
             : 'border-transparent text-gray-400 hover:bg-gray-900/60 hover:text-gray-200';
           return `
             <div onclick="selectBahanFolder('${escHtml(f)}')" class="px-3.5 py-3 rounded-xl border text-xs cursor-pointer transition flex items-center justify-between ${activeClass}">
@@ -2568,9 +2388,9 @@
       
       document.querySelectorAll('#bahan-folders-list > div').forEach(el => {
         if (el.textContent.includes(folderName)) {
-          el.className = el.className.replace(/border-transparent|text-gray-400/g, '').trim() + ' bg-indigo-500/10 border-indigo-500/30 text-indigo-300 font-bold';
+          el.className = el.className.replace(/border-transparent|text-gray-400/g, '').trim() + ' bg-sky-500/10 border-sky-500/30 text-sky-300 font-bold';
         } else {
-          el.className = el.className.replace(/bg-indigo-500\/10|border-indigo-500\/30|text-indigo-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
+          el.className = el.className.replace(/bg-sky-500\/10|border-sky-500\/30|text-sky-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
         }
       });
 
@@ -2582,7 +2402,7 @@
       grid.innerHTML = '<div class="col-span-full text-center text-gray-500 py-10 animate-pulse">Memuat media...</div>';
 
       try {
-        const res = await fetch(`/api/grok/bahan/${encodeURIComponent(folderName)}`);
+        const res = await fetch(`/api/vidabot/bahan/${encodeURIComponent(folderName)}`);
         const data = await res.json();
         const files = data.files || [];
 
@@ -2607,7 +2427,7 @@
           }
 
           return `
-            <div class="group relative bg-gray-950/60 border border-gray-900 hover:border-indigo-500/40 p-2.5 rounded-2xl flex flex-col justify-between transition duration-200">
+            <div class="group relative bg-gray-950/60 border border-gray-900 hover:border-sky-500/40 p-2.5 rounded-2xl flex flex-col justify-between transition duration-200">
               ${previewHtml}
               <div class="text-[10px] font-semibold text-gray-400 mt-2 truncate w-full" title="${escHtml(file)}">${escHtml(file)}</div>
               
@@ -2627,7 +2447,7 @@
     async function deleteBahanFile(folderName, fileName) {
       if (!confirm(`Hapus file "${fileName}"?`)) return;
       try {
-        const res = await fetch(`/api/grok/bahan/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}`, {
+        const res = await fetch(`/api/vidabot/bahan/${encodeURIComponent(folderName)}/${encodeURIComponent(fileName)}`, {
           method: 'DELETE'
         });
         const data = await res.json();
@@ -2646,7 +2466,7 @@
       if (!confirm(`HAPUS SELURUH FOLDER "${activeBahanFolder}" beserta semua file di dalamnya?`)) return;
       
       try {
-        const res = await fetch(`/api/grok/bahan/${encodeURIComponent(activeBahanFolder)}`, {
+        const res = await fetch(`/api/vidabot/bahan/${encodeURIComponent(activeBahanFolder)}`, {
           method: 'DELETE'
         });
         const data = await res.json();
@@ -2668,7 +2488,7 @@
       if (!name) return alert('Masukkan nama folder baru!');
 
       try {
-        const res = await fetch('/api/grok/bahan/create-folder', {
+        const res = await fetch('/api/vidabot/bahan/create-folder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ folderName: name })
@@ -2700,10 +2520,10 @@
       }
 
       const grid = document.getElementById('bahan-files-grid');
-      grid.innerHTML = `<div class="col-span-full text-center text-indigo-400 py-20 font-bold animate-pulse">Sedang mengupload ${files.length} file...</div>`;
+      grid.innerHTML = `<div class="col-span-full text-center text-sky-400 py-20 font-bold animate-pulse">Sedang mengupload ${files.length} file...</div>`;
 
       try {
-        const res = await fetch('/api/grok/bahan/upload', {
+        const res = await fetch('/api/vidabot/bahan/upload', {
           method: 'POST',
           body: formData
         });
@@ -2727,7 +2547,7 @@
     let activePromptFile = '';
     async function loadPromptsTab() {
       try {
-        const res = await fetch('/api/grok/prompts');
+        const res = await fetch('/api/vidabot/prompts');
         const data = await res.json();
         const list = document.getElementById('prompts-list');
         const files = data.files || [];
@@ -2740,7 +2560,7 @@
 
         list.innerHTML = files.map(file => {
           const activeClass = file === activePromptFile
-            ? 'bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-300 font-bold'
+            ? 'bg-sky-500/10 border-sky-500/30 text-sky-300 font-bold'
             : 'border-transparent text-gray-400 hover:bg-gray-900/60 hover:text-gray-200';
           const nameDisplay = file.replace('.json', '');
           return `
@@ -2768,9 +2588,9 @@
       
       document.querySelectorAll('#prompts-list > div').forEach(el => {
         if (el.textContent.includes(filename.replace('.json', ''))) {
-          el.className = el.className.replace(/border-transparent|text-gray-400/g, '').trim() + ' bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-300 font-bold';
+          el.className = el.className.replace(/border-transparent|text-gray-400/g, '').trim() + ' bg-sky-500/10 border-sky-500/30 text-sky-300 font-bold';
         } else {
-          el.className = el.className.replace(/bg-fuchsia-500\/10|border-fuchsia-500\/30|text-fuchsia-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
+          el.className = el.className.replace(/bg-sky-500\/10|border-sky-500\/30|text-sky-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
         }
       });
 
@@ -2778,7 +2598,7 @@
       document.getElementById('btn-delete-prompt').classList.remove('hidden');
 
       try {
-        const res = await fetch(`/api/grok/prompts/${encodeURIComponent(filename)}`);
+        const res = await fetch(`/api/vidabot/prompts/${encodeURIComponent(filename)}`);
         const data = await res.json();
         if (data.success) {
           document.getElementById('prompt-name-input').value = filename.replace('.json', '');
@@ -2801,7 +2621,7 @@
       document.getElementById('prompt-text-input').value = '';
       
       document.querySelectorAll('#prompts-list > div').forEach(el => {
-        el.className = el.className.replace(/bg-fuchsia-500\/10|border-fuchsia-500\/30|text-fuchsia-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
+        el.className = el.className.replace(/bg-sky-500\/10|border-sky-500\/30|text-sky-300|font-bold/g, '').trim() + ' border-transparent text-gray-400';
       });
     }
 
@@ -2815,7 +2635,7 @@
       if (!prompt) return alert('Isi prompt tidak boleh kosong!');
 
       try {
-        const res = await fetch('/api/grok/prompts/save', {
+        const res = await fetch('/api/vidabot/prompts/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, prompt })
@@ -2839,7 +2659,7 @@
       if (!confirm(`Hapus prompt "${activePromptFile.replace('.json', '')}"?`)) return;
 
       try {
-        const res = await fetch(`/api/grok/prompts/${encodeURIComponent(activePromptFile)}`, {
+        const res = await fetch(`/api/vidabot/prompts/${encodeURIComponent(activePromptFile)}`, {
           method: 'DELETE'
         });
         const data = await res.json();
@@ -2893,7 +2713,7 @@
       const sidebar = document.getElementById('settings-sidebar');
       const overlay = document.getElementById('settings-sidebar-overlay');
       if (sidebar.classList.contains('translate-x-full')) {
-        fetch('/api/grokbotv2/config')
+        fetch('/api/vidabot/config')
           .then(res => res.json())
           .then(data => {
             const pb = data.globalConfig?.parallelBrowsers || 1;
@@ -2904,7 +2724,7 @@
             const drawerHl = document.getElementById('drawer-global-headless');
             if (drawerHl) drawerHl.checked = hl;
             
-            const wa = data.globalConfig?.sendWhatsApp === true;
+            const wa = data.globalConfig?.sendWhatsApp !== false;
             const drawerWa = document.getElementById('drawer-global-send-whatsapp');
             if (drawerWa) drawerWa.checked = wa;
           });
@@ -2925,7 +2745,7 @@
       const drawerWa = document.getElementById('drawer-global-send-whatsapp');
       const sendWhatsApp = drawerWa ? drawerWa.checked : true;
       try {
-        const res = await fetch('/api/grokbotv2/global-config/save', {
+        const res = await fetch('/api/vidabot/global-config/save', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ parallelBrowsers, headless, sendWhatsApp })
@@ -2957,7 +2777,7 @@
   <div id="settings-sidebar" class="fixed inset-y-0 right-0 w-80 bg-gray-950/95 border-l border-gray-800/80 backdrop-blur-2xl shadow-2xl z-50 transform translate-x-full transition-transform duration-300 flex flex-col justify-between p-6">
     <div class="space-y-6">
       <div class="flex items-center justify-between border-b border-gray-800/80 pb-4">
-        <h3 class="text-lg font-bold text-purple-300 flex items-center gap-2">
+        <h3 class="text-lg font-bold text-teal-300 flex items-center gap-2">
           <span>⚙️</span> Setelan Browser
         </h3>
         <button onclick="toggleSettingsSidebar()" class="text-gray-400 hover:text-white text-xl font-bold transition">×</button>
@@ -2969,8 +2789,8 @@
           <p class="text-gray-505 text-[11px] mb-3 leading-relaxed">Tentukan berapa jumlah browser (instance Playwright) yang dibuka secara bersamaan untuk generate secara paralel.</p>
           <div class="flex items-center gap-3">
             <input id="global-parallel-browsers" type="range" min="1" max="5" value="1" oninput="updateParallelBrowsersLabel(this.value)"
-                   class="flex-grow h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-purple-500">
-            <span id="lbl-parallel-browsers" class="w-10 text-center text-sm font-extrabold text-purple-400 bg-purple-500/10 border border-purple-500/20 px-2.5 py-1.5 rounded-xl">1</span>
+                   class="flex-grow h-2 bg-gray-900 rounded-lg appearance-none cursor-pointer accent-teal-500">
+            <span id="lbl-parallel-browsers" class="w-10 text-center text-sm font-extrabold text-teal-400 bg-teal-500/10 border border-teal-500/20 px-2.5 py-1.5 rounded-xl">1</span>
           </div>
           <small class="text-gray-500 text-[10px] mt-2 block leading-relaxed">
             * Peringatan: Semakin banyak browser, semakin tinggi beban CPU/RAM. Sangat direkomendasikan 1-3 browser tergantung spesifikasi VPS/PC.
@@ -2982,7 +2802,7 @@
           <label class="text-xs text-gray-400 font-extrabold uppercase tracking-wider block mb-2">Mode Tampilan Browser</label>
           <p class="text-gray-505 text-[11px] mb-3 leading-relaxed">Jalankan browser di latar belakang (headless) atau tampilkan antarmuka grafis browser.</p>
           <label class="flex items-center gap-2 cursor-pointer bg-gray-900/40 border border-gray-900 p-3.5 rounded-xl hover:bg-gray-900/60 transition">
-            <input id="drawer-global-headless" type="checkbox" class="w-4 h-4 accent-purple-500 rounded" checked>
+            <input id="drawer-global-headless" type="checkbox" class="w-4 h-4 accent-teal-500 rounded" checked>
             <span class="text-xs text-gray-300 font-bold">🖥️ Headless Mode (tanpa browser)</span>
           </label>
         </div>
@@ -2992,7 +2812,7 @@
           <label class="text-xs text-gray-400 font-extrabold uppercase tracking-wider block mb-2">Notifikasi WhatsApp</label>
           <p class="text-gray-505 text-[11px] mb-3 leading-relaxed">Kirim laporan progress dan status generate/upload ke nomor WhatsApp yang terhubung.</p>
           <label class="flex items-center gap-2 cursor-pointer bg-gray-900/40 border border-gray-900 p-3.5 rounded-xl hover:bg-gray-900/60 transition">
-            <input id="drawer-global-send-whatsapp" type="checkbox" class="w-4 h-4 accent-purple-500 rounded" checked>
+            <input id="drawer-global-send-whatsapp" type="checkbox" class="w-4 h-4 accent-teal-500 rounded" checked>
             <span class="text-xs text-gray-300 font-bold">🔔 Kirim Notifikasi WhatsApp</span>
           </label>
         </div>
@@ -3000,7 +2820,7 @@
     </div>
     
     <div class="space-y-3 pt-6 border-t border-gray-800/80">
-      <button onclick="saveGlobalConfig()" class="w-full bg-gradient-to-r from-purple-600 to-pink-500 hover:from-purple-500 hover:to-pink-400 text-white py-3.5 rounded-2xl text-xs font-bold transition-all shadow-lg shadow-pink-500/20 active:scale-95">
+      <button onclick="saveGlobalConfig()" class="w-full bg-gradient-to-r from-teal-600 to-cyan-500 hover:from-teal-500 hover:to-cyan-400 text-white py-3.5 rounded-2xl text-xs font-bold transition-all shadow-lg shadow-cyan-500/20 active:scale-95">
         💾 Simpan Perubahan
       </button>
     </div>
