@@ -1,13 +1,10 @@
-// grok_api_client.ts - Client untuk memanggil API Grok Imagine secara Headless dengan State JSON
-import { chromium, Browser, BrowserContext, Page } from 'playwright';
+// grok_api_client.ts - Client API Grok Imagine (State JSON, headless)
+// DIPERBARUI: Pakai REST API baru (newgroksystem/generate.txt)
+// Upload gambar -> POST /rest/app-chat/conversations/new (stream) -> unduh video.
+import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
-import { fileURLToPath } from 'url';
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// ── Typed error untuk Rate Limit ──
 export class RateLimitError extends Error {
   availableAt: string | null;
   constructor(availableAt: string | null) {
@@ -17,232 +14,242 @@ export class RateLimitError extends Error {
   }
 }
 
-export interface GrokApiOptions {
-  stateName?: string;
-  prompt: string;
-  mediaType?: 'IMAGE' | 'VIDEO';
-  aspectRatio?: '9:16' | '16:9' | '1:1';
-}
-
 export interface GrokVideoV2Options {
   stateName?: string;
   promptText: string;
-  imagePath?: string; // Full or relative path to image file in bahan
-  resolution?: string; // '720p' | '1080p'
-  duration?: string;   // '5s' | '10s'
-  aspectRatio?: string; // '9:16' | '16:9' | '1:1'
-  mode?: string;       // 'Video' | 'Image'
-  headless?: boolean;  // Default: true
+  imagePath?: string;
+  resolution?: string;
+  duration?: string;
+  aspectRatio?: string;
+  mode?: string;
+  headless?: boolean;
 }
 
 export async function checkGrokQuota(stateName = 'indra') {
   const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
-  if (!fs.existsSync(statePath)) {
-    throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
-  }
-
+  if (!fs.existsSync(statePath)) throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({ storageState: statePath });
   const page = await context.newPage();
-
   await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded' });
-
   const quota = await page.evaluate(async () => {
-    const res = await fetch('https://grok.com/rest/media/imagine/quota_info', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({})
-    });
+    const res = await fetch('https://grok.com/rest/media/imagine/quota_info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
     return res.json();
   });
-
   const session = await page.evaluate(async () => {
     const res = await fetch('https://grok.com/api/auth/session');
     return res.json();
   });
-
   await browser.close();
-
-  return {
-    account: session.session ? `${session.session.givenName} (${session.session.email})` : 'Unauthenticated',
-    quota
-  };
+  return { account: session.session ? `${session.session.givenName} (${session.session.email})` : 'Unauthenticated', quota };
 }
-
 export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgress?: (msg: string, progress: number) => void) {
   const stateName = options.stateName || 'indra';
   const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
-  
-  if (!fs.existsSync(statePath)) {
-    throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
+  if (!fs.existsSync(statePath)) throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
+  const log = (msg: string, pct = 0) => { console.log(`[GROK_V2_NEW] ${msg}`); if (onProgress) onProgress(msg, pct); };
+
+  let imageData: string | null = null;
+  let imageMime = 'image/png';
+  let imageName = 'image.png';
+  if (options.imagePath) {
+    const imgPath = path.isAbsolute(options.imagePath) ? options.imagePath : path.join(process.cwd(), options.imagePath);
+    if (!fs.existsSync(imgPath)) throw new Error(`File gambar tidak ditemukan: ${imgPath}`);
+    const ext = path.extname(imgPath).toLowerCase();
+    imageMime = ext === '.png' ? 'image/png' : ext === '.webp' ? 'image/webp' : ext === '.bmp' ? 'image/bmp' : 'image/jpeg';
+    imageName = path.basename(imgPath);
+    imageData = fs.readFileSync(imgPath).toString('base64');
+    log(`Membaca gambar referensi: ${imageName}`, 8);
   }
 
-  const log = (msg: string, pct = 0) => {
-    console.log(`[GROK_V2_API] ${msg}`);
-    if (onProgress) onProgress(msg, pct);
-  };
+  const durationNum = parseInt(String(options.duration || '10s').replace(/\D/g, ''), 10) || 10;
+  const resolution = options.resolution === '1080p' ? '1080p' : '720p';
+  const aspectRatio = options.aspectRatio || '9:16';
+  const prompt = (options.promptText || '').trim() || 'A stunning cinematic video sequence';
 
-  log(`Memulai Headless Browser Context (State: ${stateName})...`, 5);
-
-  const browser = await chromium.launch({
-    headless: options.headless ?? true,
-    channel: 'chrome',
-    args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
-    ignoreDefaultArgs: ['--enable-automation'],
-  });
+  log(`Memulai Headless Browser (State: ${stateName}, API baru)...`, 5);
+  const browser = await chromium.launch({ headless: options.headless ?? true, channel: 'chrome', args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'], ignoreDefaultArgs: ['--enable-automation'] });
 
   try {
-    const context = await browser.newContext({
-      viewport: { width: 1366, height: 768 },
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
-      locale: 'en-US',
-      timezoneId: 'Asia/Makassar',
-      storageState: statePath,
-      acceptDownloads: true,
-    });
-
+    const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36', locale: 'en-US', timezoneId: 'Asia/Makassar', storageState: statePath, acceptDownloads: true });
     const page = await context.newPage();
     await page.addInitScript(() => { Object.defineProperty(navigator, 'webdriver', { get: () => undefined }); });
-
-    log('Membuka Grok Imagine secara Headless...', 15);
+    log('Membuka Grok Imagine...', 12);
     await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(3000);
+    const genPromise = page.evaluate(async (o: any) => {
+      const STATE: any = { status: 'running', progress: 0, message: '', videoUrl: '', videoId: '', assetId: '', conversationId: '', error: '', rateLimited: false, availableAt: null };
+      (window as any).__GROK_NEW_STATE = STATE;
+      const sleep = (ms: number) => new Promise(r => setTimeout(r, ms));
 
-    // Inject automation script grok_autoV2.js
-    const scriptPath = path.join(process.cwd(), 'grok_autoV2.js');
-    if (!fs.existsSync(scriptPath)) {
-      throw new Error(`grok_autoV2.js tidak ditemukan di ${scriptPath}`);
-    }
-    const scriptContent = fs.readFileSync(scriptPath, 'utf-8');
-    await page.evaluate(scriptContent);
-    await page.waitForTimeout(1000);
+      const readLines = async (resp: any, onLine: (l: string) => void) => {
+        if (!resp.body) { resp.text().then(t => t.split('\n').forEach(onLine)); return; }
+        const reader = resp.body.getReader();
+        const dec = new TextDecoder();
+        let buf = '';
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          while (true) { const i = buf.indexOf('\n'); if (i < 0) break; onLine(buf.slice(0, i)); buf = buf.slice(i + 1); }
+        }
+        if (buf.trim()) onLine(buf.trim());
+      };
 
-    let imageBase64: string | null = null;
-    let imageName: string | null = null;
+      const findVideo = (obj: any): string | null => {
+        if (!obj || typeof obj !== 'object') return null;
+        if (Array.isArray(obj)) { for (const it of obj) { const v = findVideo(it); if (v) return v; } return null; }
+        if (typeof obj.videoUrl === 'string' && obj.videoUrl.includes('generated_video')) return obj.videoUrl;
+        for (const k of Object.keys(obj)) { const v = findVideo(obj[k]); if (v) return v; }
+        return null;
+      };
 
-    if (options.imagePath && fs.existsSync(options.imagePath)) {
-      log(`Membaca file bahan gambar: ${path.basename(options.imagePath)}...`, 25);
-      const imgBuffer = fs.readFileSync(options.imagePath);
-      imageBase64 = imgBuffer.toString('base64');
-      imageName = path.basename(options.imagePath);
-    }
+      const handleLine = (line: string) => {
+        if (!line) return;
+        if (line.startsWith('data:')) line = line.replace(/^data:\s*/, '').trim();
+        if (!line.startsWith('{')) return;
+        let o2: any = null; try { o2 = JSON.parse(line); } catch { return; }
+        const result = o2 && o2.result; if (!result) return;
+        if (result.conversation && result.conversation.conversationId) STATE.conversationId = result.conversation.conversationId;
+        const r = result.response || {};
+        if (r.streamingVideoGenerationResponse) {
+          const sv = r.streamingVideoGenerationResponse;
+          if (typeof sv.progress === 'number') STATE.progress = Math.min(88, 38 + sv.progress * 0.5);
+          if (sv.videoUrl) STATE.videoUrl = sv.videoUrl;
+          if (sv.videoId) STATE.videoId = sv.videoId;
+          if (sv.progress >= 100) STATE.status = 'done';
+        }
+        if (r.error) STATE.error = String(r.error);
+      };
+      try {
+        let assetId: string | null = null;
+        if (o.imageData) {
+          STATE.message = 'Mengunggah gambar referensi ke Grok...';
+          STATE.progress = 20;
+          const bin = atob(o.imageData);
+          const arr = new Uint8Array(bin.length);
+          for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+          const fd = new FormData();
+          fd.append('file', new File([arr], o.imageName, { type: o.imageMime }));
+          const up = await fetch('https://grok.com/http/upload-file-v2/direct', { method: 'POST', body: fd });
+          const t = await up.text();
+          if (!up.ok) throw new Error('Upload gambar gagal HTTP ' + up.status + ': ' + t.slice(0, 200));
+          let j: any = null; try { j = JSON.parse(t); } catch {}
+          assetId = (j && j.fileMetadata && j.fileMetadata.fileMetadataId) || (j && j.fileMetadataId) || null;
+          if (!assetId) throw new Error('Upload gambar tanpa fileMetadataId: ' + t.slice(0, 200));
+          STATE.message = 'Gambar terunggah';
+          STATE.progress = 28;
+        }
 
-    log(`Memulai proses pengiriman prompt & konfigurasi video...`, 35);
-    const genCfg = {
-      prompt: options.promptText,
-      mode: (options.mode || 'video').toLowerCase() === 'image' ? 'image' : 'video',
-      image: imageBase64,
-      imageName: imageName || 'ref.jpg',
-      timeout: 600000,
-      upscale: false,
-      useImageRef: !!imageBase64,
-      genMode: options.mode || 'Video',
-      resolution: options.resolution || '720p',
-      duration: options.duration || '5s',
-      aspectRatio: options.aspectRatio || '9:16',
-    };
+        const body: any = {
+          modelName: 'imagine-video-gen',
+          message: prompt + ' --mode=custom',
+          enableImageStreaming: true,
+          enableSideBySide: true,
+          sendFinalMetadata: true,
+          responseMetadata: { experiments: [], modelConfigOverride: { modelMap: {} } },
+          mediaGenInput: { imageToVideo: { prompt, inputAssets: assetId ? [assetId] : [], aspectRatio: o.aspectRatio, duration: o.duration, resolutionName: o.resolution, mode: 'custom' } },
+          kind: 'CONVERSATION_KIND_IMAGINE'
+        };
 
-    const genPromise = page.evaluate(async (cfg: any) => (window as any).__grokGenerate(cfg), genCfg);
+        STATE.message = 'Membuat permintaan generasi video...';
+        STATE.progress = 32;
+        const resp = await fetch('https://grok.com/rest/app-chat/conversations/new', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+        if (!resp.ok) {
+          const t = await resp.text();
+          if (/rate\s*limit|limit/i.test(t)) { STATE.rateLimited = true; STATE.error = t.slice(0, 300); }
+          else throw new Error('Generate video gagal HTTP ' + resp.status + ': ' + t.slice(0, 300));
+          return STATE;
+        }
 
-    // Track rate-limit detection from polling (in case result comes late)
+        STATE.progress = 35;
+        STATE.message = 'Memproses prompt (0 - 100%)...';
+        await readLines(resp, handleLine);
+
+        if (!STATE.videoUrl && STATE.conversationId) {
+          STATE.message = 'Menunggu video (polling responses)...';
+          for (let k = 0; k < 40; k++) {
+            await sleep(3000);
+            try {
+              const rr = await fetch('https://grok.com/rest/app-chat/conversations/' + STATE.conversationId + '/responses?conversationKind=CONVERSATION_KIND_IMAGINE');
+              const tt = await rr.text();
+              let jj: any = null; try { jj = JSON.parse(tt); } catch {}
+              const v = findVideo(jj);
+              if (v) { STATE.videoUrl = v; STATE.status = 'done'; break; }
+            } catch {}
+          }
+        }
+
+        if (STATE.videoUrl) STATE.status = 'done';
+        STATE.progress = 90;
+        STATE.message = 'Selesai, siap diunduh';
+      } catch (e: any) {
+        STATE.status = 'error';
+        STATE.error = String((e && e.message) || e);
+      }
+      return STATE;
+    }, { prompt, imageData, imageMime, imageName, duration: durationNum, resolution, aspectRatio });
+    // Polling progress
     let rateLimitDetectedAt: { availableAt: string | null } | null = null;
-
     const poll = setInterval(async () => {
       try {
-        const st = await page.evaluate(() => (window as any).__grokGetState());
-        if (st && st.progress >= 0) {
-          log(`Proses generate: ${st.progress}%`, Math.min(90, 35 + Math.floor(st.progress * 0.55)));
-        }
-        // ── Deteksi rate limit dari polling ──
-        if (st && st.status === 'rate_limited') {
-          rateLimitDetectedAt = { availableAt: st.availableAt || null };
-          log(`🚫 [POLL] Rate limit terdeteksi! availableAt: ${st.availableAt || 'tidak diketahui'}`);
+        const st: any = await page.evaluate(() => (window as any).__GROK_NEW_STATE);
+        if (st) {
+          if (typeof st.progress === 'number') log(`Proses generate: ${st.progress}% - ${st.message || ''}`, Math.round(st.progress));
+          if (st.rateLimited) { rateLimitDetectedAt = { availableAt: st.availableAt || null }; log('Rate limit terdeteksi'); }
         }
       } catch {}
     }, 2500);
 
     let result: any;
-    try {
-      result = await genPromise;
-    } finally {
-      clearInterval(poll);
-    }
+    try { result = await genPromise; } finally { clearInterval(poll); }
 
-    // ── Tangkap Rate Limit dari result maupun polling ──
-    if ((result as any)?.status === 'rate_limited' || rateLimitDetectedAt) {
-      const rlInfo = rateLimitDetectedAt as { availableAt: string | null } | null;
-      const availableAt = (result as any)?.availableAt || (rlInfo ? rlInfo.availableAt : null) || null;
-      log(`🚫 Rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
+    if (result?.rateLimited || rateLimitDetectedAt) {
+      const availableAt = result?.availableAt || rateLimitDetectedAt?.availableAt || null;
+      log('Rate limit! Tersedia kembali: ' + (availableAt || 'tidak diketahui'));
+      await browser.close();
       throw new RateLimitError(availableAt);
     }
-
-    if (!result || result.status !== 'done') {
-      throw new Error(result?.error || 'Generasi video gagal di Grok');
+    if (!result || result.status !== 'done' || !result.videoUrl) {
+      throw new Error(result?.error || 'Generasi video gagal di Grok (API baru).');
     }
 
     log(`Video berhasil di-generate! Mengunduh file hasil...`, 92);
-
     const downloadDir = path.join(process.cwd(), 'grok-downloads', stateName);
-    if (!fs.existsSync(downloadDir)) {
-      fs.mkdirSync(downloadDir, { recursive: true });
-    }
-
+    if (!fs.existsSync(downloadDir)) fs.mkdirSync(downloadDir, { recursive: true });
     const fname = `grok_v2_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
     const savePath = path.join(downloadDir, fname);
 
     let saved = false;
-
-    // Direct download strategy via fetch inside page context
-    if (result.videoUrl?.startsWith('https://')) {
-      try {
-        const dr: any = await page.evaluate(async (url: string) => {
-          try {
-            const r = await fetch(url, { credentials: 'include' });
-            if (!r.ok) return { ok: false, error: `HTTP ${r.status}` };
-            const b = await r.blob();
-            const rd = new FileReader();
-            return new Promise(res => {
-              rd.onloadend = () => res({ ok: true, data: rd.result });
-              rd.onerror = () => res({ ok: false });
-              rd.readAsDataURL(b);
-            });
-          } catch (e: any) { return { ok: false, error: e.message }; }
-        }, result.videoUrl);
-
-        if (dr?.ok && dr.data) {
-          fs.writeFileSync(savePath, Buffer.from(dr.data.split(',')[1], 'base64'));
-          saved = true;
-        }
-      } catch (e: any) {
-        log(`Peringatan download Strategy A: ${e.message}`);
-      }
-    }
+    try {
+      const dr: any = await page.evaluate(async (relUrl: string) => {
+        const readBlob = async (url: string) => {
+          const r = await fetch(url, { credentials: 'include' });
+          if (!r.ok) return null;
+          const b = await r.blob();
+          const rd = new FileReader();
+          return await new Promise<any>(res => { rd.onloadend = () => res({ ok: true, data: rd.result }); rd.onerror = () => res({ ok: false }); rd.readAsDataURL(b); });
+        };
+        if (relUrl.startsWith('http://') || relUrl.startsWith('https://')) { try { const d = await readBlob(relUrl); if (d && d.ok) return d; } catch {}
+ }
+        for (const url of ['https://assets.grok.com/' + relUrl, 'https://grok.com/' + relUrl]) { try { const d = await readBlob(url); if (d && d.ok) return d; } catch {} }
+        return { ok: false, error: 'Semua URL unduhan gagal' };
+      }, result.videoUrl);
+      if (dr?.ok && dr.data) { fs.writeFileSync(savePath, Buffer.from(dr.data.split(',')[1], 'base64')); saved = true; }
+    } catch (e: any) { log('Peringatan mengunduh: ' + e.message); }
 
     await browser.close();
+    if (!saved) throw new Error(`Gagal menyimpan file video ke ${savePath}`);
 
-    if (!saved) {
-      throw new Error(`Gagal menyimpan file video ke ${savePath}`);
-    }
-
-    log(`✅ Video berhasil disimpan di ${savePath}`, 100);
-
-    return {
-      success: true,
-      filename: fname,
-      savePath,
-      downloadUrl: `/api/grok/video-file/${stateName}/${fname}`,
-      rawUrl: result.videoUrl || ''
-    };
+    log(`Video berhasil disimpan di ${savePath}`, 100);
+    return { success: true, filename: fname, savePath, downloadUrl: `/api/grok/video-file/${stateName}/${fname}`, rawUrl: result.videoUrl || '' };
   } catch (error: any) {
     try { await browser.close(); } catch {}
-    log(`❌ Error: ${error.message}`);
+    log('Error: ' + error.message);
     throw error;
   }
 }
 
-// Test runner
 if (process.argv[1]?.includes('grok_api_client')) {
-  checkGrokQuota('indra').then(res => {
-    console.log('✅ Auth & Quota Result:', JSON.stringify(res, null, 2));
-  }).catch(console.error);
+  checkGrokQuota('indra').then(res => console.log('Quota:', JSON.stringify(res, null, 2))).catch(console.error);
 }

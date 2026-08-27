@@ -3975,6 +3975,153 @@ app.get('/api/states/export', (req, res) => {
   res.download(filepath, filename);
 });
 
+// ── ZIP helper (STORE method, tanpa library tambahan) ──────────────────────
+function createDosDateTime(d = new Date()) {
+  const time = (((d.getHours() << 11) | (d.getMinutes() << 5) | (d.getSeconds() >> 1)) & 0xffff);
+  const date = ((((d.getFullYear() - 1980) << 9) | ((d.getMonth() + 1) << 5) | d.getDate()) & 0xffff);
+  return { time, date };
+}
+
+let zipCrcTable: Int32Array | null = null;
+function getZipCrcTable(): Int32Array {
+  if (zipCrcTable) return zipCrcTable;
+  const table = new Int32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) {
+      c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    }
+    table[n] = c;
+  }
+  zipCrcTable = table;
+  return table;
+}
+
+function zipCrc32(data: Buffer): number {
+  const table = getZipCrcTable();
+  let c = 0xffffffff;
+  for (let i = 0; i < data.length; i++) {
+    c = table[(c ^ data[i]) & 0xff] ^ (c >>> 8);
+  }
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// Membuat arsip ZIP dengan metode STORE (tanpa kompresi) berisi file-file state
+function buildStatesZip(entries: { name: string; data: Buffer }[]): Buffer {
+  const localParts: Buffer[] = [];
+  const centralParts: Buffer[] = [];
+  let offset = 0;
+  const now = createDosDateTime();
+
+  for (const entry of entries) {
+    const nameBuf = Buffer.from(entry.name, 'utf8');
+    const crc = zipCrc32(entry.data);
+    const size = entry.data.length;
+
+    // Local file header (30 bytes)
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);        // version needed
+    local.writeUInt16LE(0, 6);         // flags
+    local.writeUInt16LE(0, 8);         // method: store
+    local.writeUInt16LE(now.time, 10); // time
+    local.writeUInt16LE(now.date, 12); // date
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(size, 18);     // compressed size
+    local.writeUInt32LE(size, 22);     // uncompressed size
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);        // extra len
+
+    localParts.push(local, nameBuf, entry.data);
+
+    // Central directory header (46 bytes)
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);       // version made by
+    central.writeUInt16LE(20, 6);       // version needed
+    central.writeUInt16LE(0, 8);        // flags
+    central.writeUInt16LE(0, 10);       // method
+    central.writeUInt16LE(now.time, 12);
+    central.writeUInt16LE(now.date, 14);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(size, 20);
+    central.writeUInt32LE(size, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt16LE(0, 30);       // extra len
+    central.writeUInt16LE(0, 32);       // comment len
+    central.writeUInt16LE(0, 34);       // disk start
+    central.writeUInt16LE(0, 36);       // internal attrs
+    central.writeUInt32LE(0, 38);       // external attrs
+    central.writeUInt32LE(offset, 42);  // local header offset
+
+    centralParts.push(central, nameBuf);
+
+    offset += local.length + nameBuf.length + size;
+  }
+
+  const centralBuffer = Buffer.concat(centralParts);
+  const centralOffset = offset;
+
+  // End of central directory (22 bytes)
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(0, 4);             // disk number
+  eocd.writeUInt16LE(0, 6);             // disk with central dir
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralBuffer.length, 12);
+  eocd.writeUInt32LE(centralOffset, 16);
+  eocd.writeUInt16LE(0, 20);            // comment len
+
+  return Buffer.concat([...localParts, centralBuffer, eocd]);
+}
+
+// Export SEMUA sesi untuk satu platform, dibundel dalam satu arsip .zip
+app.get('/api/states/export-all', (req, res) => {
+  const platform = req.query.platform === 'grok' ? 'grok'
+    : (req.query.platform === 'facebook' ? 'facebook' : 'tiktok');
+  const dir = platform === 'grok' ? GROK_STATES_DIR
+    : (platform === 'facebook' ? FB_STATES_DIR : STATES_DIR);
+  const prefix = platform === 'grok' ? 'grok-state-'
+    : (platform === 'facebook' ? 'facebook-state-' : 'tiktok-state-');
+
+  let files: string[];
+  try {
+    files = fs.readdirSync(dir).filter(f => f.endsWith('.json') && fs.statSync(path.join(dir, f)).isFile());
+  } catch (err: any) {
+    return res.status(500).json({ error: 'Gagal membaca folder sesi: ' + err.message });
+  }
+
+  if (files.length === 0) {
+    return res.status(404).json({ error: 'Tidak ada sesi tersimpan untuk diekspor' });
+  }
+
+  const entries: { name: string; data: Buffer }[] = [];
+  for (const f of files) {
+    try {
+      entries.push({ name: f, data: fs.readFileSync(path.join(dir, f)) });
+    } catch (err) {
+      console.error('[EXPORT-ALL] Gagal membaca sesi, dilewati:', f, (err as any).message);
+    }
+  }
+
+  if (entries.length === 0) {
+    return res.status(500).json({ error: 'Tidak ada file sesi yang berhasil dibaca' });
+  }
+
+  try {
+    const zipBuffer = buildStatesZip(entries);
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const filename = `${prefix}all-sessions-${stamp}.zip`;
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.send(zipBuffer);
+  } catch (err: any) {
+    console.error('[EXPORT-ALL] Gagal membuat zip:', err);
+    res.status(500).json({ error: 'Gagal membuat arsip sesi: ' + err.message });
+  }
+});
+
 // Import state for platform
 app.post('/api/states/import', (req, res) => {
   const { filename, content, platform = 'tiktok' } = req.body;
