@@ -22,6 +22,16 @@ import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo } from './video-splitter.js';
 import { startWAPolling, notifyScheduleStarted as originalNotifyScheduleStarted, sendWAMessage as originalSendWAMessage, notifyScheduleFinished as originalNotifyScheduleFinished } from './whatsapp-service.js';
 import { loadLeonardoData, saveLeonardoData, getFreshJWT, fetchCreditBalance, uploadInitImage, triggerKlingGenerate, checkGenerationStatus, fetchGenerationVideoUrl, downloadVideoToLocal } from './leonardo-helper.js';
+function buildScheduleListMessage(stateName, items) {
+    const lines = [`[Schedule ${stateName}]`];
+    items.forEach(item => {
+        const offset = item.offsetMinutes !== undefined
+            ? ` (${item.offsetMinutes >= 0 ? '+' : ''}${item.offsetMinutes} menit)`
+            : '';
+        lines.push(`${item.index}. ${item.scheduleDate} ${item.scheduleTime}${offset}`);
+    });
+    return lines.join('\n');
+}
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const app = express();
@@ -6369,7 +6379,9 @@ app.post('/api/grokbotv2/schedule-only', async (req, res) => {
         grokbotv2BroadcastProgress();
     };
     try {
-        await runUpload(uploadConfig, grokbotv2Log, onVideoUploaded);
+        await runUpload(uploadConfig, grokbotv2Log, onVideoUploaded, items => {
+            sendWAMessageV2(buildScheduleListMessage(tiktokStateName, items));
+        });
         sendWAMessageV2(`✅ [GrokbotV2] Jadwalkan Saja selesai untuk ${tiktokStateName}. Total terupload: ${uploadedCount} video.`);
     }
     catch (err) {
@@ -7563,11 +7575,14 @@ app.post('/api/vidabot/schedule-only', async (req, res) => {
             headless: isHeadlessEnabledVida(stateFile),
             threeUploadsPerHour: !!cfg.threeUploadsPerHour,
             randomizeIntervalSchedule: true
-        }, vidabotLog);
+        }, vidabotLog, undefined, items => {
+            sendWAMessageVida(buildScheduleListMessage(tiktokStateName, items));
+        });
         marks[pendingVideos[0]] = true;
         fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
         vidabotLog(`✓ [${tiktokStateName}] Video berhasil diupload dan ditandai!`);
         sendWAMessageVida(`🎬 [${tiktokStateName}] Video ${pendingVideos[0]} berhasil diupload ke TikTok!`);
+        sendWAMessageVida(`✅ [${tiktokStateName}] Upload schedule selesai.`);
     }
     catch (err) {
         vidabotLog(`❌ [${tiktokStateName}] Gagal upload: ${err.message}`);
@@ -7656,14 +7671,17 @@ app.post('/api/vidabot/schedule', async (req, res) => {
                             productNameRadio: cfg.productNameRadio || '',
                             productTitle: cfg.productTitle || '',
                             productDescription: cfg.productDescription || '',
-                        skipSwitches: false,
-                        headless: isHeadlessEnabledVida(sf),
-                        threeUploadsPerHour: !!cfg.threeUploadsPerHour,
-                        randomizeIntervalSchedule: true
-                    }, vidabotLog);
+                            skipSwitches: false,
+                            headless: isHeadlessEnabledVida(sf),
+                            threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+                            randomizeIntervalSchedule: true
+                        }, vidabotLog, undefined, items => {
+                            sendWAMessageVida(buildScheduleListMessage(tiktokStateName, items));
+                        });
                         marks[freshPending[0]] = true;
                         fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
                         vidabotLog(`✓ [${tiktokStateName}] Berhasil upload!`);
+                        sendWAMessageVida(`✅ [${tiktokStateName}] Upload schedule selesai.`);
                     }
                     catch (e) {
                         vidabotLog(`❌ [${tiktokStateName}] Gagal upload: ${e.message}`);

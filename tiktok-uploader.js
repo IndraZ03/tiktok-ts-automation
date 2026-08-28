@@ -1118,7 +1118,7 @@ async function uploadSingleVideo(page, videoPath, config, scheduleDate, schedule
 // ═══════════════════════════════════════════════════════════
 //  MAIN UPLOAD FUNCTION - MULTI-VIDEO SEQUENTIAL
 // ═══════════════════════════════════════════════════════════
-export async function runUpload(config, log, onVideoUploaded) {
+export async function runUpload(config, log, onVideoUploaded, onSchedulePlanned) {
     isRunning = true;
     // ── Validate state file ──
     const stateFilePath = path.join(config.statesDir, config.stateFile);
@@ -1180,6 +1180,82 @@ export async function runUpload(config, log, onVideoUploaded) {
         baseSchedule.setMinutes(0);
         baseSchedule.setSeconds(0);
         baseSchedule.setMilliseconds(0);
+    }
+    const formatSchedulePlanItem = (videoSchedule, index, filename, offsetMinutes) => ({
+        index: index + 1,
+        filename,
+        scheduleDate: `${videoSchedule.getFullYear()}-${String(videoSchedule.getMonth() + 1).padStart(2, '0')}-${String(videoSchedule.getDate()).padStart(2, '0')}`,
+        scheduleTime: `${String(videoSchedule.getHours()).padStart(2, '0')}:${String(videoSchedule.getMinutes()).padStart(2, '0')}`,
+        offsetMinutes
+    });
+    const schedulePlan = [];
+    if (config.enableCustomScheduler) {
+        const validMins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+        const temp = [...validMins];
+        const chosenMins = [];
+        for (let i = 0; i < videosToUpload.length; i++) {
+            if (temp.length === 0) {
+                chosenMins.push(validMins[Math.floor(Math.random() * validMins.length)]);
+            }
+            else {
+                const idx = Math.floor(Math.random() * temp.length);
+                chosenMins.push(temp.splice(idx, 1)[0]);
+            }
+        }
+        chosenMins.sort((a, b) => a - b);
+        for (let i = 0; i < videosToUpload.length; i++) {
+            const videoSchedule = new Date(baseSchedule.getTime());
+            videoSchedule.setMinutes(chosenMins[i] || 0);
+            videoSchedule.setSeconds(0);
+            videoSchedule.setMilliseconds(0);
+            schedulePlan.push(formatSchedulePlanItem(videoSchedule, i, videosToUpload[i]));
+        }
+    }
+    else if (config.threeUploadsPerHour) {
+        let currentBatchMinutes = [];
+        let lastBatchIndex = -1;
+        for (let i = 0; i < videosToUpload.length; i++) {
+            const batchIndex = Math.floor(i / 3);
+            const subIndex = i % 3;
+            if (batchIndex !== lastBatchIndex) {
+                const possible = [];
+                for (let m = 0; m < 60; m += 5) {
+                    possible.push(m);
+                }
+                currentBatchMinutes = [];
+                while (currentBatchMinutes.length < 3 && possible.length > 0) {
+                    const randIdx = Math.floor(Math.random() * possible.length);
+                    currentBatchMinutes.push(possible.splice(randIdx, 1)[0]);
+                }
+                currentBatchMinutes.sort((a, b) => a - b);
+                lastBatchIndex = batchIndex;
+            }
+            const cycleMs = (60 + intervalMinutes) * 60000;
+            const videoSchedule = new Date(baseSchedule.getTime() + batchIndex * cycleMs);
+            videoSchedule.setMinutes(currentBatchMinutes[subIndex]);
+            schedulePlan.push(formatSchedulePlanItem(videoSchedule, i, videosToUpload[i]));
+        }
+    }
+    else {
+        let previousIntervalSchedule = new Date(baseSchedule.getTime());
+        for (let i = 0; i < videosToUpload.length; i++) {
+            let videoSchedule;
+            let offsetMinutes;
+            if (config.randomizeIntervalSchedule && i > 0) {
+                offsetMinutes = getRandomIntervalOffsetMinutes();
+                videoSchedule = new Date(previousIntervalSchedule.getTime() + intervalMs + offsetMinutes * 60000);
+            }
+            else {
+                videoSchedule = i === 0
+                    ? new Date(baseSchedule.getTime())
+                    : new Date(baseSchedule.getTime() + i * intervalMs);
+            }
+            previousIntervalSchedule = new Date(videoSchedule.getTime());
+            schedulePlan.push(formatSchedulePlanItem(videoSchedule, i, videosToUpload[i], offsetMinutes));
+        }
+    }
+    if (onSchedulePlanned) {
+        onSchedulePlanned(schedulePlan);
     }
     log('🚀 ═══════════════════════════════════════════');
     log(`🚀 Memulai upload ${videosToUpload.length} video TikTok`);
@@ -1286,75 +1362,18 @@ export async function runUpload(config, log, onVideoUploaded) {
         let uploadIndex = 0;
         let successCount = 0;
         let failCount = 0;
-        let currentBatchMinutes = [];
-        let lastBatchIndex = -1;
-        let previousIntervalSchedule = new Date(baseSchedule.getTime());
-        let chosenMins = [];
-        if (config.enableCustomScheduler) {
-            const validMins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
-            const temp = [...validMins];
-            for (let i = 0; i < videosToUpload.length; i++) {
-                if (temp.length === 0) {
-                    chosenMins.push(validMins[Math.floor(Math.random() * validMins.length)]);
-                }
-                else {
-                    const idx = Math.floor(Math.random() * temp.length);
-                    chosenMins.push(temp.splice(idx, 1)[0]);
-                }
-            }
-            chosenMins.sort((a, b) => a - b);
-        }
         for (const videoFile of videosToUpload) {
             if (!isRunning) {
                 log('⛔ Upload dihentikan oleh user');
                 break;
             }
             // ── Calculate schedule for this video ──
-            let videoSchedule;
-            if (config.enableCustomScheduler) {
-                videoSchedule = new Date(baseSchedule.getTime());
-                videoSchedule.setMinutes(chosenMins[uploadIndex] || 0);
-                videoSchedule.setSeconds(0);
-                videoSchedule.setMilliseconds(0);
+            const plannedSchedule = schedulePlan[uploadIndex];
+            if (plannedSchedule.offsetMinutes !== undefined) {
+                log(`Random interval video ${uploadIndex + 1}: ${plannedSchedule.offsetMinutes >= 0 ? '+' : ''}${plannedSchedule.offsetMinutes} menit`);
             }
-            else if (config.threeUploadsPerHour) {
-                const batchIndex = Math.floor(uploadIndex / 3);
-                const subIndex = uploadIndex % 3;
-                if (batchIndex !== lastBatchIndex) {
-                    const possible = [];
-                    for (let m = 0; m < 60; m += 5) {
-                        possible.push(m);
-                    }
-                    currentBatchMinutes = [];
-                    while (currentBatchMinutes.length < 3 && possible.length > 0) {
-                        const randIdx = Math.floor(Math.random() * possible.length);
-                        currentBatchMinutes.push(possible.splice(randIdx, 1)[0]);
-                    }
-                    currentBatchMinutes.sort((a, b) => a - b);
-                    lastBatchIndex = batchIndex;
-                }
-                const cycleMs = (60 + intervalMinutes) * 60000;
-                videoSchedule = new Date(baseSchedule.getTime() + batchIndex * cycleMs);
-                videoSchedule.setMinutes(currentBatchMinutes[subIndex]);
-            }
-            else {
-                if (config.randomizeIntervalSchedule) {
-                    if (uploadIndex === 0) {
-                        videoSchedule = new Date(baseSchedule.getTime());
-                    }
-                    else {
-                        const offsetMinutes = getRandomIntervalOffsetMinutes();
-                        videoSchedule = new Date(previousIntervalSchedule.getTime() + intervalMs + offsetMinutes * 60000);
-                        log(`Random interval video ${uploadIndex + 1}: ${offsetMinutes >= 0 ? '+' : ''}${offsetMinutes} menit`);
-                    }
-                    previousIntervalSchedule = new Date(videoSchedule.getTime());
-                }
-                else {
-                    videoSchedule = new Date(baseSchedule.getTime() + uploadIndex * intervalMs);
-                }
-            }
-            const schedDate = `${videoSchedule.getFullYear()}-${String(videoSchedule.getMonth() + 1).padStart(2, '0')}-${String(videoSchedule.getDate()).padStart(2, '0')}`;
-            const schedTime = `${String(videoSchedule.getHours()).padStart(2, '0')}:${String(videoSchedule.getMinutes()).padStart(2, '0')}`;
+            const schedDate = plannedSchedule.scheduleDate;
+            const schedTime = plannedSchedule.scheduleTime;
             log('');
             log(`════════════════════════════════════════`);
             log(`📹 Video ${uploadIndex + 1}/${videosToUpload.length}: ${videoFile}`);
