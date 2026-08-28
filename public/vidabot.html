@@ -998,7 +998,7 @@
                   <div class="mt-2">
                     <label class="flex items-center gap-2 cursor-pointer">
                       <input id="chk-threeUploads-${fn}" type="checkbox" class="w-4 h-4 accent-cyan-500"
-                             ${cfg.threeUploadsPerHour ? 'checked' : ''}>
+                             ${cfg.threeUploadsPerHour ? 'checked' : ''} onchange="toggleThreeUploadsVidabot('${fn}')">
                       <span class="text-xs text-gray-300 font-semibold">⏰ Interval Tetap (3x upload/jam, jeda 5 jam)</span>
                     </label>
                   </div>
@@ -1027,7 +1027,7 @@
                       <input id="scheduleTime-${fn}" type="time" value="${cfg.scheduleTime || nowTime}"
                              class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-cyan-500 transition font-semibold">
                     </div>
-                    <div class="col-span-1">
+                    <div id="interval-group-${fn}" class="col-span-1" style="display: ${cfg.threeUploadsPerHour ? 'none' : 'block'}">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">⏱ Interval (Min)</label>
                       <input id="intervalMinutes-${fn}" type="number" min="1" value="${cfg.intervalMinutes || 60}"
                              class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-cyan-500 transition font-semibold">
@@ -1097,6 +1097,14 @@
     // ═══════════════════════════════════════
     //  POLL ACTIVE STOCKS
     // ═══════════════════════════════════════
+    function toggleThreeUploadsVidabot(fn) {
+      const chk = document.getElementById(`chk-threeUploads-${fn}`);
+      const fields = document.getElementById(`interval-group-${fn}`);
+      if (chk && fields) {
+        fields.style.display = chk.checked ? 'none' : 'block';
+      }
+    }
+
     function pollActiveStocks() {
       if (selectedStates.length > 0) {
         selectedStates.forEach(fn => loadStateStock(fn));
@@ -1131,7 +1139,7 @@
         hashtags: document.getElementById(`hashtags-${fn}`)?.value || '',
         scheduleDate: document.getElementById(`scheduleDate-${fn}`)?.value || '',
         scheduleTime: document.getElementById(`scheduleTime-${fn}`)?.value || '',
-        intervalMinutes: parseInt(document.getElementById(`intervalMinutes-${fn}`)?.value) || 60,
+        intervalMinutes: (document.getElementById(`chk-threeUploads-${fn}`)?.checked || false) ? 300 : (parseInt(document.getElementById(`intervalMinutes-${fn}`)?.value) || 60),
         addProduct: document.getElementById(`chk-product-${fn}`)?.checked || false,
         productNameRadio: document.getElementById(`productNameRadio-${fn}`)?.value || '',
         productTitle: document.getElementById(`productTitle-${fn}`)?.value || '',

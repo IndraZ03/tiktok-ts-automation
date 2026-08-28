@@ -1230,7 +1230,7 @@ export async function runUpload(config, log, onVideoUploaded, onSchedulePlanned)
                 currentBatchMinutes.sort((a, b) => a - b);
                 lastBatchIndex = batchIndex;
             }
-            const cycleMs = (60 + intervalMinutes) * 60000;
+            const cycleMs = intervalMinutes * 60000;
             const videoSchedule = new Date(baseSchedule.getTime() + batchIndex * cycleMs);
             videoSchedule.setMinutes(currentBatchMinutes[subIndex]);
             schedulePlan.push(formatSchedulePlanItem(videoSchedule, i, videosToUpload[i]));
