@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dola AI Video Generator (/dolatest)</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#0b0f19;--panel:rgba(23,32,54,.75);--border:rgba(255,255,255,.12);--cyan:#06b6d4;--blue:#3b82f6;--main:#f8fafc;--mut:#94a3b8;--in:#0f172a}
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Inter',sans-serif}
+body{background:var(--bg);background-image:radial-gradient(at 0% 0%,rgba(6,182,212,.15) 0px,transparent 50%),radial-gradient(at 100% 100%,rgba(139,92,246,.15) 0px,transparent 50%);color:var(--main);min-height:100vh;padding:2rem 1rem}
+.container{max-width:1000px;margin:0 auto}
+.header{text-align:center;margin-bottom:2.5rem}
+.header h1{font-size:2.3rem;font-weight:800;background:linear-gradient(135deg,#38bdf8,#818cf8,#c084fc);-webkit-background-clip:text;-webkit-text-fill-color:transparent;margin-bottom:.5rem;letter-spacing:-.02em}
+.header p{color:var(--mut);font-size:.95rem}
+.nav-links{display:flex;justify-content:center;gap:1rem;margin-top:1rem;flex-wrap:wrap}
+.nav-link{color:#94a3b8;text-decoration:none;font-size:.85rem;padding:.4rem .8rem;border-radius:8px;background:rgba(255,255,255,.05);border:1px solid var(--border);transition:all .2s}
+.nav-link:hover{color:#fff;background:rgba(255,255,255,.1)}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:1.5rem}
+@media(max-width:850px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);backdrop-filter:blur(16px);border:1px solid var(--border);border-radius:18px;padding:1.5rem;box-shadow:0 10px 30px -5px rgba(0,0,0,.4)}
+.card-title{font-size:1.1rem;font-weight:700;margin-bottom:1.25rem;display:flex;align-items:center;gap:.5rem;color:#e2e8f0;border-bottom:1px solid var(--border);padding-bottom:.75rem}
+.form-group{margin-bottom:1.2rem}
+label{display:block;font-size:.85rem;font-weight:600;color:var(--mut);margin-bottom:.4rem}
+select,input,textarea{width:100%;background:var(--in);border:1px solid var(--border);border-radius:10px;padding:.75rem;color:var(--main);font-size:.9rem;outline:none;transition:border-color .2s,box-shadow .2s}
+select:focus,input:focus,textarea:focus{border-color:var(--cyan);box-shadow:0 0 0 2px rgba(6,182,212,.2)}
+textarea{resize:vertical;min-height:100px}
+.preview-box{width:100%;height:200px;border:2px dashed var(--border);border-radius:12px;display:flex;align-items:center;justify-content:center;background:rgba(15,23,42,.5);overflow:hidden;margin-top:.5rem;position:relative}
+.preview-box img{max-width:100%;max-height:100%;object-fit:contain}
+.preview-placeholder{color:var(--mut);font-size:.8rem;text-align:center;padding:1rem}
+.param-row{display:grid;grid-template-columns:1fr 1fr;gap:.75rem}
+.btn-generate{width:100%;background:linear-gradient(135deg,var(--cyan),var(--blue));border:none;border-radius:12px;padding:1rem;color:#fff;font-weight:700;font-size:1rem;cursor:pointer;box-shadow:0 4px 20px rgba(6,182,212,.35);transition:transform .2s,opacity .2s,box-shadow .2s;display:flex;align-items:center;justify-content:center;gap:.5rem;margin-top:1.25rem}
+.btn-generate:hover{opacity:.95;transform:translateY(-2px);box-shadow:0 6px 25px rgba(6,182,212,.5)}
+.btn-generate:disabled{background:#475569;cursor:not-allowed;box-shadow:none;transform:none}
+.progress-bar-container{width:100%;height:10px;background:rgba(255,255,255,.1);border-radius:5px;overflow:hidden;margin-top:.75rem;display:none}
+.progress-bar-fill{height:100%;width:0%;background:linear-gradient(90deg,#06b6d4,#3b82f6,#8b5cf6);transition:width .4s ease;border-radius:5px}
+.status-card{margin-top:1.5rem;display:none}
+.status-log{background:#060913;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:.85rem;font-family:'Cascadia Code','Fira Code',monospace;font-size:.8rem;color:#38bdf8;max-height:200px;overflow-y:auto;margin-top:.5rem;line-height:1.5;white-space:pre-wrap}
+.video-container{margin-top:1rem;border-radius:14px;overflow:hidden;background:#000;text-align:center;border:1px solid var(--border)}
+video{width:100%;max-height:400px;border-radius:14px;display:block}
+.btn-download{display:inline-flex;align-items:center;gap:.5rem;margin-top:1rem;background:linear-gradient(135deg,#10b981,#059669);color:#fff;text-decoration:none;padding:.75rem 1.5rem;border-radius:10px;font-size:.9rem;font-weight:700;box-shadow:0 4px 15px rgba(16,185,129,.3);transition:all .2s}
+.btn-download:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(16,185,129,.5)}
+.spinner{border:3px solid rgba(255,255,255,.3);border-radius:50%;border-top:3px solid #fff;width:20px;height:20px;animation:spin 1s linear infinite;display:inline-block}
+@keyframes spin{0%{transform:rotate(0)}100%{transform:rotate(360deg)}}
+.meta-chip{font-size:.75rem;color:var(--mut);background:rgba(255,255,255,.05);border:1px solid var(--border);border-radius:8px;padding:.35rem .6rem;display:inline-block;margin:.5rem .25rem 0 0}
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <h1>🎬 Dola AI Video Generator (/dolatest)</h1>
+    <p>Generate Video AI Image-to-Video via Dola AI — upload foto, isi prompt, atur rasio & durasi</p>
+    <div class="nav-links">
+      <a href="/vidabotest" class="nav-link">← Vidabot Tester</a>
+      <a href="/grokv2test" class="nav-link">Grok V2 Tester</a>
+      <a href="/" class="nav-link">Home Manager</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- PANEL KIRI: GAMBAR + PROMPT -->
+    <div class="card">
+      <div class="card-title">🖼️ Foto & Prompt</div>
+      <div class="form-group">
+        <label for="imageInput">1. Upload Foto (wajib untuk Image-to-Video) *</label>
+        <input type="file" id="imageInput" accept="image/*">
+        <div class="preview-box" id="imagePreviewBox">
+          <span class="preview-placeholder">Upload foto dari komputer Anda — preview akan tampil di sini</span>
+        </div>
+      </div>
+      <div class="form-group">
+        <label for="promptInput">2. Prompt Deskripsi Video *</label>
+        <textarea id="promptInput" placeholder="Ketik prompt deskripsi video secara detail, mis: Create a premium product commercial based on this image..."></textarea>
+      </div>
+    </div>
+
+    <!-- PANEL KANAN: PARAMETER & STATUS -->
+    <div class="card">
+      <div class="card-title">⚙️ Konfigurasi & Status</div>
+      <div class="param-row">
+        <div class="form-group">
+          <label for="aspectSelect">Aspect Ratio</label>
+          <select id="aspectSelect">
+            <option value="9:16" selected>9:16 (Portrait / TikTok)</option>
+            <option value="16:9">16:9 (Landscape)</option>
+            <option value="1:1">1:1 (Square)</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="durationInput">Durasi (detik)</label>
+          <input type="number" id="durationInput" value="10" min="5" max="60">
+        </div>
+      </div>
+      <div class="form-group">
+        <details>
+          <summary style="font-size:.85rem;color:var(--mut);cursor:pointer;font-weight:500;">
+            🔑 Custom Session Cookie (Opsional — kosongkan untuk pakai dolaai/dola-session.json)
+          </summary>
+          <div style="margin-top:.5rem;">
+            <textarea id="cookieInput" style="min-height:60px;font-size:.75rem;font-family:monospace;" placeholder="isi cookie Dola bila ingin ganti session"></textarea>
+          </div>
+        </details>
+      </div>
+      <button id="btnGenerate" class="btn-generate"><span>🚀 Generate Video via Dola AI</span></button>
+      <div class="progress-bar-container" id="progressBarContainer">
+        <div class="progress-bar-fill" id="progressBarFill"></div>
+      </div>
+      <div id="statusCard" class="status-card">
+        <label id="statusTitle">Live Log Status:</label>
+        <div class="status-log" id="statusLog">Menunggu perintah...</div>
+      </div>
+      <div id="resultCard" style="display:none;margin-top:1.5rem;">
+        <div class="card-title" style="color:#34d399;">✅ Video Berhasil Di-generate!</div>
+        <div id="metaInfo" style="margin-bottom:.5rem;"></div>
+        <div class="video-container">
+          <video id="videoPlayer" controls autoplay loop muted></video>
+        </div>
+        <div style="text-align:center;">
+          <a id="btnDownload" href="#" download class="btn-download"><span>💾 Download Video MP4</span></a>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script>
+let uploadedBase64 = null;
+
+// Preview foto
+document.getElementById('imageInput').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    uploadedBase64 = evt.target.result;
+    document.getElementById('imagePreviewBox').innerHTML = `<img src="${uploadedBase64}" alt="Preview">`;
+  };
+  reader.readAsDataURL(file);
+});
+
+// Generate
+document.getElementById('btnGenerate').addEventListener('click', async () => {
+  const promptText = document.getElementById('promptInput').value.trim();
+  const aspectRatio = document.getElementById('aspectSelect').value;
+  const duration = parseInt(document.getElementById('durationInput').value, 10) || 10;
+  const customCookie = document.getElementById('cookieInput').value;
+
+  if (!promptText) { alert('Mohon isi prompt deskripsi video terlebih dahulu!'); return; }
+  if (!uploadedBase64) { alert('Mohon upload foto terlebih dahulu (wajib untuk Image-to-Video)!'); return; }
+
+  const btn = document.getElementById('btnGenerate');
+  const statusCard = document.getElementById('statusCard');
+  const statusLog = document.getElementById('statusLog');
+  const resultCard = document.getElementById('resultCard');
+  const progressContainer = document.getElementById('progressBarContainer');
+  const progressFill = document.getElementById('progressBarFill');
+
+  btn.disabled = true;
+  btn.innerHTML = `<div class="spinner"></div> <span>Generating Video... (Memproses di Dola AI)</span>`;
+  statusCard.style.display = 'block';
+  progressContainer.style.display = 'block';
+  progressFill.style.width = '5%';
+  resultCard.style.display = 'none';
+  statusLog.textContent = `[${new Date().toLocaleTimeString()}] Mengirim instruksi generate ke server Dola...\n`;
+
+  try {
+    const response = await fetch('/api/dolatest/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ promptText, aspectRatio, duration, cookie: customCookie, imageBase64: uploadedBase64 })
+    });
+
+    const data = await response.json();
+    if (!response.ok || !data.success) {
+      throw new Error(data.error || 'Terjadi kesalahan saat generate video');
+    }
+
+    progressFill.style.width = '100%';
+    statusLog.textContent += `[${new Date().toLocaleTimeString()}] ✅ Video berhasil di-generate & disimpan!\n`;
+
+    const player = document.getElementById('videoPlayer');
+    const dlBtn = document.getElementById('btnDownload');
+    player.src = data.result.downloadUrl;
+    dlBtn.href = data.result.downloadUrl;
+    dlBtn.setAttribute('download', data.result.filename);
+
+    const meta = document.getElementById('metaInfo');
+    const r = data.result;
+    meta.innerHTML =
+      `<span class="meta-chip">Rasio: ${r.aspectRatio || aspectRatio}</span>` +
+      `<span class="meta-chip">Durasi: ${r.duration || duration}s</span>` +
+      `<span class="meta-chip">Ukuran: ${((r.sizeBytes||0)/1024/1024).toFixed(2)} MB</span>`;
+
+    resultCard.style.display = 'block';
+  } catch (err) {
+    progressFill.style.width = '0%';
+    statusLog.textContent += `[${new Date().toLocaleTimeString()}] ❌ Error: ${err.message}\n`;
+    alert(`Gagal generate video: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = `<span>🚀 Generate Video via Dola AI</span>`;
+  }
+});
+</script>
+
+
+</body>
+</html>

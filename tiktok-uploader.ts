@@ -26,6 +26,7 @@ export interface UploadConfig {
   enableCustomScheduler?: boolean;
   customIntervalHours?: number;
   customUploadCount?: number;
+  randomizeIntervalSchedule?: boolean;
 }
 
 type LogFn = (msg: string) => void;
@@ -35,6 +36,14 @@ let activeContext: BrowserContext | null = null;
 let isRunning = false;
 
 export function getIsRunning() { return isRunning; }
+
+const RANDOM_INTERVAL_OFFSET_MAX_MINUTES = 40;
+const RANDOM_INTERVAL_OFFSET_STEP_MINUTES = 5;
+
+function getRandomIntervalOffsetMinutes(): number {
+  const steps = Math.floor(RANDOM_INTERVAL_OFFSET_MAX_MINUTES / RANDOM_INTERVAL_OFFSET_STEP_MINUTES);
+  return (Math.floor(Math.random() * (steps * 2 + 1)) - steps) * RANDOM_INTERVAL_OFFSET_STEP_MINUTES;
+}
 
 export async function stopUploader() {
   isRunning = false;
@@ -1233,6 +1242,9 @@ export async function runUpload(
     log(`⏰ Mode Interval Tetap: 3 upload per jam, jeda antar-jam ${intervalMinutes} menit`);
   } else {
     log(`⏱ Interval: ${intervalMinutes} menit (${Math.floor(intervalMinutes / 60)}j ${intervalMinutes % 60}m)`);
+    if (config.randomizeIntervalSchedule) {
+      log(`🎲 Random interval aktif: jadwal setelah video pertama digeser -${RANDOM_INTERVAL_OFFSET_MAX_MINUTES} sampai +${RANDOM_INTERVAL_OFFSET_MAX_MINUTES} menit, kelipatan ${RANDOM_INTERVAL_OFFSET_STEP_MINUTES} menit`);
+    }
   }
   log(`📋 Total video: ${videosFromStart.length} | Sudah upload: ${videosFromStart.length - videosToUpload.length} | Akan upload: ${videosToUpload.length}`);
   log('🚀 ═══════════════════════════════════════════');
@@ -1334,6 +1346,7 @@ export async function runUpload(
 
     let currentBatchMinutes: number[] = [];
     let lastBatchIndex = -1;
+    let previousIntervalSchedule = new Date(baseSchedule.getTime());
 
     let chosenMins: number[] = [];
     if (config.enableCustomScheduler) {
@@ -1385,7 +1398,18 @@ export async function runUpload(
         videoSchedule = new Date(baseSchedule.getTime() + batchIndex * cycleMs);
         videoSchedule.setMinutes(currentBatchMinutes[subIndex]);
       } else {
-        videoSchedule = new Date(baseSchedule.getTime() + uploadIndex * intervalMs);
+        if (config.randomizeIntervalSchedule) {
+          if (uploadIndex === 0) {
+            videoSchedule = new Date(baseSchedule.getTime());
+          } else {
+            const offsetMinutes = getRandomIntervalOffsetMinutes();
+            videoSchedule = new Date(previousIntervalSchedule.getTime() + intervalMs + offsetMinutes * 60000);
+            log(`🎲 Random interval video ${uploadIndex + 1}: ${offsetMinutes >= 0 ? '+' : ''}${offsetMinutes} menit`);
+          }
+          previousIntervalSchedule = new Date(videoSchedule.getTime());
+        } else {
+          videoSchedule = new Date(baseSchedule.getTime() + uploadIndex * intervalMs);
+        }
       }
 
       const schedDate = `${videoSchedule.getFullYear()}-${String(videoSchedule.getMonth() + 1).padStart(2, '0')}-${String(videoSchedule.getDate()).padStart(2, '0')}`;

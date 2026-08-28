@@ -13,6 +13,7 @@ import { runFacebookUpload, stopFacebookUploader } from './facebook-uploader.js'
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, getGrokRateLimits, clearGrokRateLimit, setGrokRateLimit } from './grok-uploader.js';
 import { generateGrokVideoV2, RateLimitError } from './grok_api_client.js';
 import { generateVidabotVideo } from './vidabot_api_client.js';
+import { generateDolaVideo } from './dola_api_client.js';
 import { runVidabotGenerator, stopVidabotGenerator, getVidabotStats, getVidabotBrowserProgress, getVidabotRateLimits } from './vidabot_generator.js';
 import { postTikTokAffiliateVideoApi } from './tiktok_api_post.js';
 import multer from 'multer';
@@ -2506,6 +2507,8 @@ app.post('/api/grokv2test/generate', async (req, res) => {
 //  VIDABOT TEST APIs (/vidabotest & /vidabot)
 // ═══════════════════════════════════════════════════════════
 const VIDABOT_DOWNLOAD_DIR = path.join(process.cwd(), 'vidabot-downloads');
+const DOLA_DOWNLOAD_DIR = path.join(process.cwd(), 'dola-downloads');
+if (!fs.existsSync(DOLA_DOWNLOAD_DIR)) fs.mkdirSync(DOLA_DOWNLOAD_DIR, { recursive: true });
 app.get('/vidabotest', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'vidabotest.html'));
 });
@@ -2556,7 +2559,50 @@ app.get('/api/vidabot/video-file/:filename', (req, res) => {
 //  TIKTOK V2 TEST APIs (/tiktokv2test)
 // ═══════════════════════════════════════════════════════════
 app.get('/tiktokv2test', (req, res) => {
-    res.sendFile(path.join(__dirname, 'public', 'tiktokv2test.html'));
+// ════════════════════════════════════════
+//  DOLA TEST APIs (/dolatest)
+app.get('/dolatest', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'dolatest.html'));
+});
+app.post('/api/dolatest/generate', async (req, res) => {
+    const { promptText, imageBase64, aspectRatio, duration, cookie } = req.body;
+    if (!promptText || promptText.trim() === '') {
+        return res.status(400).json({ error: 'Prompt teks harus diisi' });
+    }
+    if (!imageBase64) {
+        return res.status(400).json({ error: 'Foto/gambar wajib di-upload untuk Image-to-Video Dola' });
+    }
+    try {
+        console.log(`[DOLATEST] Memulai generate video (Aspect: ${aspectRatio || '9:16'}, Durasi: ${duration || 10}s)...`);
+        const result = await generateDolaVideo({
+            promptText,
+            imageBase64,
+            aspectRatio: aspectRatio || '9:16',
+            duration: Number(duration) || 10,
+            cookie,
+            outputDir: DOLA_DOWNLOAD_DIR,
+            filenamePrefix: 'dola',
+        }, (msg, progress) => {
+            console.log(`[DOLATEST] ${msg} (${progress}%)`);
+        });
+        res.json({ success: true, result });
+    }
+    catch (err) {
+        console.error(`[DOLATEST ERROR] ${err.message}`);
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/dola/video-file/:filename', (req, res) => {
+    const { filename } = req.params;
+    if (filename.includes('..')) {
+        return res.status(400).send('Invalid path');
+    }
+    const filepath = path.join(DOLA_DOWNLOAD_DIR, filename);
+    if (!fs.existsSync(filepath))
+        return res.status(404).send('File not found');
+    res.sendFile(filepath);
+});
+res.sendFile(path.join(__dirname, 'public', 'tiktokv2test.html'));
 });
 app.get('/api/tiktokv2test/states', (req, res) => {
     res.json(getSavedStates('tiktok'));
@@ -6296,7 +6342,8 @@ app.post('/api/grokbotv2/schedule-only', async (req, res) => {
         scheduleTime: schedTime,
         intervalMinutes: cfg.intervalMinutes || 60,
         stateFile: stateFile,
-        statesDir: STATES_DIR
+        statesDir: STATES_DIR,
+        randomizeIntervalSchedule: true
     };
     let uploadedCount = 0;
     const onVideoUploaded = (videoFilename) => {
@@ -7514,7 +7561,8 @@ app.post('/api/vidabot/schedule-only', async (req, res) => {
             productDescription: cfg.productDescription || '',
             skipSwitches: false,
             headless: isHeadlessEnabledVida(stateFile),
-            threeUploadsPerHour: !!cfg.threeUploadsPerHour
+            threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+            randomizeIntervalSchedule: true
         }, vidabotLog);
         marks[pendingVideos[0]] = true;
         fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
@@ -7608,10 +7656,11 @@ app.post('/api/vidabot/schedule', async (req, res) => {
                             productNameRadio: cfg.productNameRadio || '',
                             productTitle: cfg.productTitle || '',
                             productDescription: cfg.productDescription || '',
-                            skipSwitches: false,
-                            headless: isHeadlessEnabledVida(sf),
-                            threeUploadsPerHour: !!cfg.threeUploadsPerHour
-                        }, vidabotLog);
+                        skipSwitches: false,
+                        headless: isHeadlessEnabledVida(sf),
+                        threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+                        randomizeIntervalSchedule: true
+                    }, vidabotLog);
                         marks[freshPending[0]] = true;
                         fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
                         vidabotLog(`✓ [${tiktokStateName}] Berhasil upload!`);

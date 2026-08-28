@@ -6661,7 +6661,8 @@ app.post('/api/grokbotv2/schedule-only', async (req, res) => {
     scheduleTime: schedTime,
     intervalMinutes: cfg.intervalMinutes || 60,
     stateFile: stateFile,
-    statesDir: STATES_DIR
+    statesDir: STATES_DIR,
+    randomizeIntervalSchedule: true
   };
 
   let uploadedCount = 0;
@@ -7925,7 +7926,8 @@ app.post('/api/vidabot/schedule-only', async (req, res) => {
       productDescription: cfg.productDescription || '',
       skipSwitches: false,
       headless: isHeadlessEnabledVida(stateFile),
-      threeUploadsPerHour: !!cfg.threeUploadsPerHour
+      threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+      randomizeIntervalSchedule: true
     }, vidabotLog);
 
     marks[pendingVideos[0]] = true;
@@ -8021,7 +8023,8 @@ app.post('/api/vidabot/schedule', async (req, res) => {
               productDescription: cfg.productDescription || '',
               skipSwitches: false,
               headless: isHeadlessEnabledVida(sf),
-              threeUploadsPerHour: !!cfg.threeUploadsPerHour
+              threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+              randomizeIntervalSchedule: true
             }, vidabotLog);
             marks[freshPending[0]] = true;
             fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));

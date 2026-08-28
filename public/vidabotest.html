@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vidabot Veo Generator (/vidabotest)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0b0f19;
+      --panel-bg: rgba(23, 32, 54, 0.75);
+      --panel-border: rgba(255, 255, 255, 0.12);
+      --accent-cyan: #06b6d4;
+      --accent-teal: #14b8a6;
+      --accent-blue: #3b82f6;
+      --accent-purple: #8b5cf6;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --input-bg: #0f172a;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: 'Inter', sans-serif;
+    }
+
+    body {
+      background-color: var(--bg-dark);
+      background-image: 
+        radial-gradient(at 0% 0%, rgba(6, 182, 212, 0.15) 0px, transparent 50%),
+        radial-gradient(at 100% 100%, rgba(139, 92, 246, 0.15) 0px, transparent 50%);
+      color: var(--text-main);
+      min-height: 100vh;
+      padding: 2rem 1rem;
+    }
+
+    .container {
+      max-width: 1050px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2.5rem;
+    }
+
+    .header h1 {
+      font-size: 2.3rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #38bdf8, #818cf8, #c084fc);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.02em;
+    }
+
+    .header p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+
+    .nav-links {
+      display: flex;
+      justify-content: center;
+      gap: 1rem;
+      margin-top: 1rem;
+    }
+
+    .nav-link {
+      color: #94a3b8;
+      text-decoration: none;
+      font-size: 0.85rem;
+      padding: 0.4rem 0.8rem;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      transition: all 0.2s;
+    }
+
+    .nav-link:hover {
+      color: #fff;
+      background: rgba(255, 255, 255, 0.1);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 850px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    .card {
+      background: var(--panel-bg);
+      backdrop-filter: blur(16px);
+      border: 1px solid var(--panel-border);
+      border-radius: 18px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 30px -5px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      margin-bottom: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: #e2e8f0;
+      border-bottom: 1px solid var(--panel-border);
+      padding-bottom: 0.75rem;
+    }
+
+    .form-group {
+      margin-bottom: 1.2rem;
+    }
+
+    label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      margin-bottom: 0.4rem;
+    }
+
+    select, input, textarea {
+      width: 100%;
+      background: var(--input-bg);
+      border: 1px solid var(--panel-border);
+      border-radius: 10px;
+      padding: 0.75rem;
+      color: var(--text-main);
+      font-size: 0.9rem;
+      outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    select:focus, input:focus, textarea:focus {
+      border-color: var(--accent-cyan);
+      box-shadow: 0 0 0 2px rgba(6, 182, 212, 0.2);
+    }
+
+    textarea {
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    .preview-box {
+      width: 100%;
+      height: 180px;
+      border: 2px dashed var(--panel-border);
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(15, 23, 42, 0.5);
+      overflow: hidden;
+      margin-top: 0.5rem;
+      position: relative;
+    }
+
+    .preview-box img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+
+    .preview-placeholder {
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      text-align: center;
+      padding: 1rem;
+    }
+
+    .btn-generate {
+      width: 100%;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-blue));
+      border: none;
+      border-radius: 12px;
+      padding: 1rem;
+      color: white;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      box-shadow: 0 4px 20px rgba(6, 182, 212, 0.35);
+      transition: transform 0.2s, opacity 0.2s, box-shadow 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+      margin-top: 1.25rem;
+    }
+
+    .btn-generate:hover {
+      opacity: 0.95;
+      transform: translateY(-2px);
+      box-shadow: 0 6px 25px rgba(6, 182, 212, 0.5);
+    }
+
+    .btn-generate:disabled {
+      background: #475569;
+      cursor: not-allowed;
+      box-shadow: none;
+      transform: none;
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 10px;
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 5px;
+      overflow: hidden;
+      margin-top: 0.75rem;
+      display: none;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #06b6d4, #3b82f6, #8b5cf6);
+      transition: width 0.4s ease;
+      border-radius: 5px;
+    }
+
+    .status-card {
+      margin-top: 1.5rem;
+      display: none;
+    }
+
+    .status-log {
+      background: #060913;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 10px;
+      padding: 0.85rem;
+      font-family: 'Cascadia Code', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: #38bdf8;
+      max-height: 180px;
+      overflow-y: auto;
+      margin-top: 0.5rem;
+      line-height: 1.5;
+    }
+
+    .video-container {
+      margin-top: 1rem;
+      border-radius: 14px;
+      overflow: hidden;
+      background: #000;
+      text-align: center;
+      border: 1px solid var(--panel-border);
+    }
+
+    video {
+      width: 100%;
+      max-height: 400px;
+      border-radius: 14px;
+      display: block;
+    }
+
+    .btn-download {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-top: 1rem;
+      background: linear-gradient(135deg, #10b981, #059669);
+      color: white;
+      text-decoration: none;
+      padding: 0.75rem 1.5rem;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+      transition: all 0.2s;
+    }
+
+    .btn-download:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(16, 185, 129, 0.5);
+    }
+
+    .spinner {
+      border: 3px solid rgba(255,255,255,0.3);
+      border-radius: 50%;
+      border-top: 3px solid white;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .tab-btns {
+      display: flex;
+      gap: 0.5rem;
+      margin-bottom: 0.75rem;
+    }
+
+    .tab-btn {
+      flex: 1;
+      padding: 0.5rem;
+      font-size: 0.8rem;
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      color: var(--text-muted);
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .tab-btn.active {
+      background: rgba(6, 182, 212, 0.15);
+      border-color: var(--accent-cyan);
+      color: #38bdf8;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="header">
+    <h1>🎬 Vidabot Veo Generator (/vidabotest)</h1>
+    <p>Generate Video AI Menggunakan Gambar & Prompt via Vidabot (Veo Engine)</p>
+    <div class="nav-links">
+      <a href="/grok" class="nav-link">← Grok Imagine</a>
+      <a href="/grokv2test" class="nav-link">Grok V2 Tester</a>
+      <a href="/" class="nav-link">Home Manager</a>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- PANEL KIRI: FORM INPUTS -->
+    <div class="card">
+      <div class="card-title">🖼️ Form Input (Gambar & Prompt)</div>
+
+      <!-- Option tab for Image Input -->
+      <div class="form-group">
+        <label>1. Pilihan Bahan Gambar</label>
+        <div class="tab-btns">
+          <button type="button" class="tab-btn active" id="tabServerImg" onclick="switchImageTab('server')">Folder Server</button>
+          <button type="button" class="tab-btn" id="tabUploadImg" onclick="switchImageTab('upload')">Upload Komputer</button>
+        </div>
+
+        <!-- Server Image Controls -->
+        <div id="serverImageControls">
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem; margin-bottom: 0.5rem;">
+            <select id="bahanFolderSelect">
+              <option value="">-- Pilih Folder --</option>
+            </select>
+            <select id="bahanFileSelect" disabled>
+              <option value="">-- Pilih File --</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Upload Image Controls -->
+        <div id="uploadImageControls" style="display: none; margin-bottom: 0.5rem;">
+          <input type="file" id="customFileInput" accept="image/*">
+        </div>
+
+        <!-- Image Preview Box -->
+        <div class="preview-box" id="imagePreviewBox">
+          <span class="preview-placeholder">Preview gambar bahan akan muncul di sini (Opsional untuk Image-to-Video)</span>
+        </div>
+      </div>
+
+      <!-- Prompt Section -->
+      <div class="form-group">
+        <label for="promptFileSelect">2. Pilih Prompt Template (Opsional)</label>
+        <select id="promptFileSelect">
+          <option value="">-- Pilih Template Prompt atau Ketik Manual --</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="promptInput">Prompt Deskripsi Video *</label>
+        <textarea id="promptInput" placeholder="Ketik prompt deskripsi video secara detail..."></textarea>
+      </div>
+    </div>
+
+    <!-- PANEL KANAN: PARAMETER & GENERATE ACTION -->
+    <div class="card">
+      <div class="card-title">⚙️ Konfigurasi & Status Live</div>
+
+      <div class="form-group">
+        <label for="aspectSelect">Aspect Ratio Video</label>
+        <select id="aspectSelect">
+          <option value="portrait" selected>Portrait (9:16)</option>
+          <option value="landscape">Landscape (16:9)</option>
+          <option value="square">Square (1:1)</option>
+        </select>
+      </div>
+
+      <!-- Optional Cookie Configuration -->
+      <div class="form-group">
+        <details>
+          <summary style="font-size: 0.85rem; color: var(--text-muted); cursor: pointer; font-weight: 500;">
+            🔑 Custom Session Cookie (Opsional)
+          </summary>
+          <div style="margin-top: 0.5rem;">
+            <textarea id="cookieInput" style="min-height: 60px; font-size: 0.75rem; font-family: monospace;" placeholder="Format: remember_web_...=...; XSRF-TOKEN=...; laravel_session=..."></textarea>
+          </div>
+        </details>
+      </div>
+
+      <!-- Action Button -->
+      <button id="btnGenerate" class="btn-generate">
+        <span>🚀 Generate Video via Vidabot</span>
+      </button>
+
+      <!-- Progress Bar -->
+      <div class="progress-bar-container" id="progressBarContainer">
+        <div class="progress-bar-fill" id="progressBarFill"></div>
+      </div>
+
+      <!-- STATUS LOG & PROGRESS -->
+      <div id="statusCard" class="status-card">
+        <label id="statusTitle">Live Log Status:</label>
+        <div class="status-log" id="statusLog">Menunggu perintah...</div>
+      </div>
+
+      <!-- RESULT VIDEO PLAYER -->
+      <div id="resultCard" style="display: none; margin-top: 1.5rem;">
+        <div class="card-title" style="color: #34d399;">✅ Video Berhasil Di-generate!</div>
+        <div class="video-container">
+          <video id="videoPlayer" controls autoplay loop muted></video>
+        </div>
+        <div style="text-align: center;">
+          <a id="btnDownload" href="#" download class="btn-download">
+            <span>💾 Download Video MP4</span>
+          </a>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+  let bahanDataMap = {};
+  let uploadedBase64 = null;
+  let activeImgMode = 'server';
+
+  function switchImageTab(mode) {
+    activeImgMode = mode;
+    document.getElementById('tabServerImg').classList.toggle('active', mode === 'server');
+    document.getElementById('tabUploadImg').classList.toggle('active', mode === 'upload');
+    document.getElementById('serverImageControls').style.display = mode === 'server' ? 'block' : 'none';
+    document.getElementById('uploadImageControls').style.display = mode === 'upload' ? 'block' : 'none';
+
+    if (mode === 'upload') {
+      if (uploadedBase64) {
+        document.getElementById('imagePreviewBox').innerHTML = `<img src="${uploadedBase64}" alt="Preview">`;
+      } else {
+        document.getElementById('imagePreviewBox').innerHTML = `<span class="preview-placeholder">Upload gambar dari komputer Anda</span>`;
+      }
+    } else {
+      const folder = document.getElementById('bahanFolderSelect').value;
+      const file = document.getElementById('bahanFileSelect').value;
+      updateImagePreview(folder, file);
+    }
+  }
+
+  // Handle custom file upload
+  document.getElementById('customFileInput').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      uploadedBase64 = evt.target.result;
+      document.getElementById('imagePreviewBox').innerHTML = `<img src="${uploadedBase64}" alt="Uploaded Preview">`;
+    };
+    reader.readAsDataURL(file);
+  });
+
+  async function loadInitialData() {
+    // Load Bahan Folders & Files
+    try {
+      const res = await fetch('/api/grokv2test/bahan');
+      const data = await res.json();
+      bahanDataMap = data.bahanMap || {};
+      const folderSelect = document.getElementById('bahanFolderSelect');
+      folderSelect.innerHTML = '<option value="">-- Pilih Folder Bahan --</option>';
+      (data.folders || []).forEach(f => {
+        const opt = document.createElement('option');
+        opt.value = f;
+        opt.textContent = f;
+        folderSelect.appendChild(opt);
+      });
+    } catch (e) { console.error('Error loading bahan:', e); }
+
+    // Load Prompt Files
+    try {
+      const res = await fetch('/api/grokv2test/prompts');
+      const data = await res.json();
+      const promptSelect = document.getElementById('promptFileSelect');
+      promptSelect.innerHTML = '<option value="">-- Pilih Prompt Template --</option>';
+      (data.files || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p;
+        opt.textContent = p;
+        promptSelect.appendChild(opt);
+      });
+    } catch (e) { console.error('Error loading prompts:', e); }
+  }
+
+  // Handle Bahan Folder Selection
+  document.getElementById('bahanFolderSelect').addEventListener('change', (e) => {
+    const folder = e.target.value;
+    const fileSelect = document.getElementById('bahanFileSelect');
+    fileSelect.innerHTML = '<option value="">-- Pilih File Gambar --</option>';
+    
+    if (folder && bahanDataMap[folder]) {
+      fileSelect.disabled = false;
+      bahanDataMap[folder].forEach(img => {
+        const opt = document.createElement('option');
+        opt.value = img;
+        opt.textContent = img;
+        fileSelect.appendChild(opt);
+      });
+    } else {
+      fileSelect.disabled = true;
+      updateImagePreview('', '');
+    }
+  });
+
+  // Handle Bahan File Selection
+  document.getElementById('bahanFileSelect').addEventListener('change', (e) => {
+    const folder = document.getElementById('bahanFolderSelect').value;
+    const file = e.target.value;
+    updateImagePreview(folder, file);
+  });
+
+  function updateImagePreview(folder, file) {
+    const previewBox = document.getElementById('imagePreviewBox');
+    if (folder && file) {
+      previewBox.innerHTML = `<img src="/bahan/${folder}/${file}" alt="Preview">`;
+    } else {
+      previewBox.innerHTML = `<span class="preview-placeholder">Preview gambar bahan akan muncul di sini (Opsional untuk Image-to-Video)</span>`;
+    }
+  }
+
+  // Handle Prompt Template Selection
+  document.getElementById('promptFileSelect').addEventListener('change', async (e) => {
+    const filename = e.target.value;
+    if (!filename) return;
+    try {
+      const res = await fetch(`/api/grokv2test/prompt-content/${filename}`);
+      const data = await res.json();
+      if (data.success && data.prompt) {
+        document.getElementById('promptInput').value = data.prompt;
+      }
+    } catch (err) { console.error('Error loading prompt content:', err); }
+  });
+
+  // Handle Generate Action
+  document.getElementById('btnGenerate').addEventListener('click', async () => {
+    const promptText = document.getElementById('promptInput').value;
+    const aspectRatio = document.getElementById('aspectSelect').value;
+    const customCookie = document.getElementById('cookieInput').value;
+
+    if (!promptText || promptText.trim() === '') {
+      alert('Silakan masukkan prompt deskripsi video terlebih dahulu!');
+      return;
+    }
+
+    let imageBase64 = null;
+    let bahanFolder = null;
+    let bahanFile = null;
+
+    if (activeImgMode === 'upload' && uploadedBase64) {
+      imageBase64 = uploadedBase64;
+    } else if (activeImgMode === 'server') {
+      bahanFolder = document.getElementById('bahanFolderSelect').value;
+      bahanFile = document.getElementById('bahanFileSelect').value;
+    }
+
+    const btn = document.getElementById('btnGenerate');
+    const statusCard = document.getElementById('statusCard');
+    const statusLog = document.getElementById('statusLog');
+    const resultCard = document.getElementById('resultCard');
+    const progressContainer = document.getElementById('progressBarContainer');
+    const progressFill = document.getElementById('progressBarFill');
+
+    btn.disabled = true;
+    btn.innerHTML = `<div class="spinner"></div> <span>Generating Video... (Memproses di Vidabot)</span>`;
+    statusCard.style.display = 'block';
+    progressContainer.style.display = 'block';
+    progressFill.style.width = '10%';
+    resultCard.style.display = 'none';
+
+    statusLog.textContent = `[${new Date().toLocaleTimeString()}] Mengirim instruksi generate ke server Vidabot...\n`;
+
+    try {
+      const response = await fetch('/api/vidabot/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          promptText,
+          aspectRatio,
+          cookie: customCookie,
+          imageBase64,
+          bahanFolder,
+          bahanFile
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.error || 'Terjadi kesalahan saat generate video');
+      }
+
+      progressFill.style.width = '100%';
+      statusLog.textContent += `[${new Date().toLocaleTimeString()}] ✅ Video berhasil di-generate dan disimpan!\n`;
+
+      // Show video result
+      const player = document.getElementById('videoPlayer');
+      const dlBtn = document.getElementById('btnDownload');
+      
+      player.src = data.result.downloadUrl;
+      dlBtn.href = data.result.downloadUrl;
+      dlBtn.setAttribute('download', data.result.filename);
+      
+      resultCard.style.display = 'block';
+    } catch (err) {
+      progressFill.style.width = '0%';
+      statusLog.textContent += `[${new Date().toLocaleTimeString()}] ❌ Error: ${err.message}\n`;
+      alert(`Gagal generate video: ${err.message}`);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = `<span>🚀 Generate Video via Vidabot</span>`;
+    }
+  });
+
+  window.addEventListener('DOMContentLoaded', loadInitialData);
+</script>
+
+</body>
+</html>
