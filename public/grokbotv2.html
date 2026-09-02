@@ -326,6 +326,10 @@
                     class="w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
               ♾️ Infinite Generate (Stok Utama & Cadangan)
             </button>
+            <button id="btn-infinite-schedule" onclick="openInfiniteScheduleModal()"
+                    class="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-orange-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+              ♾️ Infinite Schedule
+            </button>
             <button id="btn-stop" onclick="stopBot()" disabled
                     class="w-full bg-gray-900 border border-red-900/30 hover:bg-red-655/20 hover:border-red-500 disabled:opacity-20 text-red-400 disabled:text-gray-500 disabled:pointer-events-none py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2">
               <span>⛔</span> Hentikan Bot
@@ -752,6 +756,36 @@
     </div>
   </div>
 
+  <div id="infinite-schedule-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/75 p-4">
+    <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-orange-800/60 bg-gray-950 p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-5">
+        <div><h3 class="text-xl font-extrabold text-orange-300">♾️ Infinite Schedule Grokbot V2</h3><p class="text-xs text-gray-400 mt-1">Atur waktu mulai, jadwal TikTok, dan urutan state.</p></div>
+        <button onclick="closeInfiniteScheduleModal()" class="text-gray-400 hover:text-white text-2xl">×</button>
+      </div>
+      <label class="block text-xs font-bold text-gray-300 mb-2">Initial Time Script</label>
+      <input id="infinite-schedule-initial" type="datetime-local" class="w-full mb-5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white">
+      <div id="infinite-schedule-state-list" class="space-y-3"></div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeInfiniteScheduleModal()" class="px-5 py-3 rounded-xl bg-gray-800 text-gray-300 font-bold">Batal</button>
+        <button onclick="confirmInfiniteSchedule()" class="px-6 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-extrabold">OK & Aktifkan</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="infinite-generate-modal" class="fixed inset-0 z-[101] hidden items-center justify-center bg-black/75 p-4">
+    <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-purple-800/60 bg-gray-950 p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-5">
+        <div><h3 class="text-xl font-extrabold text-purple-300">♾️ Infinite Generate Grokbot V2</h3><p class="text-xs text-gray-400 mt-1">Pilih akun tetap atau Auto Switch untuk setiap TikTok state.</p></div>
+        <button onclick="closeInfiniteGenerateModal()" class="text-gray-400 hover:text-white text-2xl">×</button>
+      </div>
+      <div id="infinite-generate-state-list" class="space-y-3"></div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeInfiniteGenerateModal()" class="px-5 py-3 rounded-xl bg-gray-800 text-gray-300 font-bold">Batal</button>
+        <button onclick="confirmInfiniteGenerate()" class="px-6 py-3 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-extrabold">OK & Mulai</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     // ═══════════════════════════════════════
     //  GLOBAL OPTIONS & STATE
@@ -925,7 +959,7 @@
         
         // Default configs mapping
         const cfg = stateConfigs[fn] || {
-          grokState: '', promptFile: '', bahanFolder: '', mode: 'Video',
+          grokState: '', autoSwitchGrokState: false, promptFile: '', bahanFolder: '', mode: 'Video',
           resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
           scheduleTime: '', intervalMinutes: 60,
@@ -975,13 +1009,17 @@
               </h4>
               
               <div class="space-y-3">
-                <div>
+                <div id="grokStateGroup-${fn}" style="display: ${cfg.autoSwitchGrokState ? 'none' : 'block'}">
                   <label class="text-xs text-gray-400 font-semibold block mb-1">Grok State (Session)</label>
                   <select id="grokState-${fn}" class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-3.5 py-2.5 text-sm focus:outline-none focus:border-purple-500 transition-all font-semibold">
                     <option value="">-- Pilih Grok State --</option>
                     ${grokStateOpts}
                   </select>
                 </div>
+                <label class="flex items-center gap-2.5 cursor-pointer rounded-xl border border-purple-900/40 bg-purple-950/20 px-3.5 py-2.5">
+                  <input id="autoSwitchGrokState-${fn}" type="checkbox" ${cfg.autoSwitchGrokState ? 'checked' : ''} onchange="toggleAutoSwitchGrokState('${fn}')" class="w-4 h-4 accent-purple-500">
+                  <span class="text-xs text-purple-300 font-bold">🔄 Auto Switch Grok State</span>
+                </label>
                 
                 <div class="grid grid-cols-2 gap-2">
                   <div>
@@ -1225,10 +1263,17 @@
     // ═══════════════════════════════════════
     //  SAVE CONFIG
     // ═══════════════════════════════════════
+    function toggleAutoSwitchGrokState(fn) {
+      const checked = document.getElementById(`autoSwitchGrokState-${fn}`)?.checked || false;
+      const group = document.getElementById(`grokStateGroup-${fn}`);
+      if (group) group.style.display = checked ? 'none' : 'block';
+    }
+
     async function saveConfig(fn) {
       const cfg = {
         stateFile: fn,
         grokState: document.getElementById(`grokState-${fn}`)?.value || '',
+        autoSwitchGrokState: document.getElementById(`autoSwitchGrokState-${fn}`)?.checked || false,
         promptFile: document.getElementById(`promptFile-${fn}`)?.value || '',
         bahanFolder: document.getElementById(`bahanFolder-${fn}`)?.value || '',
         mode: document.getElementById(`mode-${fn}`)?.value || 'Video',
@@ -1439,13 +1484,113 @@
       }
     }
 
-    async function startInfiniteGenerate() {
-      if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
+    let infiniteScheduleDraft = [];
 
-      // Save all active configurations
-      for (const fn of selectedStates) {
-        await saveConfig(fn);
-      }
+    function toLocalDateTimeInput(date) {
+      const pad = n => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    async function openInfiniteScheduleModal() {
+      if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
+      for (const fn of selectedStates) await saveConfig(fn);
+      const now = new Date(Date.now() + 60000);
+      document.getElementById('infinite-schedule-initial').value = toLocalDateTimeInput(now);
+      infiniteScheduleDraft = selectedStates.map(fn => {
+        const cfg = stateConfigs[fn] || {};
+        const fallback = toLocalDateTimeInput(new Date(Date.now() + 3600000));
+        return { stateFile: fn, scheduleValue: cfg.scheduleDate && cfg.scheduleTime ? `${cfg.scheduleDate}T${cfg.scheduleTime}` : fallback };
+      });
+      renderInfiniteScheduleDraft();
+      const modal = document.getElementById('infinite-schedule-modal');
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+    }
+
+    function closeInfiniteScheduleModal() {
+      const modal = document.getElementById('infinite-schedule-modal');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+    }
+
+    function moveInfiniteScheduleState(index, direction) {
+      const target = index + direction;
+      if (target < 0 || target >= infiniteScheduleDraft.length) return;
+      [infiniteScheduleDraft[index], infiniteScheduleDraft[target]] = [infiniteScheduleDraft[target], infiniteScheduleDraft[index]];
+      renderInfiniteScheduleDraft();
+    }
+
+    function updateInfiniteScheduleValue(index, value) { infiniteScheduleDraft[index].scheduleValue = value; }
+
+    function renderInfiniteScheduleDraft() {
+      document.getElementById('infinite-schedule-state-list').innerHTML = infiniteScheduleDraft.map((item, index) => `
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 flex flex-col md:flex-row md:items-center gap-3">
+          <div class="flex items-center gap-2 md:w-52"><span class="w-7 h-7 rounded-full bg-orange-900 text-orange-300 flex items-center justify-center text-xs font-black">${index + 1}</span><span class="font-bold text-gray-200 truncate">${getStateName(item.stateFile)}</span></div>
+          <input type="datetime-local" value="${item.scheduleValue}" onchange="updateInfiniteScheduleValue(${index}, this.value)" class="flex-1 bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white">
+          <div class="flex gap-2"><button onclick="moveInfiniteScheduleState(${index}, -1)" class="px-3 py-2 rounded-lg bg-gray-800 text-gray-300" ${index === 0 ? 'disabled' : ''}>↑</button><button onclick="moveInfiniteScheduleState(${index}, 1)" class="px-3 py-2 rounded-lg bg-gray-800 text-gray-300" ${index === infiniteScheduleDraft.length - 1 ? 'disabled' : ''}>↓</button></div>
+        </div>`).join('');
+    }
+
+    async function confirmInfiniteSchedule() {
+      const initialRunAt = document.getElementById('infinite-schedule-initial').value;
+      if (!initialRunAt || infiniteScheduleDraft.some(item => !item.scheduleValue)) return alert('Semua waktu wajib diisi.');
+      const states = infiniteScheduleDraft.map((item, order) => {
+        const [scheduleDate, scheduleTime] = item.scheduleValue.split('T');
+        return { stateFile: item.stateFile, order, scheduleDate, scheduleTime };
+      });
+      const res = await fetch('/api/grokbotv2/infinite-schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initialRunAt, states }) });
+      const data = await res.json();
+      if (!data.success) return alert(data.error || 'Gagal mengaktifkan Infinite Schedule');
+      closeInfiniteScheduleModal();
+      addLog('✓ Infinite Schedule Grokbot V2 berhasil diaktifkan.');
+      connectSSE(); pollStatus();
+    }
+
+    async function stopInfiniteSchedule() {
+      await fetch('/api/grokbotv2/stop-infinite-schedule', { method: 'POST' });
+      addLog('✓ Infinite Schedule Grokbot V2 dihentikan.');
+      pollStatus();
+    }
+
+    let infiniteGenerateDraft = [];
+
+    function startInfiniteGenerate() {
+      if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
+      infiniteGenerateDraft = selectedStates.map(stateFile => {
+        const cfg = stateConfigs[stateFile] || {};
+        return { stateFile, autoSwitchGrokState: !!cfg.autoSwitchGrokState, grokState: cfg.grokState || '' };
+      });
+      renderInfiniteGenerateDraft();
+      const modal = document.getElementById('infinite-generate-modal');
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+    }
+
+    function closeInfiniteGenerateModal() {
+      const modal = document.getElementById('infinite-generate-modal');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+    }
+
+    function setInfiniteGenerateAutoSwitch(index, checked) {
+      infiniteGenerateDraft[index].autoSwitchGrokState = checked;
+      renderInfiniteGenerateDraft();
+    }
+
+    function setInfiniteGenerateGrokState(index, value) { infiniteGenerateDraft[index].grokState = value; }
+
+    function renderInfiniteGenerateDraft() {
+      const validStates = grokStates.filter(item => item.expiry?.status !== 'expired');
+      document.getElementById('infinite-generate-state-list').innerHTML = infiniteGenerateDraft.map((item, index) => {
+        const options = validStates.map(gs => `<option value="${escHtml(gs.filename)}" ${item.grokState === gs.filename ? 'selected' : ''}>${escHtml(gs.name)}</option>`).join('');
+        return `<div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4">
+          <div class="font-extrabold text-gray-200 mb-3">${index + 1}. ${escHtml(getStateName(item.stateFile))}</div>
+          <label class="flex items-center gap-2.5 cursor-pointer mb-3"><input type="checkbox" ${item.autoSwitchGrokState ? 'checked' : ''} onchange="setInfiniteGenerateAutoSwitch(${index}, this.checked)" class="w-4 h-4 accent-purple-500"><span class="text-xs text-purple-300 font-bold">🔄 Auto Switch Grok State</span></label>
+          <div style="display:${item.autoSwitchGrokState ? 'none' : 'block'}"><label class="text-xs text-gray-400 font-semibold block mb-1">Grok State (Session)</label><select onchange="setInfiniteGenerateGrokState(${index}, this.value)" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white"><option value="">-- Pilih Grok State --</option>${options}</select></div>
+          ${item.autoSwitchGrokState ? `<p class="text-xs text-gray-500">Semua session Grok valid akan dipakai bergantian saat akun aktif terkena rate limit.</p>` : ''}
+        </div>`;
+      }).join('');
+    }
+
+    async function confirmInfiniteGenerate() {
+      const invalid = infiniteGenerateDraft.find(item => !item.autoSwitchGrokState && !item.grokState);
+      if (invalid) return alert(`Pilih Grok State untuk ${getStateName(invalid.stateFile)} atau aktifkan Auto Switch.`);
 
       addLog(`♾️ Memulai Orchestrator INFINITE GENERATE untuk ${selectedStates.length} state...`);
       setBusy(true);
@@ -1455,13 +1600,18 @@
         const res = await fetch('/api/grokbotv2/infinite-generate', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stateFiles: selectedStates })
+          body: JSON.stringify({ stateFiles: selectedStates, stateOptions: infiniteGenerateDraft })
         });
         const data = await res.json();
         if (!data.success) {
           addLog('❌ Gagal: ' + (data.error || ''));
           setBusy(false);
         } else {
+          infiniteGenerateDraft.forEach(item => {
+            stateConfigs[item.stateFile] = { ...(stateConfigs[item.stateFile] || {}), autoSwitchGrokState: item.autoSwitchGrokState, grokState: item.grokState };
+          });
+          closeInfiniteGenerateModal();
+          renderAllCards();
           pollStatus();
         }
       } catch (e) {
@@ -1493,9 +1643,10 @@
     function updateControlsUI(data) {
       const btnFullAuto = document.getElementById('btn-full-auto');
       const btnInfGen = document.getElementById('btn-infinite-generate');
+      const btnInfSchedule = document.getElementById('btn-infinite-schedule');
       const btnStopAll = document.getElementById('btn-stop');
 
-      if (!btnFullAuto || !btnInfGen || !btnStopAll) return;
+      if (!btnFullAuto || !btnInfGen || !btnInfSchedule || !btnStopAll) return;
 
       // 1. Full Auto Toggle Control
       if (data.grokbotFullAutoRunning) {
@@ -1520,18 +1671,29 @@
         btnInfGen.textContent = '♾️ Infinite Generate (Stok Utama & Cadangan)';
         btnInfGen.className = 'w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'startInfiniteGenerate()');
-        btnInfGen.disabled = !data.infiniteGenRunning && data.running;
+        btnInfGen.disabled = false;
       }
 
+      if (data.infiniteScheduleRunning) {
+        btnInfSchedule.textContent = '⛔ Hentikan Infinite Schedule';
+        btnInfSchedule.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnInfSchedule.setAttribute('onclick', 'stopInfiniteSchedule()');
+      } else {
+        btnInfSchedule.textContent = '♾️ Infinite Schedule';
+        btnInfSchedule.className = 'w-full bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-orange-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnInfSchedule.setAttribute('onclick', 'openInfiniteScheduleModal()');
+      }
+      btnInfSchedule.disabled = !!data.grokbotFullAutoRunning;
+
       // 3. Force Stop All Control
-      const anyActive = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning;
+      const anyActive = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning || data.infiniteScheduleRunning;
       btnStopAll.disabled = !anyActive;
       btnStopAll.textContent = '⛔ Force Stop Semua';
     }
 
-    function updateStatusBadge(running, infiniteGenRunning, waitInfo, fullAutoRunning) {
+    function updateStatusBadge(running, infiniteGenRunning, waitInfo, fullAutoRunning, infiniteScheduleRunning = false) {
       const badge = document.getElementById('status-badge');
-      if (running || infiniteGenRunning || fullAutoRunning) {
+      if (running || infiniteGenRunning || fullAutoRunning || infiniteScheduleRunning) {
         if (waitInfo) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-yellow-500 running-pulse"></span> ⏳ Wait Limit`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-yellow-950/40 border border-yellow-800 text-yellow-400 font-semibold flex items-center gap-2';
@@ -1541,6 +1703,9 @@
         } else if (fullAutoRunning) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-pink-500 running-pulse"></span> 🚀 Standby (Full Auto)`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-pink-950/40 border border-pink-800 text-pink-400 font-semibold flex items-center gap-2';
+        } else if (infiniteScheduleRunning) {
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-orange-500 running-pulse"></span> ♾️ Infinite Schedule`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-orange-950/40 border border-orange-800 text-orange-400 font-semibold flex items-center gap-2';
         } else {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-indigo-500 running-pulse"></span> ♾️ Checking Stock`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-indigo-950/40 border border-indigo-800 text-indigo-400 font-semibold flex items-center gap-2';
@@ -1602,7 +1767,7 @@
             const waitStr = e.data.substring('[INFINITE_WAIT]:'.length);
             currentWaitInfo = waitStr === 'null' ? null : JSON.parse(waitStr);
             fetch('/api/grokbotv2/status').then(res => res.json()).then(data => {
-              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning);
+              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning, data.infiniteScheduleRunning);
               if (data.queue) renderQueue(data.queue);
             });
           } catch {}
@@ -1638,12 +1803,12 @@
         if (data.globalConfig) {
           globalConfig = data.globalConfig;
         }
-        const active = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning;
+        const active = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning || data.infiniteScheduleRunning;
         setBusy(active);
         updateControlsUI(data);
         if (active) {
           connectSSE();
-          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning);
+          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning, data.infiniteScheduleRunning);
         }
         if (data.queue) renderQueue(data.queue);
         if (data.progress) updateProgressUI(data.progress);

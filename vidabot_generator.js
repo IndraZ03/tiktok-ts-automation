@@ -19,6 +19,10 @@ export function getVidabotBrowserProgress() { return workerProgress.map(w => ({ 
 const vidabotRateLimits = {};
 export function getVidabotRateLimits() { return { ...vidabotRateLimits }; }
 export function clearVidabotRateLimit(_key) { delete vidabotRateLimits[_key]; }
+function isRateLimitError(error) {
+    const message = error instanceof Error ? error.message : String(error || '');
+    return /rate[\s_-]*limit|too many requests|quota|http\s*429|\b429\b|limit(?:ed)? reached|limit.*(?:exceed|habis|tercapai)/i.test(message);
+}
 export async function stopVidabotGenerator() {
     isRunning = false;
 }
@@ -229,6 +233,14 @@ async function runVidabotWorker(idx, count, config, downloadDir, bahanFolderPath
             log(`${tag} ❌ Error: ${e.message}`);
             stats.failed++;
             bp.message = `Error: ${e.message}`.substring(0, 80);
+            if (isRateLimitError(e)) {
+                const key = config.rateLimitKey || 'vidabot';
+                vidabotRateLimits[key] = { availableAt: null, detectedAt: Date.now() };
+                isRunning = false;
+                bp.status = 'error';
+                log(`${tag} 🚫 Rate limit Vidabot terdeteksi. Semua worker dihentikan.`);
+                break;
+            }
         }
         bp.current = i + 1;
     }

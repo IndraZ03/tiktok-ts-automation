@@ -4305,6 +4305,7 @@ const GROKBOT_DATA_FILE = path.join(__dirname, 'grokbot-data.json');
 
 interface GrokbotStateConfig {
   grokState: string;
+  autoSwitchGrokState?: boolean;
   promptFile: string;
   bahanFolder: string;
   mode: string;
@@ -6152,8 +6153,25 @@ app.get('/api/grokbot/logs', (req, res) => {
 // ═══════════════════════════════════════════════════════════
 const GROKBOTV2_DATA_FILE = path.join(__dirname, 'grokbotv2-data.json');
 
+interface InfiniteScheduleStateConfig {
+  stateFile: string;
+  order: number;
+  scheduleDate: string;
+  scheduleTime: string;
+}
+
+interface InfiniteScheduleConfig {
+  active: boolean;
+  initialRunAt: string;
+  currentIndex: number;
+  started: boolean;
+  states: InfiniteScheduleStateConfig[];
+  updatedAt: string;
+}
+
 interface GrokbotV2Data {
   states: Record<string, GrokbotStateConfig>;
+  infiniteSchedule?: InfiniteScheduleConfig;
   globalConfig?: {
     parallelBrowsers?: number;
     headless?: boolean;
@@ -6195,6 +6213,7 @@ const grokbotv2SseClients: Response[] = [];
 let grokbotv2Running = false;
 let infiniteGenV2Running = false;
 let grokbotv2FullAutoRunning = false;
+let grokbotv2InfiniteScheduleRunning = false;
 let infiniteGenV2WaitInfo: { rateLimitTime: string; resumeTime: string; targetState: string } | null = null;
 let grokbotv2Queue: Array<{ stateName: string; stateFile: string; videoCount: number; scheduleStart: string; scheduleEnd: string; active: boolean }> = [];
 let grokbotv2Progress: {
@@ -6207,6 +6226,10 @@ let grokbotv2Progress: {
   uploadTotal: number;
   mergedCount: number;
   mergeTotal: number;
+  activeGrokState: string;
+  autoSwitchGrokState: boolean;
+  availableGrokAccounts: number;
+  limitedGrokAccounts: string[];
 } = {
   generate: 0,
   merge: 0,
@@ -6217,6 +6240,10 @@ let grokbotv2Progress: {
   uploadTotal: 0,
   mergedCount: 0,
   mergeTotal: 0,
+  activeGrokState: '',
+  autoSwitchGrokState: false,
+  availableGrokAccounts: 0,
+  limitedGrokAccounts: [],
 };
 
 function grokbotv2Log(msg: string) {
@@ -6256,8 +6283,43 @@ function resetGrokbotv2Progress(overrides: Partial<typeof grokbotv2Progress> = {
     generate: 0, merge: 0, upload: 0, currentState: '',
     browsers: [], uploadedCount: 0, uploadTotal: 0,
     mergedCount: 0, mergeTotal: 0,
+    activeGrokState: '', autoSwitchGrokState: false,
+    availableGrokAccounts: 0, limitedGrokAccounts: [],
     ...overrides
   };
+}
+
+interface GrokV2GenerationResult {
+  allAccountsLimited: boolean;
+  completedRaw: number;
+  totalRaw: number;
+  limitedAccounts: string[];
+  lastAccount: string | null;
+}
+
+function getGrokV2AccountPool(autoSwitch: boolean, fixedState?: string): string[] {
+  const validStates = getSavedStates('grok')
+    .filter(item => item.expiry.status !== 'expired')
+    .filter(item => {
+      try { JSON.parse(fs.readFileSync(path.join(GROK_STATES_DIR, item.filename), 'utf-8')); return true; } catch { return false; }
+    })
+    .map(item => item.filename)
+    .sort((a, b) => a.localeCompare(b));
+  if (!autoSwitch) return fixedState && validStates.includes(fixedState) ? [fixedState] : [];
+  return validStates;
+}
+
+function isGrokV2AccountRateLimited(stateFile: string): boolean {
+  const info = getGrokRateLimits()[stateFile];
+  if (!info) return false;
+  if (info.availableAt) {
+    const expiry = getRateLimitExpiryDate(info.availableAt, info.detectedAt || Date.now());
+    if (expiry && Date.now() >= expiry.getTime()) {
+      clearGrokRateLimit(stateFile);
+      return false;
+    }
+  }
+  return true;
 }
 
 // ── GROKBOT V2 GENERATOR FUNCTION USING generateGrokVideoV2 ──
@@ -6274,11 +6336,16 @@ async function runGrokGeneratorV2(config: {
   totalVideos: number;
   merge?: boolean;
   audioFolder?: string;
-}, log: (msg: string) => void): Promise<void> {
-  const grokStateName = (config.grokState || 'indra').replace('grok-state-', '').replace('.json', '');
+  customDownloadDir?: string;
+  autoSwitchGrokState?: boolean;
+}, log: (msg: string) => void): Promise<GrokV2GenerationResult> {
   const tiktokStateName = config.stateFile.replace('tiktok-state-', '').replace('.json', '');
-  const targetDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
+  const targetDir = config.customDownloadDir || path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
   const rawDir = path.join(targetDir, 'raw');
+  const accountPool = getGrokV2AccountPool(!!config.autoSwitchGrokState, config.grokState);
+  const limitedAccounts: string[] = [];
+  let currentAccount = accountPool.find(account => !isGrokV2AccountRateLimited(account)) || null;
+  let completedRaw = 0;
 
   if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
   if (config.merge && !fs.existsSync(rawDir)) fs.mkdirSync(rawDir, { recursive: true });
@@ -6286,7 +6353,19 @@ async function runGrokGeneratorV2(config: {
   const mergeEnabled = config.merge !== false;
   const totalRawToGenerate = mergeEnabled ? config.totalVideos * 2 : config.totalVideos;
 
-  log(`🚀 [GROK_V2_GENERATOR] Memulai generasi ${config.totalVideos} video (${totalRawToGenerate} raw) untuk TikTok State ${tiktokStateName} (Grok Account: ${grokStateName})...`);
+  if (!currentAccount) {
+    log('🚫 Tidak ada Grok State yang tersedia (seluruh akun limit, kedaluwarsa, atau belum dikonfigurasi).');
+    return { allAccountsLimited: true, completedRaw, totalRaw: totalRawToGenerate, limitedAccounts: accountPool, lastAccount: null };
+  }
+  let grokStateName = currentAccount.replace('grok-state-', '').replace('.json', '');
+  const accountMode = config.autoSwitchGrokState ? `Auto Switch (${accountPool.length} akun)` : 'Akun Tetap';
+  grokbotv2Progress.activeGrokState = currentAccount;
+  grokbotv2Progress.autoSwitchGrokState = !!config.autoSwitchGrokState;
+  grokbotv2Progress.availableGrokAccounts = accountPool.filter(account => !isGrokV2AccountRateLimited(account)).length;
+  grokbotv2Progress.limitedGrokAccounts = accountPool.filter(isGrokV2AccountRateLimited);
+  grokbotv2BroadcastProgress();
+  log(`🚀 [GROK_V2_GENERATOR] Memulai generasi ${config.totalVideos} video (${totalRawToGenerate} raw) untuk TikTok State ${tiktokStateName} (${accountMode}, akun: ${grokStateName})...`);
+  sendWAMessageV2(`🔑 [GrokbotV2] Menggunakan akun Grok "${grokStateName}" untuk state ${tiktokStateName} (${accountMode}).`);
 
   // Load Prompt File
   let promptText = 'A stunning video sequence';
@@ -6353,6 +6432,7 @@ async function runGrokGeneratorV2(config: {
         try { fs.unlinkSync(res.savePath); } catch {}
 
         log(`✓ [GROK_V2] Raw video #${i + 1} tersimpan ke: ${newFilename}`);
+        completedRaw++;
 
         grokbotv2Progress.generate = Math.round(((i + 1) / totalRawToGenerate) * 100);
         grokbotv2BroadcastProgress();
@@ -6398,22 +6478,113 @@ async function runGrokGeneratorV2(config: {
       if (err instanceof RateLimitError || err.name === 'RateLimitError') {
         // ── Deteksi Rate Limit: catat ke shared grokRateLimits dan hentikan loop ──
         const grokStateKey = config.grokState || 'indra';
+        const limitedState: string = currentAccount || grokStateKey;
         const availableAt = (err as any).availableAt || null;
-        setGrokRateLimit(grokStateKey, availableAt);
-        log(`🚫 [GROK_V2 RATE LIMIT] Akun "${grokStateKey}" terkena rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
-        log(`⏹️ Menghentikan loop generate V2 karena rate limit...`);
-        sendWAMessageV2(`🚫 [GrokbotV2] Rate limit! Akun "${grokStateKey}" terkena limit.${availableAt ? ' Tersedia kembali: ' + availableAt : ''}`);
+        setGrokRateLimit(limitedState, availableAt);
+        if (!limitedAccounts.includes(limitedState)) limitedAccounts.push(limitedState);
+        log(`🚫 [GROK_V2 RATE LIMIT] Akun "${limitedState}" terkena rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
         grokbotv2BroadcastProgress(); // broadcast agar UI langsung update
+        const replacement: string | undefined = accountPool.find(account => account !== limitedState && !isGrokV2AccountRateLimited(account));
+        if (config.autoSwitchGrokState && replacement) {
+          const previousName = limitedState.replace('grok-state-', '').replace('.json', '');
+          currentAccount = replacement;
+          grokStateName = replacement.replace('grok-state-', '').replace('.json', '');
+          grokbotv2Progress.activeGrokState = replacement;
+          grokbotv2Progress.availableGrokAccounts = accountPool.filter(account => !isGrokV2AccountRateLimited(account)).length;
+          grokbotv2Progress.limitedGrokAccounts = accountPool.filter(isGrokV2AccountRateLimited);
+          grokbotv2BroadcastProgress();
+          const switchMessage = `🔄 [GrokbotV2] Akun ${previousName} terkena rate limit. Beralih ke akun ${grokStateName} dan mengulang video #${i + 1}.`;
+          log(switchMessage);
+          sendWAMessageV2(switchMessage);
+          i--;
+          continue;
+        }
+        const allLimitMessage = `🚫 [GrokbotV2] Semua akun Grok yang diizinkan terkena rate limit: ${accountPool.map(a => a.replace('grok-state-', '').replace('.json', '')).join(', ') || 'tidak ada akun'}.`;
+        log(allLimitMessage);
+        sendWAMessageV2(allLimitMessage);
         break;
       }
       log(`❌ [GROK_V2 ERROR] ${err.message}`);
     }
   }
 
-  grokbotv2Progress.generate = 100;
-  grokbotv2Progress.merge = 100;
+  const allAccountsLimited = completedRaw < totalRawToGenerate && accountPool.every(isGrokV2AccountRateLimited);
+  grokbotv2Progress.generate = completedRaw >= totalRawToGenerate ? 100 : Math.round((completedRaw / totalRawToGenerate) * 100);
+  if (completedRaw >= totalRawToGenerate) grokbotv2Progress.merge = 100;
   grokbotv2BroadcastProgress();
-  log(`✅ [GROK_V2_GENERATOR] Selesai memproses generasi video V2 untuk ${tiktokStateName}`);
+  log(`${allAccountsLimited ? '🚫' : '✅'} [GROK_V2_GENERATOR] Selesai memproses generasi video V2 untuk ${tiktokStateName}`);
+  return { allAccountsLimited, completedRaw, totalRaw: totalRawToGenerate, limitedAccounts, lastAccount: currentAccount };
+}
+
+type InfiniteStockTarget = {
+  stateFile: string;
+  stateName: string;
+  stockType: 'utama' | 'cadangan';
+  stockCount: number;
+};
+
+function countPendingVideos(folder: string, marksName: string, prefix: string): number {
+  if (!fs.existsSync(folder)) return 0;
+  const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+  let marks: Record<string, boolean> = {};
+  try { marks = JSON.parse(fs.readFileSync(path.join(folder, marksName), 'utf-8')); } catch {}
+  try {
+    return fs.readdirSync(folder).filter(file => {
+      const full = path.join(folder, file);
+      return fs.statSync(full).isFile()
+        && exts.includes(path.extname(file).toLowerCase())
+        && file.startsWith(prefix)
+        && !marks[file];
+    }).length;
+  } catch {
+    return 0;
+  }
+}
+
+async function waitWhileRunning(durationMs: number, isStillRunning: () => boolean): Promise<void> {
+  const stepMs = 2000;
+  let elapsed = 0;
+  while (elapsed < durationMs && isStillRunning()) {
+    const waitMs = Math.min(stepMs, durationMs - elapsed);
+    await new Promise(resolve => setTimeout(resolve, waitMs));
+    elapsed += waitMs;
+  }
+}
+
+function formatLocalDateTime(value: Date): { scheduleDate: string; scheduleTime: string } {
+  return {
+    scheduleDate: `${value.getFullYear()}-${String(value.getMonth() + 1).padStart(2, '0')}-${String(value.getDate()).padStart(2, '0')}`,
+    scheduleTime: `${String(value.getHours()).padStart(2, '0')}:${String(value.getMinutes()).padStart(2, '0')}`
+  };
+}
+
+function nextScheduleBaseline(items: SchedulePlanItem[], cfg: { intervalMinutes?: number; threeUploadsPerHour?: boolean }, fallbackDate: string, fallbackTime: string) {
+  if (items.length === 0) return { scheduleDate: fallbackDate, scheduleTime: fallbackTime };
+  const last = items[items.length - 1];
+  const lastDate = new Date(`${last.scheduleDate}T${last.scheduleTime}:00`);
+  if (cfg.threeUploadsPerHour) {
+    lastDate.setMinutes(0, 0, 0);
+    lastDate.setHours(lastDate.getHours() + 5);
+  } else {
+    lastDate.setMinutes(lastDate.getMinutes() + (cfg.intervalMinutes || 60));
+  }
+  return formatLocalDateTime(lastDate);
+}
+
+function validateInfiniteSchedulePayload(initialRunAt: unknown, states: unknown): string | null {
+  if (typeof initialRunAt !== 'string' || isNaN(new Date(initialRunAt).getTime())) return 'Initial time tidak valid';
+  if (!Array.isArray(states) || states.length === 0) return 'Minimal satu state diperlukan';
+  const seen = new Set<string>();
+  for (const item of states as any[]) {
+    if (!item || typeof item.stateFile !== 'string' || !item.stateFile) return 'State file tidak valid';
+    if (seen.has(item.stateFile)) return `State duplikat: ${item.stateFile}`;
+    seen.add(item.stateFile);
+    if (typeof item.scheduleDate !== 'string' || typeof item.scheduleTime !== 'string'
+      || isNaN(new Date(`${item.scheduleDate}T${item.scheduleTime}:00`).getTime())) {
+      return `Jadwal TikTok tidak valid untuk ${item.stateFile}`;
+    }
+  }
+  return null;
 }
 
 // ── GROKBOT V2 API ROUTES ──
@@ -6426,12 +6597,12 @@ app.get('/api/grokbotv2/config', (req, res) => {
 });
 
 app.post('/api/grokbotv2/config/save', (req, res) => {
-  const { stateFile, grokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, addProduct, productNameRadio, productTitle, productDescription, headless, threeUploadsPerHour, lastUploadDate, lastUploadTime } = req.body;
+  const { stateFile, grokState, autoSwitchGrokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, addProduct, productNameRadio, productTitle, productDescription, headless, threeUploadsPerHour, lastUploadDate, lastUploadTime } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
   const data = loadGrokbotV2Data();
   if (!data.states[stateFile]) {
     data.states[stateFile] = {
-      grokState: '', promptFile: '', bahanFolder: '', mode: 'Video',
+      grokState: '', autoSwitchGrokState: false, promptFile: '', bahanFolder: '', mode: 'Video',
       resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
       audioFolder: '', description: '', hashtags: '', scheduleDate: '',
       scheduleTime: '', intervalMinutes: 60,
@@ -6441,6 +6612,7 @@ app.post('/api/grokbotv2/config/save', (req, res) => {
   }
   const s = data.states[stateFile];
   if (grokState !== undefined) s.grokState = grokState;
+  if (autoSwitchGrokState !== undefined) s.autoSwitchGrokState = !!autoSwitchGrokState;
   if (promptFile !== undefined) s.promptFile = promptFile;
   if (bahanFolder !== undefined) s.bahanFolder = bahanFolder;
   if (mode !== undefined) s.mode = mode;
@@ -6494,6 +6666,7 @@ app.get('/api/grokbotv2/stock', (req, res) => {
   const stateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
   const stateDir = path.join(GROK_DOWNLOAD_DIR, stateName);
   const rawDir = path.join(stateDir, 'raw');
+  const cadanganDir = path.join(stateDir, 'cadangan');
   const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
 
   let rawCount = 0;
@@ -6511,7 +6684,16 @@ app.get('/api/grokbotv2/stock', (req, res) => {
   try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
 
   const unuploaded = mergedFiles.filter(f => !marks[f]);
-  res.json({ raw: rawCount, utama: unuploaded.length, cadangan: 0 });
+
+  let cadanganFiles: string[] = [];
+  if (fs.existsSync(cadanganDir)) {
+    try { cadanganFiles = fs.readdirSync(cadanganDir).filter(f => f.startsWith('grok_merged_') && exts.includes(path.extname(f).toLowerCase())); } catch {}
+  }
+  const cadanganMarksFile = path.join(cadanganDir, '.downloaded.json');
+  let cadanganMarks: Record<string, boolean> = {};
+  try { cadanganMarks = JSON.parse(fs.readFileSync(cadanganMarksFile, 'utf-8')); } catch {}
+
+  res.json({ raw: rawCount, utama: unuploaded.length, cadangan: cadanganFiles.filter(f => !cadanganMarks[f]).length });
 });
 
 app.post('/api/grokbotv2/generate-utama', async (req, res) => {
@@ -6522,6 +6704,8 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
   const data = loadGrokbotV2Data();
   const cfg = data.states[stateFile];
   if (!cfg) return res.status(400).json({ error: 'Config tidak ditemukan' });
+  if (!cfg.autoSwitchGrokState && !cfg.grokState) return res.status(400).json({ error: 'Grok State belum dipilih atau aktifkan Auto Switch!' });
+  if (getGrokV2AccountPool(!!cfg.autoSwitchGrokState, cfg.grokState).length === 0) return res.status(400).json({ error: 'Tidak ada Grok State valid yang dapat digunakan!' });
 
   const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
   const stateDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
@@ -6549,7 +6733,7 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
   sendWAMessageV2(`🚀 [GrokbotV2] Generate Stok Utama dimulai untuk ${tiktokStateName}. Dibutuhkan: ${needed} video.`);
 
   try {
-    await runGrokGeneratorV2({
+    const result = await runGrokGeneratorV2({
       stateFile,
       grokState: cfg.grokState,
       bahanFolder: cfg.bahanFolder,
@@ -6561,10 +6745,13 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
       headless: isHeadlessEnabledV2(stateFile),
       totalVideos: needed,
       merge: cfg.merge,
-      audioFolder: cfg.audioFolder
+      audioFolder: cfg.audioFolder,
+      autoSwitchGrokState: !!cfg.autoSwitchGrokState
     }, grokbotv2Log);
     grokbotv2Log('===== GENERATE UTAMA V2 FINISHED =====');
-    sendWAMessageV2(`✅ [GrokbotV2] Generate Stok Utama selesai untuk ${tiktokStateName}.`);
+    sendWAMessageV2(result.allAccountsLimited
+      ? `🚫 [GrokbotV2] Generate Stok Utama ${tiktokStateName} berhenti karena semua akun Grok terkena rate limit.`
+      : `✅ [GrokbotV2] Generate Stok Utama selesai untuk ${tiktokStateName}.`);
   } catch (e: any) {
     grokbotv2Log('❌ Fatal Utama Gen V2: ' + e.message);
     sendWAMessageV2(`❌ [GrokbotV2] Fatal error Generate Utama ${tiktokStateName}: ${e.message}`);
@@ -6583,8 +6770,11 @@ app.post('/api/grokbotv2/generate-cadangan', async (req, res) => {
   const data = loadGrokbotV2Data();
   const cfg = data.states[stateFile];
   if (!cfg) return res.status(400).json({ error: 'Config tidak ditemukan' });
+  if (!cfg.autoSwitchGrokState && !cfg.grokState) return res.status(400).json({ error: 'Grok State belum dipilih atau aktifkan Auto Switch!' });
+  if (getGrokV2AccountPool(!!cfg.autoSwitchGrokState, cfg.grokState).length === 0) return res.status(400).json({ error: 'Tidak ada Grok State valid yang dapat digunakan!' });
 
   const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+  const cadanganDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName, 'cadangan');
 
   res.json({ success: true, message: `Generasi Stok Cadangan V2 dimulai untuk ${tiktokStateName}` });
 
@@ -6598,7 +6788,7 @@ app.post('/api/grokbotv2/generate-cadangan', async (req, res) => {
   sendWAMessageV2(`🚀 [GrokbotV2] Generate Stok Cadangan dimulai untuk ${tiktokStateName} (30 video).`);
 
   try {
-    await runGrokGeneratorV2({
+    const result = await runGrokGeneratorV2({
       stateFile,
       grokState: cfg.grokState,
       bahanFolder: cfg.bahanFolder,
@@ -6610,10 +6800,14 @@ app.post('/api/grokbotv2/generate-cadangan', async (req, res) => {
       headless: isHeadlessEnabledV2(stateFile),
       totalVideos: 30,
       merge: cfg.merge,
-      audioFolder: cfg.audioFolder
+      audioFolder: cfg.audioFolder,
+      customDownloadDir: cadanganDir,
+      autoSwitchGrokState: !!cfg.autoSwitchGrokState
     }, grokbotv2Log);
     grokbotv2Log('===== GENERATE CADANGAN V2 FINISHED =====');
-    sendWAMessageV2(`✅ [GrokbotV2] Generate Stok Cadangan selesai untuk ${tiktokStateName}.`);
+    sendWAMessageV2(result.allAccountsLimited
+      ? `🚫 [GrokbotV2] Generate Stok Cadangan ${tiktokStateName} berhenti karena semua akun Grok terkena rate limit.`
+      : `✅ [GrokbotV2] Generate Stok Cadangan selesai untuk ${tiktokStateName}.`);
   } catch (e: any) {
     grokbotv2Log('❌ Fatal Cadangan Gen V2: ' + e.message);
     sendWAMessageV2(`❌ [GrokbotV2] Fatal error Generate Cadangan ${tiktokStateName}: ${e.message}`);
@@ -6714,20 +6908,314 @@ app.post('/api/grokbotv2/schedule-only', async (req, res) => {
   }
 });
 
+app.post('/api/grokbotv2/infinite-generate', (req, res) => {
+  if (infiniteGenV2Running || grokbotv2Running || grokbotv2FullAutoRunning) {
+    return res.status(400).json({ success: false, error: 'Grokbot V2 sedang menjalankan proses lain!' });
+  }
+  const { stateFiles, stateOptions } = req.body;
+  if (!Array.isArray(stateFiles) || stateFiles.length === 0) {
+    return res.status(400).json({ success: false, error: 'stateFiles diperlukan' });
+  }
+
+  const startData = loadGrokbotV2Data();
+  if (Array.isArray(stateOptions)) {
+    for (const option of stateOptions) {
+      if (!option || !stateFiles.includes(option.stateFile) || !startData.states[option.stateFile]) continue;
+      const autoSwitch = !!option.autoSwitchGrokState;
+      const grokState = typeof option.grokState === 'string' ? option.grokState : '';
+      if (!autoSwitch && !grokState) return res.status(400).json({ success: false, error: `Grok State diperlukan untuk ${option.stateFile}` });
+      if (getGrokV2AccountPool(autoSwitch, grokState).length === 0) return res.status(400).json({ success: false, error: `Tidak ada Grok State valid untuk ${option.stateFile}` });
+      startData.states[option.stateFile].autoSwitchGrokState = autoSwitch;
+      startData.states[option.stateFile].grokState = grokState;
+    }
+    saveGrokbotV2Data(startData);
+  }
+
+  infiniteGenV2Running = true;
+  res.json({ success: true, message: `Infinite Generate Grokbot V2 dimulai untuk ${stateFiles.length} state` });
+  grokbotv2Log(`♾️ Infinite Generate V2 dimulai untuk ${stateFiles.length} state aktif.`);
+
+  (async () => {
+    const batchSize = 30;
+    const cooldownMs = 3 * 24 * 60 * 60 * 1000;
+    try {
+      while (infiniteGenV2Running) {
+        const data = loadGrokbotV2Data();
+        const targets: InfiniteStockTarget[] = [];
+        for (const stateFile of stateFiles) {
+          const cfg = data.states[stateFile];
+          if (!cfg || !cfg.promptFile || (!cfg.autoSwitchGrokState && !cfg.grokState)) continue;
+          if (getGrokV2AccountPool(!!cfg.autoSwitchGrokState, cfg.grokState).length === 0) continue;
+          const stateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+          const utamaDir = path.join(GROK_DOWNLOAD_DIR, stateName);
+          const cadanganDir = path.join(utamaDir, 'cadangan');
+          targets.push({ stateFile, stateName, stockType: 'utama', stockCount: countPendingVideos(utamaDir, '.downloaded.json', 'grok_') });
+          targets.push({ stateFile, stateName, stockType: 'cadangan', stockCount: countPendingVideos(cadanganDir, '.downloaded.json', 'grok_') });
+        }
+
+        if (targets.length === 0) {
+          grokbotv2Log('⚠️ Tidak ada state aktif dengan konfigurasi Grok dan prompt yang valid. Cek ulang 30 detik lagi.');
+          await waitWhileRunning(30000, () => infiniteGenV2Running);
+          continue;
+        }
+
+        const availableTargets = targets.filter(item => {
+          const targetCfg = data.states[item.stateFile];
+          return getGrokV2AccountPool(!!targetCfg.autoSwitchGrokState, targetCfg.grokState).some(account => !isGrokV2AccountRateLimited(account));
+        });
+        if (availableTargets.length === 0) {
+          const allAccounts = [...new Set(targets.flatMap(item => {
+            const targetCfg = data.states[item.stateFile];
+            return getGrokV2AccountPool(!!targetCfg.autoSwitchGrokState, targetCfg.grokState);
+          }))];
+          const resumeAt = new Date(Date.now() + cooldownMs);
+          infiniteGenV2WaitInfo = { rateLimitTime: new Date().toISOString(), resumeTime: resumeAt.toISOString(), targetState: 'Semua state' };
+          const limitMessage = `🚫 [GrokbotV2] Semua Grok State yang tersedia terkena rate limit (${allAccounts.map(a => a.replace('grok-state-', '').replace('.json', '')).join(', ')}). Infinite Generate dilanjutkan 3 hari lagi (${resumeAt.toLocaleString('id-ID')}).`;
+          grokbotv2Log(limitMessage);
+          sendWAMessageV2(limitMessage);
+          await waitWhileRunning(cooldownMs, () => infiniteGenV2Running);
+          if (!infiniteGenV2Running) break;
+          allAccounts.forEach(clearGrokRateLimit);
+          infiniteGenV2WaitInfo = null;
+          continue;
+        }
+
+        availableTargets.sort((a, b) => a.stockCount - b.stockCount || a.stateName.localeCompare(b.stateName) || a.stockType.localeCompare(b.stockType));
+        const target = availableTargets[0];
+
+        const cfg = data.states[target.stateFile];
+        const mergeEnabled = cfg.merge !== false;
+        const rawCount = mergeEnabled ? batchSize * 2 : batchSize;
+        const targetDir = target.stockType === 'cadangan'
+          ? path.join(GROK_DOWNLOAD_DIR, target.stateName, 'cadangan')
+          : path.join(GROK_DOWNLOAD_DIR, target.stateName);
+
+        resetGrokbotv2Progress({ currentState: target.stateName, mergeTotal: mergeEnabled ? batchSize : 0 });
+        grokbotv2Queue = [{ stateName: target.stateName, stateFile: target.stateFile, videoCount: batchSize, scheduleStart: `Infinite ${target.stockType}`, scheduleEnd: `Stok ${target.stockCount}`, active: true }];
+        grokbotv2BroadcastQueue();
+        grokbotv2BroadcastProgress();
+
+        const startMessage = `♾️ [GrokbotV2] State ${target.stateName}, stok ${target.stockType} paling sedikit (${target.stockCount}). Akan generate ${batchSize} video (${rawCount} video mentah).`;
+        grokbotv2Log(startMessage);
+        sendWAMessageV2(startMessage);
+
+        const generationResult = await runGrokGeneratorV2({
+          stateFile: target.stateFile,
+          grokState: cfg.grokState,
+          bahanFolder: cfg.bahanFolder,
+          promptFile: cfg.promptFile,
+          mode: cfg.mode || 'Video',
+          resolution: cfg.resolution || '720p',
+          duration: cfg.duration || '10s',
+          aspectRatio: cfg.aspectRatio || '9:16',
+          headless: isHeadlessEnabledV2(target.stateFile),
+          totalVideos: batchSize,
+          merge: mergeEnabled,
+          audioFolder: cfg.audioFolder,
+          customDownloadDir: targetDir,
+          autoSwitchGrokState: !!cfg.autoSwitchGrokState
+        }, grokbotv2Log);
+
+        if (generationResult.allAccountsLimited) grokbotv2Log(`🔎 Seluruh akun untuk ${target.stateName} limit; mengaudit akun state lain.`);
+        await waitWhileRunning(2000, () => infiniteGenV2Running);
+      }
+    } catch (error: any) {
+      grokbotv2Log(`❌ Infinite Generate V2 error: ${error.message}`);
+      sendWAMessageV2(`❌ [GrokbotV2] Infinite Generate error: ${error.message}`);
+    } finally {
+      infiniteGenV2Running = false;
+      infiniteGenV2WaitInfo = null;
+      grokbotv2Queue = [];
+      resetGrokbotv2Progress();
+      grokbotv2BroadcastQueue();
+      grokbotv2BroadcastProgress();
+      grokbotv2Log('===== INFINITE GENERATE V2 FINISHED =====');
+    }
+  })();
+});
+
+function saveGrokbotV2InfiniteSchedule(config: InfiniteScheduleConfig) {
+  const data = loadGrokbotV2Data();
+  data.infiniteSchedule = config;
+  saveGrokbotV2Data(data);
+}
+
+async function runGrokbotV2InfiniteSchedule(): Promise<void> {
+  if (grokbotv2InfiniteScheduleRunning) return;
+  const initial = loadGrokbotV2Data().infiniteSchedule;
+  if (!initial?.active || initial.states.length === 0) return;
+  grokbotv2InfiniteScheduleRunning = true;
+  grokbotv2Log('♾️ Infinite Schedule Grokbot V2 aktif.');
+
+  try {
+    while (grokbotv2InfiniteScheduleRunning) {
+      const data = loadGrokbotV2Data();
+      const schedule = data.infiniteSchedule;
+      if (!schedule?.active || schedule.states.length === 0) break;
+      schedule.states.sort((a, b) => a.order - b.order);
+
+      if (!schedule.started) {
+        const waitMs = Math.max(0, new Date(schedule.initialRunAt).getTime() - Date.now());
+        if (waitMs > 0) {
+          grokbotv2Log(`⏳ Infinite Schedule menunggu initial time ${new Date(schedule.initialRunAt).toLocaleString('id-ID')}`);
+          await waitWhileRunning(waitMs, () => grokbotv2InfiniteScheduleRunning);
+        }
+        if (!grokbotv2InfiniteScheduleRunning) break;
+        schedule.started = true;
+        schedule.updatedAt = new Date().toISOString();
+        saveGrokbotV2InfiniteSchedule(schedule);
+      }
+
+      let selectedIndex = -1;
+      let selectedStock = 0;
+      for (let offset = 0; offset < schedule.states.length; offset++) {
+        const idx = (schedule.currentIndex + offset) % schedule.states.length;
+        const entry = schedule.states[idx];
+        const stateName = entry.stateFile.replace('tiktok-state-', '').replace('.json', '');
+        const stock = countPendingVideos(path.join(GROK_DOWNLOAD_DIR, stateName), '.downloaded.json', 'grok_');
+        if (stock > 0 && data.states[entry.stateFile]) {
+          selectedIndex = idx;
+          selectedStock = stock;
+          break;
+        }
+        grokbotv2Log(`⚠️ [Infinite Schedule] ${stateName} dilewati karena stok utama kosong atau konfigurasi tidak tersedia.`);
+      }
+
+      if (selectedIndex < 0) {
+        schedule.active = false;
+        schedule.updatedAt = new Date().toISOString();
+        saveGrokbotV2InfiniteSchedule(schedule);
+        const warning = '⚠️ [GrokbotV2 Infinite Schedule] Seluruh stok state terpilih kosong. Infinite Schedule dihentikan.';
+        grokbotv2Log(warning);
+        sendWAMessageV2(warning);
+        break;
+      }
+
+      const entry = schedule.states[selectedIndex];
+      const cfg = data.states[entry.stateFile];
+      const stateName = entry.stateFile.replace('tiktok-state-', '').replace('.json', '');
+      const stateDir = path.join(GROK_DOWNLOAD_DIR, stateName);
+      const videos = fs.readdirSync(stateDir)
+        .filter(file => fs.statSync(path.join(stateDir, file)).isFile() && file.startsWith('grok_') && ['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(path.extname(file).toLowerCase()))
+        .sort();
+      let downloaded: Record<string, boolean> = {};
+      const marksFile = path.join(stateDir, '.downloaded.json');
+      try { downloaded = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+      const pending = videos.filter(file => !downloaded[file]);
+      if (pending.length === 0) {
+        schedule.currentIndex = (selectedIndex + 1) % schedule.states.length;
+        saveGrokbotV2InfiniteSchedule(schedule);
+        continue;
+      }
+
+      const startMessage = `🚀 [GrokbotV2 Infinite Schedule] Mulai melakukan schedule state ${stateName}. Jumlah stok: ${selectedStock}.`;
+      grokbotv2Log(startMessage);
+      sendWAMessageV2(startMessage);
+      let successCount = 0;
+      let plannedItems: SchedulePlanItem[] = [];
+
+      await runUpload({
+        videoFolder: stateDir,
+        startFromVideo: pending[0],
+        description: cfg.description || '',
+        hashtags: cfg.hashtags || '',
+        addProduct: !!cfg.addProduct,
+        productNameRadio: cfg.productNameRadio || '',
+        productTitle: cfg.productTitle || '',
+        productDescription: cfg.productDescription || '',
+        skipSwitches: true,
+        headless: isHeadlessEnabledV2(entry.stateFile),
+        scheduleDate: entry.scheduleDate,
+        scheduleTime: entry.scheduleTime,
+        intervalMinutes: cfg.threeUploadsPerHour ? 300 : (cfg.intervalMinutes || 60),
+        stateFile: entry.stateFile,
+        statesDir: STATES_DIR,
+        threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+        randomizeIntervalSchedule: true
+      }, grokbotv2Log, filename => {
+        let marks: Record<string, boolean> = {};
+        try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+        marks[filename] = true;
+        fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
+        const videoPath = path.join(stateDir, filename);
+        if (fs.existsSync(videoPath)) try { fs.unlinkSync(videoPath); } catch {}
+        successCount++;
+      }, items => {
+        plannedItems = items;
+        sendWAMessageV2(buildScheduleListMessage(stateName, items));
+      });
+
+      const nextBaseline = nextScheduleBaseline(plannedItems, cfg, entry.scheduleDate, entry.scheduleTime);
+      entry.scheduleDate = nextBaseline.scheduleDate;
+      entry.scheduleTime = nextBaseline.scheduleTime;
+      schedule.currentIndex = (selectedIndex + 1) % schedule.states.length;
+      schedule.updatedAt = new Date().toISOString();
+      saveGrokbotV2InfiniteSchedule(schedule);
+
+      const nextEntry = schedule.states[schedule.currentIndex];
+      const nextName = nextEntry.stateFile.replace('tiktok-state-', '').replace('.json', '');
+      const remaining = countPendingVideos(stateDir, '.downloaded.json', 'grok_');
+      const doneMessage = `✅ [GrokbotV2 Infinite Schedule] Telah berhasil upload schedule state ${stateName}. Berhasil: ${successCount}, gagal: ${Math.max(0, pending.length - successCount)}, stok tersisa: ${remaining}. Selanjutnya state ${nextName} pada ${new Date().toLocaleString('id-ID')}.`;
+      grokbotv2Log(doneMessage);
+      sendWAMessageV2(doneMessage);
+    }
+  } catch (error: any) {
+    grokbotv2Log(`❌ Infinite Schedule V2 error: ${error.message}`);
+    sendWAMessageV2(`❌ [GrokbotV2 Infinite Schedule] Error: ${error.message}`);
+  } finally {
+    grokbotv2InfiniteScheduleRunning = false;
+    const finalData = loadGrokbotV2Data();
+    if (finalData.infiniteSchedule?.active) {
+      finalData.infiniteSchedule.active = false;
+      finalData.infiniteSchedule.updatedAt = new Date().toISOString();
+      saveGrokbotV2Data(finalData);
+    }
+    grokbotv2Log('===== INFINITE SCHEDULE V2 FINISHED =====');
+  }
+}
+
+app.post('/api/grokbotv2/infinite-schedule', (req, res) => {
+  if (grokbotv2InfiniteScheduleRunning || grokbotv2FullAutoRunning) return res.status(400).json({ success: false, error: 'Infinite Schedule atau Full Auto sedang aktif' });
+  const validationError = validateInfiniteSchedulePayload(req.body.initialRunAt, req.body.states);
+  if (validationError) return res.status(400).json({ success: false, error: validationError });
+  const states = (req.body.states as InfiniteScheduleStateConfig[]).map((item, index) => ({ ...item, order: index }));
+  const config: InfiniteScheduleConfig = { active: true, initialRunAt: req.body.initialRunAt, currentIndex: 0, started: false, states, updatedAt: new Date().toISOString() };
+  saveGrokbotV2InfiniteSchedule(config);
+  const lines = states.map((item, index) => `${index + 1}. ${item.stateFile.replace('tiktok-state-', '').replace('.json', '')}: ${item.scheduleDate} ${item.scheduleTime}`);
+  sendWAMessageV2(`✅ [GrokbotV2] Infinite Schedule berhasil aktif.\nInitial time: ${new Date(config.initialRunAt).toLocaleString('id-ID')}\n${lines.join('\n')}`);
+  void runGrokbotV2InfiniteSchedule();
+  res.json({ success: true });
+});
+
+app.post('/api/grokbotv2/stop-infinite-schedule', (req, res) => {
+  grokbotv2InfiniteScheduleRunning = false;
+  const data = loadGrokbotV2Data();
+  if (data.infiniteSchedule) {
+    data.infiniteSchedule.active = false;
+    data.infiniteSchedule.updatedAt = new Date().toISOString();
+    saveGrokbotV2Data(data);
+  }
+  grokbotv2Log('⛔ Infinite Schedule V2 dihentikan.');
+  res.json({ success: true });
+});
+
 app.post('/api/grokbotv2/status', (req, res) => {
   const data = loadGrokbotV2Data();
-  res.json({ running: grokbotv2Running, infiniteGenRunning: infiniteGenV2Running, infiniteGenWaitInfo: infiniteGenV2WaitInfo, grokbotFullAutoRunning: grokbotv2FullAutoRunning, queue: grokbotv2Queue, progress: grokbotv2Progress, rateLimits: getGrokRateLimits(), globalConfig: data.globalConfig || {} });
+  res.json({ running: grokbotv2Running, infiniteGenRunning: infiniteGenV2Running, infiniteGenWaitInfo: infiniteGenV2WaitInfo, grokbotFullAutoRunning: grokbotv2FullAutoRunning, infiniteScheduleRunning: grokbotv2InfiniteScheduleRunning, infiniteSchedule: data.infiniteSchedule || null, queue: grokbotv2Queue, progress: grokbotv2Progress, rateLimits: getGrokRateLimits(), globalConfig: data.globalConfig || {} });
 });
 
 app.get('/api/grokbotv2/status', (req, res) => {
   const data = loadGrokbotV2Data();
-  res.json({ running: grokbotv2Running, infiniteGenRunning: infiniteGenV2Running, infiniteGenWaitInfo: infiniteGenV2WaitInfo, grokbotFullAutoRunning: grokbotv2FullAutoRunning, queue: grokbotv2Queue, progress: grokbotv2Progress, rateLimits: getGrokRateLimits(), globalConfig: data.globalConfig || {} });
+  res.json({ running: grokbotv2Running, infiniteGenRunning: infiniteGenV2Running, infiniteGenWaitInfo: infiniteGenV2WaitInfo, grokbotFullAutoRunning: grokbotv2FullAutoRunning, infiniteScheduleRunning: grokbotv2InfiniteScheduleRunning, infiniteSchedule: data.infiniteSchedule || null, queue: grokbotv2Queue, progress: grokbotv2Progress, rateLimits: getGrokRateLimits(), globalConfig: data.globalConfig || {} });
 });
 
 app.post('/api/grokbotv2/stop', async (req, res) => {
   grokbotv2FullAutoRunning = false;
   grokbotv2Running = false;
   infiniteGenV2Running = false;
+  grokbotv2InfiniteScheduleRunning = false;
+  const stopDataV2 = loadGrokbotV2Data();
+  if (stopDataV2.infiniteSchedule) { stopDataV2.infiniteSchedule.active = false; saveGrokbotV2Data(stopDataV2); }
   resetGrokbotv2Progress();
   grokbotv2BroadcastProgress();
   grokbotv2Log('⛔ ===== GROKBOT V2 STOPPED =====');
@@ -7201,6 +7689,7 @@ interface VidabotStateConfig {
 
 interface VidabotData {
   states: Record<string, VidabotStateConfig>;
+  infiniteSchedule?: InfiniteScheduleConfig;
   globalConfig?: {
     parallelBrowsers?: number;
     headless?: boolean;
@@ -7270,6 +7759,7 @@ const vidabotSseClients: Response[] = [];
 let vidabotRunning = false;
 let vidaInfiniteGenRunning = false;
 let vidabotFullAutoRunning = false;
+let vidabotInfiniteScheduleRunning = false;
 let vidaInfiniteGenWaitInfo: { rateLimitTime: string; resumeTime: string; targetState: string } | null = null;
 let vidabotQueue: Array<{ stateName: string; stateFile: string; videoCount: number; scheduleStart: string; scheduleEnd: string; active: boolean }> = [];
 let vidabotProgress: {
@@ -7663,6 +8153,9 @@ app.post('/api/vidabot/generate-utama', async (req, res) => {
   vidabotBroadcastProgress();
   res.json({ success: true, message: `Memulai generate ${needed} video utama (${totalRawToGenerate} raw)` });
 
+  vidabotLog(`🚀 Memulai Generate Stok Utama Vidabot untuk ${tiktokStateName}. Dibutuhkan: ${needed} video (${totalRawToGenerate} video mentah)`);
+  sendWAMessageVida(`🚀 [Vidabot] Generate Stok Utama dimulai untuk ${tiktokStateName}. Dibutuhkan: ${needed} video (${totalRawToGenerate} video mentah).`);
+
   const vidaConfig = {
     bahanFolder: cfg.bahanFolder || '', bahanDir: BAHAN_DIR,
     promptFile: cfg.promptFile, promptDir: PROMPT_DIR,
@@ -7752,6 +8245,9 @@ app.post('/api/vidabot/generate-cadangan', async (req, res) => {
   resetVidabotProgress({ currentState: tiktokStateName, mergeTotal: mergeEnabled ? needed : 0 });
   vidabotBroadcastProgress();
   res.json({ success: true, message: `Memulai generate ${needed} video cadangan (${totalRawToGenerate} raw)` });
+
+  vidabotLog(`🚀 Memulai Generate Stok Cadangan Vidabot untuk ${tiktokStateName}. Dibutuhkan: ${needed} video (${totalRawToGenerate} video mentah)`);
+  sendWAMessageVida(`🚀 [Vidabot] Generate Stok Cadangan dimulai untuk ${tiktokStateName}. Dibutuhkan: ${needed} video (${totalRawToGenerate} video mentah).`);
 
   const vidaConfig = {
     bahanFolder: cfg.bahanFolder || '', bahanDir: BAHAN_DIR,
@@ -8062,7 +8558,7 @@ app.post('/api/vidabot/schedule', async (req, res) => {
 });
 
 app.post('/api/vidabot/full-auto', async (req, res) => {
-  if (vidabotFullAutoRunning) return res.status(400).json({ error: 'Full Auto Vidabot sudah berjalan!' });
+  if (vidabotFullAutoRunning || vidabotInfiniteScheduleRunning) return res.status(400).json({ error: 'Full Auto atau Infinite Schedule Vidabot sedang berjalan!' });
   const { stateFiles } = req.body;
   if (!stateFiles || !Array.isArray(stateFiles) || stateFiles.length === 0) {
     return res.status(400).json({ error: 'stateFiles diperlukan' });
@@ -8090,7 +8586,7 @@ app.post('/api/vidabot/full-auto', async (req, res) => {
 });
 
 app.post('/api/vidabot/infinite-generate', async (req, res) => {
-  if (vidaInfiniteGenRunning) return res.status(400).json({ error: 'Infinite Generate Vidabot sudah berjalan!' });
+  if (vidaInfiniteGenRunning || vidabotRunning || vidabotFullAutoRunning) return res.status(400).json({ error: 'Vidabot sedang menjalankan proses lain!' });
   const { stateFiles } = req.body;
   if (!stateFiles || !Array.isArray(stateFiles) || stateFiles.length === 0) {
     return res.status(400).json({ error: 'stateFiles diperlukan' });
@@ -8101,82 +8597,265 @@ app.post('/api/vidabot/infinite-generate', async (req, res) => {
   vidabotLog(`♾️ Infinite Generate Vidabot dimulai untuk ${stateFiles.length} state`);
 
   (async () => {
+    const batchSize = 30;
+    const cooldownMs = 2 * 60 * 60 * 1000;
     try {
       while (vidaInfiniteGenRunning) {
-        let anyGenerated = false;
-        for (const sf of stateFiles) {
-          if (!vidaInfiniteGenRunning) break;
-          const data = loadVidabotData();
-          const cfg = data.states[sf];
+        const data = loadVidabotData();
+        const targets: InfiniteStockTarget[] = [];
+        for (const stateFile of stateFiles) {
+          const cfg = data.states[stateFile];
           if (!cfg || !cfg.promptFile) continue;
-
-          const tiktokStateName = sf.replace('tiktok-state-', '').replace('.json', '');
-          const stateDownloadDir = path.join(VIDA_DOWNLOAD_DIR, tiktokStateName);
-          const marksFile = path.join(stateDownloadDir, '.uploaded.json');
-          let marks: Record<string, boolean> = {};
-          try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
-
-          const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
-          let currentUtamaCount = 0;
-          if (fs.existsSync(stateDownloadDir)) {
-            currentUtamaCount = fs.readdirSync(stateDownloadDir).filter(f => {
-              const full = path.join(stateDownloadDir, f);
-              return fs.statSync(full).isFile() && (f.startsWith('vida_merged_') || (exts.includes(path.extname(f).toLowerCase()) && !f.startsWith('.'))) && !marks[f];
-            }).length;
-          }
-
-          const needed = Math.max(0, 30 - currentUtamaCount);
-          if (needed > 0) {
-            anyGenerated = true;
-            vidabotRunning = true;
-            vidabotLog(`🎯 [${tiktokStateName}] Mengisi stok utama (+${needed} video)...`);
-            const mergeEnabled = cfg.merge !== false;
-            const totalRaw = mergeEnabled ? (2 * needed) : needed;
-            const vidaConfig = {
-              bahanFolder: cfg.bahanFolder || '', bahanDir: BAHAN_DIR,
-              promptFile: cfg.promptFile, promptDir: PROMPT_DIR,
-              aspectRatio: cfg.aspectRatio || '9:16',
-              downloadDir: VIDA_DOWNLOAD_DIR,
-              customDownloadDir: stateDownloadDir, totalVideos: totalRaw,
-              merge: mergeEnabled, audioFolder: cfg.audioFolder || '',
-              parallelBrowsers: data.globalConfig?.parallelBrowsers || 1,
-            };
-            try {
-              await runVidabotGenerator(vidaConfig, vidabotLog, __dirname);
-              vidabotLog(`✓ [${tiktokStateName}] Selesai generate stok utama.`);
-            } catch (e: any) {
-              vidabotLog(`❌ [${tiktokStateName}] Error generate: ${e.message}`);
-            } finally {
-              vidabotRunning = false;
-            }
-          }
+          const stateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+          const utamaDir = path.join(VIDA_DOWNLOAD_DIR, stateName);
+          const cadanganDir = path.join(utamaDir, 'cadangan');
+          targets.push({ stateFile, stateName, stockType: 'utama', stockCount: countPendingVideos(utamaDir, '.uploaded.json', 'vida_') });
+          targets.push({ stateFile, stateName, stockType: 'cadangan', stockCount: countPendingVideos(cadanganDir, '.uploaded.json', 'vida_') });
         }
 
-        if (!anyGenerated) {
-          vidabotLog('✨ Semua stok state penuh. Tidur 30 detik...');
-          let slept = 0;
-          while (slept < 30000 && vidaInfiniteGenRunning) {
-            await new Promise(r => setTimeout(r, 2000));
-            slept += 2000;
-          }
+        targets.sort((a, b) => a.stockCount - b.stockCount || a.stateName.localeCompare(b.stateName) || a.stockType.localeCompare(b.stockType));
+        const target = targets[0];
+        if (!target) {
+          vidabotLog('⚠️ Tidak ada state aktif dengan prompt yang valid. Cek ulang 30 detik lagi.');
+          await waitWhileRunning(30000, () => vidaInfiniteGenRunning);
+          continue;
+        }
+
+        const cfg = data.states[target.stateFile];
+        const mergeEnabled = cfg.merge !== false;
+        const totalRaw = mergeEnabled ? batchSize * 2 : batchSize;
+        const targetDir = target.stockType === 'cadangan'
+          ? path.join(VIDA_DOWNLOAD_DIR, target.stateName, 'cadangan')
+          : path.join(VIDA_DOWNLOAD_DIR, target.stateName);
+
+        clearVidabotRateLimit(target.stateFile);
+        vidabotRunning = true;
+        resetVidabotProgress({ currentState: target.stateName, mergeTotal: mergeEnabled ? batchSize : 0 });
+        vidabotQueue = [{ stateName: target.stateName, stateFile: target.stateFile, videoCount: batchSize, scheduleStart: `Infinite ${target.stockType}`, scheduleEnd: `Stok ${target.stockCount}`, active: true }];
+        vidabotBroadcastQueue();
+        vidabotBroadcastProgress();
+
+        const startMessage = `♾️ [Vidabot] State ${target.stateName}, stok ${target.stockType} paling sedikit (${target.stockCount}). Akan generate ${batchSize} video (${totalRaw} video mentah).`;
+        vidabotLog(startMessage);
+        sendWAMessageVida(startMessage);
+
+        await runVidabotGenerator({
+          bahanFolder: cfg.bahanFolder || '', bahanDir: BAHAN_DIR,
+          promptFile: cfg.promptFile, promptDir: PROMPT_DIR,
+          aspectRatio: cfg.aspectRatio || '9:16',
+          downloadDir: VIDA_DOWNLOAD_DIR,
+          customDownloadDir: targetDir,
+          totalVideos: totalRaw,
+          merge: mergeEnabled,
+          audioFolder: cfg.audioFolder || '',
+          parallelBrowsers: data.globalConfig?.parallelBrowsers || 1,
+          rateLimitKey: target.stateFile
+        }, vidabotLog, __dirname);
+        vidabotRunning = false;
+
+        const rateLimited = !!getVidabotRateLimits()[target.stateFile];
+        if (rateLimited && vidaInfiniteGenRunning) {
+          const resumeAt = new Date(Date.now() + cooldownMs);
+          vidaInfiniteGenWaitInfo = { rateLimitTime: new Date().toISOString(), resumeTime: resumeAt.toISOString(), targetState: target.stateName };
+          const limitMessage = `🚫 [Vidabot] AI Vidabot terkena rate limit saat memproses ${target.stateName}. Infinite Generate dilanjutkan 2 jam lagi (${resumeAt.toLocaleString('id-ID')}).`;
+          vidabotLog(limitMessage);
+          sendWAMessageVida(limitMessage);
+          await waitWhileRunning(cooldownMs, () => vidaInfiniteGenRunning);
+          vidaInfiniteGenWaitInfo = null;
+        } else {
+          await waitWhileRunning(2000, () => vidaInfiniteGenRunning);
         }
       }
+    } catch (error: any) {
+      vidabotLog(`❌ Infinite Generate Vidabot error: ${error.message}`);
+      sendWAMessageVida(`❌ [Vidabot] Infinite Generate error: ${error.message}`);
     } finally {
       vidaInfiniteGenRunning = false;
       vidabotRunning = false;
+      vidaInfiniteGenWaitInfo = null;
+      vidabotQueue = [];
       resetVidabotProgress();
+      vidabotBroadcastQueue();
       vidabotBroadcastProgress();
       vidabotLog('===== INFINITE GENERATE VIDABOT FINISHED =====');
     }
   })();
 });
 
+function saveVidabotInfiniteSchedule(config: InfiniteScheduleConfig) {
+  const data = loadVidabotData();
+  data.infiniteSchedule = config;
+  saveVidabotData(data);
+}
+
+async function runVidabotInfiniteSchedule(): Promise<void> {
+  if (vidabotInfiniteScheduleRunning) return;
+  const initial = loadVidabotData().infiniteSchedule;
+  if (!initial?.active || initial.states.length === 0) return;
+  vidabotInfiniteScheduleRunning = true;
+  vidabotLog('♾️ Infinite Schedule Vidabot aktif.');
+
+  try {
+    while (vidabotInfiniteScheduleRunning) {
+      const data = loadVidabotData();
+      const schedule = data.infiniteSchedule;
+      if (!schedule?.active || schedule.states.length === 0) break;
+      schedule.states.sort((a, b) => a.order - b.order);
+
+      if (!schedule.started) {
+        const waitMs = Math.max(0, new Date(schedule.initialRunAt).getTime() - Date.now());
+        if (waitMs > 0) {
+          vidabotLog(`⏳ Infinite Schedule menunggu initial time ${new Date(schedule.initialRunAt).toLocaleString('id-ID')}`);
+          await waitWhileRunning(waitMs, () => vidabotInfiniteScheduleRunning);
+        }
+        if (!vidabotInfiniteScheduleRunning) break;
+        schedule.started = true;
+        schedule.updatedAt = new Date().toISOString();
+        saveVidabotInfiniteSchedule(schedule);
+      }
+
+      let selectedIndex = -1;
+      let selectedStock = 0;
+      for (let offset = 0; offset < schedule.states.length; offset++) {
+        const idx = (schedule.currentIndex + offset) % schedule.states.length;
+        const entry = schedule.states[idx];
+        const stateName = entry.stateFile.replace('tiktok-state-', '').replace('.json', '');
+        const stock = countPendingVideos(path.join(VIDA_DOWNLOAD_DIR, stateName), '.uploaded.json', 'vida_');
+        if (stock > 0 && data.states[entry.stateFile]) {
+          selectedIndex = idx;
+          selectedStock = stock;
+          break;
+        }
+        vidabotLog(`⚠️ [Infinite Schedule] ${stateName} dilewati karena stok utama kosong atau konfigurasi tidak tersedia.`);
+      }
+
+      if (selectedIndex < 0) {
+        schedule.active = false;
+        schedule.updatedAt = new Date().toISOString();
+        saveVidabotInfiniteSchedule(schedule);
+        const warning = '⚠️ [Vidabot Infinite Schedule] Seluruh stok state terpilih kosong. Infinite Schedule dihentikan.';
+        vidabotLog(warning);
+        sendWAMessageVida(warning);
+        break;
+      }
+
+      const entry = schedule.states[selectedIndex];
+      const cfg = data.states[entry.stateFile];
+      const stateName = entry.stateFile.replace('tiktok-state-', '').replace('.json', '');
+      const stateDir = path.join(VIDA_DOWNLOAD_DIR, stateName);
+      const videos = fs.readdirSync(stateDir)
+        .filter(file => fs.statSync(path.join(stateDir, file)).isFile() && file.startsWith('vida_') && ['.mp4', '.mov', '.avi', '.mkv', '.webm'].includes(path.extname(file).toLowerCase()))
+        .sort();
+      let uploaded: Record<string, boolean> = {};
+      const marksFile = path.join(stateDir, '.uploaded.json');
+      try { uploaded = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+      const pending = videos.filter(file => !uploaded[file]);
+      if (pending.length === 0) {
+        schedule.currentIndex = (selectedIndex + 1) % schedule.states.length;
+        saveVidabotInfiniteSchedule(schedule);
+        continue;
+      }
+
+      const startMessage = `🚀 [Vidabot Infinite Schedule] Mulai melakukan schedule state ${stateName}. Jumlah stok: ${selectedStock}.`;
+      vidabotLog(startMessage);
+      sendWAMessageVida(startMessage);
+      let successCount = 0;
+      let plannedItems: SchedulePlanItem[] = [];
+
+      await runUpload({
+        videoFolder: stateDir,
+        startFromVideo: pending[0],
+        description: cfg.description || '',
+        hashtags: cfg.hashtags || '',
+        addProduct: !!cfg.addProduct,
+        productNameRadio: cfg.productNameRadio || '',
+        productTitle: cfg.productTitle || '',
+        productDescription: cfg.productDescription || '',
+        skipSwitches: false,
+        headless: isHeadlessEnabledVida(entry.stateFile),
+        scheduleDate: entry.scheduleDate,
+        scheduleTime: entry.scheduleTime,
+        intervalMinutes: cfg.threeUploadsPerHour ? 300 : (cfg.intervalMinutes || 60),
+        stateFile: entry.stateFile,
+        statesDir: STATES_DIR,
+        threeUploadsPerHour: !!cfg.threeUploadsPerHour,
+        randomizeIntervalSchedule: true
+      }, vidabotLog, filename => {
+        let marks: Record<string, boolean> = {};
+        try { marks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
+        marks[filename] = true;
+        fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
+        const videoPath = path.join(stateDir, filename);
+        if (fs.existsSync(videoPath)) try { fs.unlinkSync(videoPath); } catch {}
+        successCount++;
+      }, items => {
+        plannedItems = items;
+        sendWAMessageVida(buildScheduleListMessage(stateName, items));
+      });
+
+      const nextBaseline = nextScheduleBaseline(plannedItems, cfg, entry.scheduleDate, entry.scheduleTime);
+      entry.scheduleDate = nextBaseline.scheduleDate;
+      entry.scheduleTime = nextBaseline.scheduleTime;
+      schedule.currentIndex = (selectedIndex + 1) % schedule.states.length;
+      schedule.updatedAt = new Date().toISOString();
+      saveVidabotInfiniteSchedule(schedule);
+
+      const nextEntry = schedule.states[schedule.currentIndex];
+      const nextName = nextEntry.stateFile.replace('tiktok-state-', '').replace('.json', '');
+      const remaining = countPendingVideos(stateDir, '.uploaded.json', 'vida_');
+      const doneMessage = `✅ [Vidabot Infinite Schedule] Telah berhasil upload schedule state ${stateName}. Berhasil: ${successCount}, gagal: ${Math.max(0, pending.length - successCount)}, stok tersisa: ${remaining}. Selanjutnya state ${nextName} pada ${new Date().toLocaleString('id-ID')}.`;
+      vidabotLog(doneMessage);
+      sendWAMessageVida(doneMessage);
+    }
+  } catch (error: any) {
+    vidabotLog(`❌ Infinite Schedule Vidabot error: ${error.message}`);
+    sendWAMessageVida(`❌ [Vidabot Infinite Schedule] Error: ${error.message}`);
+  } finally {
+    vidabotInfiniteScheduleRunning = false;
+    const finalData = loadVidabotData();
+    if (finalData.infiniteSchedule?.active) {
+      finalData.infiniteSchedule.active = false;
+      finalData.infiniteSchedule.updatedAt = new Date().toISOString();
+      saveVidabotData(finalData);
+    }
+    vidabotLog('===== INFINITE SCHEDULE VIDABOT FINISHED =====');
+  }
+}
+
+app.post('/api/vidabot/infinite-schedule', (req, res) => {
+  if (vidabotInfiniteScheduleRunning || vidabotFullAutoRunning) return res.status(400).json({ success: false, error: 'Infinite Schedule atau Full Auto sedang aktif' });
+  const validationError = validateInfiniteSchedulePayload(req.body.initialRunAt, req.body.states);
+  if (validationError) return res.status(400).json({ success: false, error: validationError });
+  const states = (req.body.states as InfiniteScheduleStateConfig[]).map((item, index) => ({ ...item, order: index }));
+  const config: InfiniteScheduleConfig = { active: true, initialRunAt: req.body.initialRunAt, currentIndex: 0, started: false, states, updatedAt: new Date().toISOString() };
+  saveVidabotInfiniteSchedule(config);
+  const lines = states.map((item, index) => `${index + 1}. ${item.stateFile.replace('tiktok-state-', '').replace('.json', '')}: ${item.scheduleDate} ${item.scheduleTime}`);
+  sendWAMessageVida(`✅ [Vidabot] Infinite Schedule berhasil aktif.\nInitial time: ${new Date(config.initialRunAt).toLocaleString('id-ID')}\n${lines.join('\n')}`);
+  void runVidabotInfiniteSchedule();
+  res.json({ success: true });
+});
+
+app.post('/api/vidabot/stop-infinite-schedule', (req, res) => {
+  vidabotInfiniteScheduleRunning = false;
+  const data = loadVidabotData();
+  if (data.infiniteSchedule) {
+    data.infiniteSchedule.active = false;
+    data.infiniteSchedule.updatedAt = new Date().toISOString();
+    saveVidabotData(data);
+  }
+  vidabotLog('⛔ Infinite Schedule Vidabot dihentikan.');
+  res.json({ success: true });
+});
+
 app.get('/api/vidabot/status', (req, res) => {
+  const data = loadVidabotData();
   res.json({
     running: vidabotRunning,
     infiniteGenRunning: vidaInfiniteGenRunning,
     infiniteGenWaitInfo: vidaInfiniteGenWaitInfo,
     vidabotFullAutoRunning,
+    infiniteScheduleRunning: vidabotInfiniteScheduleRunning,
+    infiniteSchedule: data.infiniteSchedule || null,
     queue: vidabotQueue,
     progress: vidabotProgress,
     rateLimits: getVidabotRateLimits()
@@ -8187,6 +8866,9 @@ app.post('/api/vidabot/stop', async (req, res) => {
   vidaInfiniteGenRunning = false;
   vidabotFullAutoRunning = false;
   vidabotRunning = false;
+  vidabotInfiniteScheduleRunning = false;
+  const stopDataVida = loadVidabotData();
+  if (stopDataVida.infiniteSchedule) { stopDataVida.infiniteSchedule.active = false; saveVidabotData(stopDataVida); }
   resetVidabotProgress();
   vidabotBroadcastProgress();
   await stopVidabotGenerator();
@@ -8225,6 +8907,8 @@ app.get('/api/vidabot/logs', (req, res) => {
 app.listen(PORT, () => {
   initAutopull();
   startWAPolling();
+  if (loadGrokbotV2Data().infiniteSchedule?.active) void runGrokbotV2InfiniteSchedule();
+  if (loadVidabotData().infiniteSchedule?.active) void runVidabotInfiniteSchedule();
   console.log(`🚀 State Manager berjalan di http://localhost:${PORT}`);
   console.log(`🎬 TikTok Auto Uploader: http://localhost:${PORT}/tiktok`);
   console.log(`🧠 Grok Imagine Generator: http://localhost:${PORT}/grok`);

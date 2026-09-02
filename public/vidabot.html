@@ -324,6 +324,10 @@
                     class="w-full bg-gradient-to-r from-teal-600 via-sky-600 to-sky-700 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
               ♾️ Infinite Generate (Stok Utama & Cadangan)
             </button>
+            <button id="btn-infinite-schedule" onclick="openInfiniteScheduleModal()"
+                    class="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-orange-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+              ♾️ Infinite Schedule
+            </button>
             <button id="btn-stop" onclick="stopBot()" disabled
                     class="w-full bg-gray-900 border border-red-900/30 hover:bg-red-655/20 hover:border-red-500 disabled:opacity-20 text-red-400 disabled:text-gray-500 disabled:pointer-events-none py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2">
               <span>⛔</span> Hentikan Bot
@@ -689,6 +693,22 @@
         </div>
       </div>
 
+    </div>
+  </div>
+
+  <div id="infinite-schedule-modal" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/75 p-4">
+    <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-orange-800/60 bg-gray-950 p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-5">
+        <div><h3 class="text-xl font-extrabold text-orange-300">♾️ Infinite Schedule Vidabot</h3><p class="text-xs text-gray-400 mt-1">Atur waktu mulai, jadwal TikTok, dan urutan state.</p></div>
+        <button onclick="closeInfiniteScheduleModal()" class="text-gray-400 hover:text-white text-2xl">×</button>
+      </div>
+      <label class="block text-xs font-bold text-gray-300 mb-2">Initial Time Script</label>
+      <input id="infinite-schedule-initial" type="datetime-local" class="w-full mb-5 bg-gray-900 border border-gray-700 rounded-xl px-4 py-3 text-sm text-white">
+      <div id="infinite-schedule-state-list" class="space-y-3"></div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeInfiniteScheduleModal()" class="px-5 py-3 rounded-xl bg-gray-800 text-gray-300 font-bold">Batal</button>
+        <button onclick="confirmInfiniteSchedule()" class="px-6 py-3 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-extrabold">OK & Aktifkan</button>
+      </div>
     </div>
   </div>
 
@@ -1337,6 +1357,72 @@
       }
     }
 
+    let infiniteScheduleDraft = [];
+
+    function toLocalDateTimeInput(date) {
+      const pad = n => String(n).padStart(2, '0');
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    }
+
+    async function openInfiniteScheduleModal() {
+      if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
+      for (const fn of selectedStates) await saveConfig(fn);
+      const now = new Date(Date.now() + 60000);
+      document.getElementById('infinite-schedule-initial').value = toLocalDateTimeInput(now);
+      infiniteScheduleDraft = selectedStates.map(fn => {
+        const cfg = stateConfigs[fn] || {};
+        const fallback = toLocalDateTimeInput(new Date(Date.now() + 3600000));
+        return { stateFile: fn, scheduleValue: cfg.scheduleDate && cfg.scheduleTime ? `${cfg.scheduleDate}T${cfg.scheduleTime}` : fallback };
+      });
+      renderInfiniteScheduleDraft();
+      const modal = document.getElementById('infinite-schedule-modal');
+      modal.classList.remove('hidden'); modal.classList.add('flex');
+    }
+
+    function closeInfiniteScheduleModal() {
+      const modal = document.getElementById('infinite-schedule-modal');
+      modal.classList.add('hidden'); modal.classList.remove('flex');
+    }
+
+    function moveInfiniteScheduleState(index, direction) {
+      const target = index + direction;
+      if (target < 0 || target >= infiniteScheduleDraft.length) return;
+      [infiniteScheduleDraft[index], infiniteScheduleDraft[target]] = [infiniteScheduleDraft[target], infiniteScheduleDraft[index]];
+      renderInfiniteScheduleDraft();
+    }
+
+    function updateInfiniteScheduleValue(index, value) { infiniteScheduleDraft[index].scheduleValue = value; }
+
+    function renderInfiniteScheduleDraft() {
+      document.getElementById('infinite-schedule-state-list').innerHTML = infiniteScheduleDraft.map((item, index) => `
+        <div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4 flex flex-col md:flex-row md:items-center gap-3">
+          <div class="flex items-center gap-2 md:w-52"><span class="w-7 h-7 rounded-full bg-orange-900 text-orange-300 flex items-center justify-center text-xs font-black">${index + 1}</span><span class="font-bold text-gray-200 truncate">${getStateName(item.stateFile)}</span></div>
+          <input type="datetime-local" value="${item.scheduleValue}" onchange="updateInfiniteScheduleValue(${index}, this.value)" class="flex-1 bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white">
+          <div class="flex gap-2"><button onclick="moveInfiniteScheduleState(${index}, -1)" class="px-3 py-2 rounded-lg bg-gray-800 text-gray-300" ${index === 0 ? 'disabled' : ''}>↑</button><button onclick="moveInfiniteScheduleState(${index}, 1)" class="px-3 py-2 rounded-lg bg-gray-800 text-gray-300" ${index === infiniteScheduleDraft.length - 1 ? 'disabled' : ''}>↓</button></div>
+        </div>`).join('');
+    }
+
+    async function confirmInfiniteSchedule() {
+      const initialRunAt = document.getElementById('infinite-schedule-initial').value;
+      if (!initialRunAt || infiniteScheduleDraft.some(item => !item.scheduleValue)) return alert('Semua waktu wajib diisi.');
+      const states = infiniteScheduleDraft.map((item, order) => {
+        const [scheduleDate, scheduleTime] = item.scheduleValue.split('T');
+        return { stateFile: item.stateFile, order, scheduleDate, scheduleTime };
+      });
+      const res = await fetch('/api/vidabot/infinite-schedule', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ initialRunAt, states }) });
+      const data = await res.json();
+      if (!data.success) return alert(data.error || 'Gagal mengaktifkan Infinite Schedule');
+      closeInfiniteScheduleModal();
+      addLog('✓ Infinite Schedule Vidabot berhasil diaktifkan.');
+      connectSSE(); pollStatus();
+    }
+
+    async function stopInfiniteSchedule() {
+      await fetch('/api/vidabot/stop-infinite-schedule', { method: 'POST' });
+      addLog('✓ Infinite Schedule Vidabot dihentikan.');
+      pollStatus();
+    }
+
     async function startInfiniteGenerate() {
       if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
 
@@ -1391,9 +1477,10 @@
     function updateControlsUI(data) {
       const btnFullAuto = document.getElementById('btn-full-auto');
       const btnInfGen = document.getElementById('btn-infinite-generate');
+      const btnInfSchedule = document.getElementById('btn-infinite-schedule');
       const btnStopAll = document.getElementById('btn-stop');
 
-      if (!btnFullAuto || !btnInfGen || !btnStopAll) return;
+      if (!btnFullAuto || !btnInfGen || !btnInfSchedule || !btnStopAll) return;
 
       // 1. Full Auto Toggle Control
       if (data.vidabotFullAutoRunning) {
@@ -1409,7 +1496,7 @@
       }
 
       // 2. Infinite Generate Toggle Control
-      if (data.vidaInfiniteGenRunning) {
+      if (data.infiniteGenRunning) {
         btnInfGen.textContent = '⛔ Hentikan Infinite Gen';
         btnInfGen.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'stopInfiniteGenerate()');
@@ -1418,18 +1505,29 @@
         btnInfGen.textContent = '♾️ Infinite Generate (Stok Utama & Cadangan)';
         btnInfGen.className = 'w-full bg-gradient-to-r from-teal-600 via-sky-600 to-sky-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'startInfiniteGenerate()');
-        btnInfGen.disabled = !data.vidaInfiniteGenRunning && data.running;
+        btnInfGen.disabled = false;
       }
 
+      if (data.infiniteScheduleRunning) {
+        btnInfSchedule.textContent = '⛔ Hentikan Infinite Schedule';
+        btnInfSchedule.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnInfSchedule.setAttribute('onclick', 'stopInfiniteSchedule()');
+      } else {
+        btnInfSchedule.textContent = '♾️ Infinite Schedule';
+        btnInfSchedule.className = 'w-full bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-orange-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+        btnInfSchedule.setAttribute('onclick', 'openInfiniteScheduleModal()');
+      }
+      btnInfSchedule.disabled = !!data.vidabotFullAutoRunning;
+
       // 3. Force Stop All Control
-      const anyActive = data.running || data.vidaInfiniteGenRunning || data.vidabotFullAutoRunning;
+      const anyActive = data.running || data.infiniteGenRunning || data.vidabotFullAutoRunning || data.infiniteScheduleRunning;
       btnStopAll.disabled = !anyActive;
       btnStopAll.textContent = '⛔ Force Stop Semua';
     }
 
-    function updateStatusBadge(running, vidaInfiniteGenRunning, waitInfo, fullAutoRunning) {
+    function updateStatusBadge(running, vidaInfiniteGenRunning, waitInfo, fullAutoRunning, infiniteScheduleRunning = false) {
       const badge = document.getElementById('status-badge');
-      if (running || vidaInfiniteGenRunning || fullAutoRunning) {
+      if (running || vidaInfiniteGenRunning || fullAutoRunning || infiniteScheduleRunning) {
         if (waitInfo) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-yellow-500 running-pulse"></span> ⏳ Wait Limit`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-yellow-950/40 border border-yellow-800 text-yellow-400 font-semibold flex items-center gap-2';
@@ -1439,6 +1537,9 @@
         } else if (fullAutoRunning) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-cyan-500 running-pulse"></span> 🚀 Standby (Full Auto)`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-cyan-950/40 border border-cyan-800 text-cyan-400 font-semibold flex items-center gap-2';
+        } else if (infiniteScheduleRunning) {
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-orange-500 running-pulse"></span> ♾️ Infinite Schedule`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-orange-950/40 border border-orange-800 text-orange-400 font-semibold flex items-center gap-2';
         } else {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-sky-500 running-pulse"></span> ♾️ Checking Stock`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-sky-950/40 border border-sky-800 text-sky-400 font-semibold flex items-center gap-2';
@@ -1500,7 +1601,7 @@
             const waitStr = e.data.substring('[INFINITE_WAIT]:'.length);
             currentWaitInfo = waitStr === 'null' ? null : JSON.parse(waitStr);
             fetch('/api/vidabot/status').then(res => res.json()).then(data => {
-              updateStatusBadge(data.running, data.vidaInfiniteGenRunning, currentWaitInfo, data.vidabotFullAutoRunning);
+              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.vidabotFullAutoRunning, data.infiniteScheduleRunning);
               if (data.queue) renderQueue(data.queue);
             });
           } catch {}
@@ -1535,12 +1636,12 @@
         if (data.globalConfig) {
           globalConfig = data.globalConfig;
         }
-        const active = data.running || data.vidaInfiniteGenRunning || data.vidabotFullAutoRunning;
+        const active = data.running || data.infiniteGenRunning || data.vidabotFullAutoRunning || data.infiniteScheduleRunning;
         setBusy(active);
         updateControlsUI(data);
         if (active) {
           connectSSE();
-          updateStatusBadge(data.running, data.vidaInfiniteGenRunning, currentWaitInfo, data.vidabotFullAutoRunning);
+          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.vidabotFullAutoRunning, data.infiniteScheduleRunning);
         }
         if (data.queue) renderQueue(data.queue);
         if (data.progress) updateProgressUI(data.progress);

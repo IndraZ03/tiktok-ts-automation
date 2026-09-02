@@ -19,10 +19,70 @@
       "threeUploadsPerHour": false,
       "lastUploadDate": "",
       "lastUploadTime": ""
+    },
+    "tiktok-state-secomfy.json": {
+      "promptFile": "xprimes25.json",
+      "bahanFolder": "secomfy_s25",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "vidabot",
+      "description": "",
+      "hashtags": "",
+      "scheduleDate": "2026-08-27",
+      "scheduleTime": "02:14",
+      "intervalMinutes": 60,
+      "addProduct": false,
+      "productNameRadio": "",
+      "productTitle": "",
+      "productDescription": "",
+      "headless": true,
+      "threeUploadsPerHour": false,
+      "lastUploadDate": "",
+      "lastUploadTime": ""
+    },
+    "tiktok-state-tabletmurahxprime.json": {
+      "promptFile": "xprimes25.json",
+      "bahanFolder": "tabletxprime_s25",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "vidabot",
+      "description": "Xprime S25 10.1 Inch 120Hz 16GB+1TB 8800mAh Android 15 + Keyboard - Alat Belajar Kantoran & Hiburan Hadiah Beli 1 Dapat 8",
+      "hashtags": "tablet,tabletsejutaan,tabletmurah",
+      "scheduleDate": "2026-08-30",
+      "scheduleTime": "12:30",
+      "intervalMinutes": 300,
+      "addProduct": true,
+      "productNameRadio": "Xprime S25 10.1 Inch 120Hz 16GB+1TB 8800mAh Android 15 + Keyboard - Alat Belajar Kantoran & Hiburan Hadiah Beli 1 Dapat 8",
+      "productTitle": "BISA COD BELI DISINI",
+      "productDescription": "",
+      "headless": true,
+      "threeUploadsPerHour": false,
+      "lastUploadDate": "2026-08-29",
+      "lastUploadTime": "00:14"
+    },
+    "tiktok-state-Rekomendasi Tablet Murah.json": {
+      "promptFile": "xprimes25.json",
+      "bahanFolder": "rekomendasitabletmurah_s25",
+      "aspectRatio": "9:16",
+      "merge": true,
+      "audioFolder": "vidabot",
+      "description": "Xprime S25 10.1 Inch 120Hz 16GB+1TB 8800mAh Android 15 + Keyboard - Alat Belajar Kantoran & Hiburan Hadiah Beli 1 Dapat 8",
+      "hashtags": "tablet,tabletsejutaan,tabletmurah",
+      "scheduleDate": "2026-08-30",
+      "scheduleTime": "12:30",
+      "intervalMinutes": 300,
+      "addProduct": true,
+      "productNameRadio": "Xprime S25 10.1 Inch 120Hz 16GB+1TB 8800mAh Android 15 + Keyboard - Alat Belajar Kantoran & Hiburan Hadiah Beli 1 Dapat 8",
+      "productTitle": "BISA COD BELI DISINI",
+      "productDescription": "",
+      "headless": true,
+      "threeUploadsPerHour": false,
+      "lastUploadDate": "2026-08-28",
+      "lastUploadTime": "01:01"
     }
   },
   "globalConfig": {
-    "headless": false,
-    "sendWhatsApp": false
+    "headless": true,
+    "sendWhatsApp": true
   }
 }

@@ -8,6 +8,7 @@ import ffmpegPath from 'ffmpeg-static';
 let activeBrowser = null;
 let activeContext = null;
 let isRunning = false;
+let uploadLock = Promise.resolve();
 export function getIsRunning() { return isRunning; }
 const RANDOM_INTERVAL_OFFSET_MAX_MINUTES = 40;
 const RANDOM_INTERVAL_OFFSET_STEP_MINUTES = 5;
@@ -1118,7 +1119,7 @@ async function uploadSingleVideo(page, videoPath, config, scheduleDate, schedule
 // ═══════════════════════════════════════════════════════════
 //  MAIN UPLOAD FUNCTION - MULTI-VIDEO SEQUENTIAL
 // ═══════════════════════════════════════════════════════════
-export async function runUpload(config, log, onVideoUploaded, onSchedulePlanned) {
+async function runUploadUnlocked(config, log, onVideoUploaded, onSchedulePlanned) {
     isRunning = true;
     // ── Validate state file ──
     const stateFilePath = path.join(config.statesDir, config.stateFile);
@@ -1268,7 +1269,7 @@ export async function runUpload(config, log, onVideoUploaded, onSchedulePlanned)
     else {
         log(`⏱ Interval: ${intervalMinutes} menit (${Math.floor(intervalMinutes / 60)}j ${intervalMinutes % 60}m)`);
         if (config.randomizeIntervalSchedule) {
-            log(`Random interval aktif: jadwal setelah video pertama digeser -${RANDOM_INTERVAL_OFFSET_MAX_MINUTES} sampai +${RANDOM_INTERVAL_OFFSET_MAX_MINUTES} menit, kelipatan ${RANDOM_INTERVAL_OFFSET_STEP_MINUTES} menit`);
+            log(`🎲 Random interval aktif: jadwal setelah video pertama digeser -${RANDOM_INTERVAL_OFFSET_MAX_MINUTES} sampai +${RANDOM_INTERVAL_OFFSET_MAX_MINUTES} menit, kelipatan ${RANDOM_INTERVAL_OFFSET_STEP_MINUTES} menit`);
         }
     }
     log(`📋 Total video: ${videosFromStart.length} | Sudah upload: ${videosFromStart.length - videosToUpload.length} | Akan upload: ${videosToUpload.length}`);
@@ -1367,10 +1368,9 @@ export async function runUpload(config, log, onVideoUploaded, onSchedulePlanned)
                 log('⛔ Upload dihentikan oleh user');
                 break;
             }
-            // ── Calculate schedule for this video ──
             const plannedSchedule = schedulePlan[uploadIndex];
             if (plannedSchedule.offsetMinutes !== undefined) {
-                log(`Random interval video ${uploadIndex + 1}: ${plannedSchedule.offsetMinutes >= 0 ? '+' : ''}${plannedSchedule.offsetMinutes} menit`);
+                log(`🎲 Random interval video ${uploadIndex + 1}: ${plannedSchedule.offsetMinutes >= 0 ? '+' : ''}${plannedSchedule.offsetMinutes} menit`);
             }
             const schedDate = plannedSchedule.scheduleDate;
             const schedTime = plannedSchedule.scheduleTime;
@@ -1470,5 +1470,21 @@ export async function runUpload(config, log, onVideoUploaded, onSchedulePlanned)
         isRunning = false;
         // Don't close browser so user can inspect
         log('✅ Proses selesai. Browser tetap terbuka untuk inspeksi.');
+    }
+}
+// Semua pemanggil berbagi satu Chrome/CDP. Serialisasi di sini mencegah dua
+// bot menempel ke profile/tab yang sama ketika berjalan bersamaan.
+export async function runUpload(config, log, onVideoUploaded, onSchedulePlanned) {
+    let release;
+    const previous = uploadLock;
+    uploadLock = new Promise(resolve => { release = resolve; });
+    if (getIsRunning())
+        log('⏳ Menunggu antrean upload TikTok global...');
+    await previous;
+    try {
+        await runUploadUnlocked(config, log, onVideoUploaded, onSchedulePlanned);
+    }
+    finally {
+        release();
     }
 }

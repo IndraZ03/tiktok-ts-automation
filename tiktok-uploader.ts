@@ -42,6 +42,7 @@ export interface SchedulePlanItem {
 let activeBrowser: Browser | null = null;
 let activeContext: BrowserContext | null = null;
 let isRunning = false;
+let uploadLock: Promise<void> = Promise.resolve();
 
 export function getIsRunning() { return isRunning; }
 
@@ -1170,7 +1171,7 @@ async function uploadSingleVideo(
 // ═══════════════════════════════════════════════════════════
 //  MAIN UPLOAD FUNCTION - MULTI-VIDEO SEQUENTIAL
 // ═══════════════════════════════════════════════════════════
-export async function runUpload(
+async function runUploadUnlocked(
   config: UploadConfig,
   log: LogFn,
   onVideoUploaded?: (filename: string) => void,
@@ -1546,5 +1547,25 @@ export async function runUpload(
     isRunning = false;
     // Don't close browser so user can inspect
     log('✅ Proses selesai. Browser tetap terbuka untuk inspeksi.');
+  }
+}
+
+// Semua pemanggil berbagi satu Chrome/CDP. Serialisasi di sini mencegah dua
+// bot menempel ke profile/tab yang sama ketika berjalan bersamaan.
+export async function runUpload(
+  config: UploadConfig,
+  log: LogFn,
+  onVideoUploaded?: (filename: string) => void,
+  onSchedulePlanned?: (items: SchedulePlanItem[]) => void
+): Promise<void> {
+  let release!: () => void;
+  const previous = uploadLock;
+  uploadLock = new Promise<void>(resolve => { release = resolve; });
+  if (getIsRunning()) log('⏳ Menunggu antrean upload TikTok global...');
+  await previous;
+  try {
+    await runUploadUnlocked(config, log, onVideoUploaded, onSchedulePlanned);
+  } finally {
+    release();
   }
 }
