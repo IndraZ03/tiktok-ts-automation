@@ -1937,7 +1937,12 @@
       
       // Update bars width & texts
       document.getElementById('prog-generate').style.width = gen + '%';
-      document.getElementById('txt-generate').textContent = `🧠 Grok Generate: ${gen}%`;
+      const currentVideo = prog.currentVideo || 0;
+      const currentVideoTotal = prog.currentVideoTotal || 0;
+      const currentVideoProgress = Math.round(prog.currentVideoProgress || 0);
+      document.getElementById('txt-generate').textContent = currentVideoTotal > 0
+        ? `🧠 Grok: ${gen}% · raw ${currentVideo}/${currentVideoTotal} (${currentVideoProgress}%)`
+        : `🧠 Grok Generate: ${gen}%`;
       
       document.getElementById('prog-merge').style.width = mrg + '%';
       const mergedCount = prog.mergedCount || 0;
@@ -2006,7 +2011,10 @@
       // Set active task description
       let activeTask = 'Idle';
       if (gen < 100) {
-        activeTask = `Sedang generate video mentah via Grok... (${gen}%)`;
+        const phase = prog.currentPhase || 'Sedang generate video mentah via Grok...';
+        activeTask = currentVideoTotal > 0
+          ? `${phase} · raw ${currentVideo}/${currentVideoTotal} (${currentVideoProgress}%)`
+          : `${phase} (${gen}%)`;
       } else if (mrg < 100) {
         activeTask = mergeTotal > 0
           ? `Sedang merge video... (${mergedCount}/${mergeTotal})`

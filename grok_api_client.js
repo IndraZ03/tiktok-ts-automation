@@ -31,7 +31,72 @@ export async function checkGrokQuota(stateName = 'indra') {
     await browser.close();
     return { account: session.session ? `${session.session.givenName} (${session.session.email})` : 'Unauthenticated', quota };
 }
-export async function generateGrokVideoV2(options, onProgress) {
+export async function createGrokV2Session(stateName = 'indra', headless = true) {
+    const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
+    if (!fs.existsSync(statePath))
+        throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
+    const browser = await chromium.launch({ headless, channel: 'chrome', args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'], ignoreDefaultArgs: ['--enable-automation'] });
+    try {
+        const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36', locale: 'en-US', timezoneId: 'Asia/Makassar', storageState: statePath, acceptDownloads: true });
+        const page = await context.newPage();
+        const session = { browser, context, page, stateName, statsigId: '', requestMetadata: {} };
+        const metadataHeaders = ['baggage', 'sentry-trace', 'traceparent'];
+        page.on('request', request => {
+            if (!request.url().startsWith('https://grok.com/'))
+                return;
+            const headers = request.headers();
+            if (!session.statsigId && headers['x-statsig-id'])
+                session.statsigId = headers['x-statsig-id'];
+            for (const name of metadataHeaders) {
+                if (!session.requestMetadata[name] && headers[name])
+                    session.requestMetadata[name] = headers[name];
+            }
+        });
+        const browserScriptPath = path.join(process.cwd(), 'grok_api_browser.js');
+        if (!fs.existsSync(browserScriptPath))
+            throw new Error(`File browser script tidak ditemukan: ${browserScriptPath}`);
+        const browserScript = fs.readFileSync(browserScriptPath, 'utf-8');
+        await page.addInitScript({ content: browserScript + `
+      Object.defineProperty(navigator, 'webdriver', {
+        get: function () { return undefined; }
+      });
+    ` });
+        await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 60000 });
+        // The anti-bot clearance cookie is often issued shortly after the first page load.
+        for (let attempt = 0; attempt < 10; attempt++) {
+            const cookies = await context.cookies('https://grok.com');
+            if (cookies.some(cookie => cookie.name === 'cf_clearance'))
+                break;
+            await page.waitForTimeout(1000);
+        }
+        await page.waitForTimeout(2000);
+        return session;
+    }
+    catch (error) {
+        try {
+            await browser.close();
+        }
+        catch { }
+        throw error;
+    }
+}
+export class TooManyRequestsError extends Error {
+    retryAfterMs;
+    constructor(retryAfterMs = 0) {
+        super('Grok mengirim HTTP 429 Too Many Requests');
+        this.name = 'TooManyRequestsError';
+        this.retryAfterMs = retryAfterMs;
+    }
+}
+export async function closeGrokV2Session(session) {
+    if (!session)
+        return;
+    try {
+        await session.browser.close();
+    }
+    catch { }
+}
+export async function generateGrokVideoV2(options, onProgress, sharedSession) {
     const stateName = options.stateName || 'indra';
     const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
     if (!fs.existsSync(statePath))
@@ -55,52 +120,26 @@ export async function generateGrokVideoV2(options, onProgress) {
     const resolution = options.resolution === '1080p' ? '1080p' : '720p';
     const aspectRatio = options.aspectRatio || '9:16';
     const prompt = (options.promptText || '').trim() || 'A stunning cinematic video sequence';
-    const browserScriptPath = path.join(process.cwd(), 'grok_api_browser.js');
-    if (!fs.existsSync(browserScriptPath))
-        throw new Error(`File browser script tidak ditemukan: ${browserScriptPath}`);
-    const browserScript = fs.readFileSync(browserScriptPath, 'utf-8');
-    log(`Memulai Headless Browser (State: ${stateName}, API baru)...`, 5);
-    const browser = await chromium.launch({ headless: options.headless ?? true, channel: 'chrome', args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'], ignoreDefaultArgs: ['--enable-automation'] });
+    if (sharedSession && sharedSession.stateName !== stateName) {
+        throw new Error(`Sesi Grok untuk akun ${sharedSession.stateName} tidak cocok dengan akun ${stateName}`);
+    }
+    const ownsSession = !sharedSession;
+    log(ownsSession
+        ? `Memulai Headless Browser (State: ${stateName}, API baru)...`
+        : `Menggunakan sesi Grok yang sudah terbuka (State: ${stateName})...`, 5);
+    const session = sharedSession || await createGrokV2Session(stateName, options.headless ?? true);
+    const { browser, context, page } = session;
     try {
-        const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36', locale: 'en-US', timezoneId: 'Asia/Makassar', storageState: statePath, acceptDownloads: true });
-        const page = await context.newPage();
-        let statsigId = '';
-        const requestMetadata = {};
-        const metadataHeaders = ['baggage', 'sentry-trace', 'traceparent'];
-        page.on('request', request => {
-            if (!request.url().startsWith('https://grok.com/'))
-                return;
-            const headers = request.headers();
-            if (!statsigId && headers['x-statsig-id'])
-                statsigId = headers['x-statsig-id'];
-            for (const name of metadataHeaders) {
-                if (!requestMetadata[name] && headers[name])
-                    requestMetadata[name] = headers[name];
-            }
-        });
-        await page.addInitScript({ content: browserScript + `
-      Object.defineProperty(navigator, 'webdriver', {
-        get: function () { return undefined; }
-      });
-    ` });
-        log('Membuka Grok Imagine...', 12);
-        await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 60000 });
-        // The anti-bot clearance cookie is often issued shortly after the first page load.
-        for (let attempt = 0; attempt < 10; attempt++) {
-            const cookies = await context.cookies('https://grok.com');
-            if (cookies.some(cookie => cookie.name === 'cf_clearance'))
-                break;
-            await page.waitForTimeout(1000);
-        }
-        await page.waitForTimeout(2000);
-        if (statsigId || Object.keys(requestMetadata).length > 0)
+        if (ownsSession)
+            log('Grok Imagine siap dipakai untuk batch ini.', 12);
+        if (session.statsigId || Object.keys(session.requestMetadata).length > 0)
             log('Metadata request Grok terdeteksi', 13);
         const runGeneration = () => page.evaluate((o) => {
             const generate = window.__GROK_API_V2_GENERATE;
             if (typeof generate !== 'function')
                 throw new Error('Grok browser API script tidak terpasang');
             return generate(o);
-        }, { prompt, imageData, imageMime, imageName, duration: durationNum, resolution, aspectRatio, statsigId, requestMetadata });
+        }, { prompt, imageData, imageMime, imageName, duration: durationNum, resolution, aspectRatio, statsigId: session.statsigId, requestMetadata: session.requestMetadata });
         // Polling progress
         let rateLimitDetectedAt = null;
         const poll = setInterval(async () => {
@@ -110,8 +149,12 @@ export async function generateGrokVideoV2(options, onProgress) {
                     if (typeof st.progress === 'number')
                         log(`Proses generate: ${st.progress}% - ${st.message || ''}`, Math.round(st.progress));
                     if (st.rateLimited) {
-                        rateLimitDetectedAt = { availableAt: st.availableAt || null };
-                        log('Rate limit terdeteksi');
+                        rateLimitDetectedAt = {
+                            availableAt: st.availableAt || null,
+                            transient: !!st.transientRateLimit || st.httpStatus === 429,
+                            retryAfterMs: Number(st.retryAfterMs) || 0
+                        };
+                        log(st.transientRateLimit ? 'Too many requests terdeteksi' : 'Rate limit terdeteksi');
                     }
                 }
             }
@@ -139,8 +182,19 @@ export async function generateGrokVideoV2(options, onProgress) {
         const detectedRateLimit = rateLimitDetectedAt;
         if (result?.rateLimited || detectedRateLimit) {
             const availableAt = result?.availableAt || detectedRateLimit?.availableAt || null;
+            const isTooManyRequests = !!result?.transientRateLimit
+                || result?.httpStatus === 429
+                || !!detectedRateLimit?.transient;
+            if (isTooManyRequests) {
+                const retryAfterMs = Number(result?.retryAfterMs) || detectedRateLimit?.retryAfterMs || 0;
+                log('Too many requests. Menunggu sebelum mencoba raw yang sama lagi.');
+                if (ownsSession)
+                    await closeGrokV2Session(session);
+                throw new TooManyRequestsError(retryAfterMs);
+            }
             log('Rate limit! Tersedia kembali: ' + (availableAt || 'tidak diketahui'));
-            await browser.close();
+            if (ownsSession)
+                await closeGrokV2Session(session);
             throw new RateLimitError(availableAt);
         }
         if (!result || result.status !== 'done' || !result.videoUrl) {
@@ -186,17 +240,16 @@ export async function generateGrokVideoV2(options, onProgress) {
                 log(`Peringatan mengunduh dari ${downloadUrl.substring(0, 70)}: ${e.message}`);
             }
         }
-        await browser.close();
+        if (ownsSession)
+            await closeGrokV2Session(session);
         if (!saved)
             throw new Error(`Gagal menyimpan file video ke ${savePath}`);
         log(`Video berhasil disimpan di ${savePath}`, 100);
         return { success: true, filename: fname, savePath, downloadUrl: `/api/grok/video-file/${stateName}/${fname}`, rawUrl: result.videoUrl || '' };
     }
     catch (error) {
-        try {
-            await browser.close();
-        }
-        catch { }
+        if (ownsSession)
+            await closeGrokV2Session(session);
         log('Error: ' + error.message);
         throw error;
     }

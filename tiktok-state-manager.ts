@@ -12,7 +12,7 @@ import { execa } from 'execa';
 import { runUpload, stopUploader, getIsRunning, type SchedulePlanItem } from './tiktok-uploader.js';
 import { runFacebookUpload, stopFacebookUploader, getFacebookIsRunning } from './facebook-uploader.js';
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress, getGrokRateLimits, clearGrokRateLimit, setGrokRateLimit } from './grok-uploader.js';
-import { generateGrokVideoV2, RateLimitError } from './grok_api_client.js';
+import { generateGrokVideoV2, createGrokV2Session, closeGrokV2Session, RateLimitError, TooManyRequestsError, type GrokV2Session } from './grok_api_client.js';
 import { generateVidabotVideo } from './vidabot_api_client.js';
 import {
   runVidabotGenerator,
@@ -6230,6 +6230,10 @@ let grokbotv2Progress: {
   autoSwitchGrokState: boolean;
   availableGrokAccounts: number;
   limitedGrokAccounts: string[];
+  currentVideo: number;
+  currentVideoTotal: number;
+  currentVideoProgress: number;
+  currentPhase: string;
 } = {
   generate: 0,
   merge: 0,
@@ -6244,6 +6248,10 @@ let grokbotv2Progress: {
   autoSwitchGrokState: false,
   availableGrokAccounts: 0,
   limitedGrokAccounts: [],
+  currentVideo: 0,
+  currentVideoTotal: 0,
+  currentVideoProgress: 0,
+  currentPhase: '',
 };
 
 function grokbotv2Log(msg: string) {
@@ -6285,6 +6293,7 @@ function resetGrokbotv2Progress(overrides: Partial<typeof grokbotv2Progress> = {
     mergedCount: 0, mergeTotal: 0,
     activeGrokState: '', autoSwitchGrokState: false,
     availableGrokAccounts: 0, limitedGrokAccounts: [],
+    currentVideo: 0, currentVideoTotal: 0, currentVideoProgress: 0, currentPhase: '',
     ...overrides
   };
 }
@@ -6295,6 +6304,7 @@ interface GrokV2GenerationResult {
   totalRaw: number;
   limitedAccounts: string[];
   lastAccount: string | null;
+  fatalError?: string;
 }
 
 function getGrokV2AccountPool(autoSwitch: boolean, fixedState?: string): string[] {
@@ -6309,6 +6319,8 @@ function getGrokV2AccountPool(autoSwitch: boolean, fixedState?: string): string[
   return validStates;
 }
 
+const GROK_V2_UNKNOWN_RATE_LIMIT_MS = 15 * 60 * 1000;
+
 function isGrokV2AccountRateLimited(stateFile: string): boolean {
   const info = getGrokRateLimits()[stateFile];
   if (!info) return false;
@@ -6318,8 +6330,28 @@ function isGrokV2AccountRateLimited(stateFile: string): boolean {
       clearGrokRateLimit(stateFile);
       return false;
     }
+  } else if (Date.now() - (info.detectedAt || Date.now()) >= GROK_V2_UNKNOWN_RATE_LIMIT_MS) {
+    // HTTP 429 responses often do not include a reset time. Use the same
+    // conservative fallback as the legacy generator instead of blocking the
+    // account forever.
+    clearGrokRateLimit(stateFile);
+    return false;
   }
   return true;
+}
+
+function getGrokV2RateLimitWaitMs(accounts: string[]): number {
+  const now = Date.now();
+  const rateLimits = getGrokRateLimits();
+  const delays = accounts.map(account => {
+    const info = rateLimits[account];
+    if (info?.availableAt) {
+      const expiry = getRateLimitExpiryDate(info.availableAt, info.detectedAt || now);
+      if (expiry && expiry.getTime() > now) return expiry.getTime() - now;
+    }
+    return GROK_V2_UNKNOWN_RATE_LIMIT_MS;
+  });
+  return delays.length > 0 ? Math.min(...delays) : GROK_V2_UNKNOWN_RATE_LIMIT_MS;
 }
 
 // ── GROKBOT V2 GENERATOR FUNCTION USING generateGrokVideoV2 ──
@@ -6352,12 +6384,17 @@ async function runGrokGeneratorV2(config: {
 
   const mergeEnabled = config.merge !== false;
   const totalRawToGenerate = mergeEnabled ? config.totalVideos * 2 : config.totalVideos;
+  let fatalError: string | null = null;
 
   if (!currentAccount) {
     log('🚫 Tidak ada Grok State yang tersedia (seluruh akun limit, kedaluwarsa, atau belum dikonfigurasi).');
     return { allAccountsLimited: true, completedRaw, totalRaw: totalRawToGenerate, limitedAccounts: accountPool, lastAccount: null };
   }
   let grokStateName = currentAccount.replace('grok-state-', '').replace('.json', '');
+  let grokSession: GrokV2Session | null = null;
+  const tooManyRequestAttempts = new Map<number, number>();
+  const interVideoDelayMs = 20 * 1000;
+  const maxTooManyRequestRetries = 6;
   const accountMode = config.autoSwitchGrokState ? `Auto Switch (${accountPool.length} akun)` : 'Akun Tetap';
   grokbotv2Progress.activeGrokState = currentAccount;
   grokbotv2Progress.autoSwitchGrokState = !!config.autoSwitchGrokState;
@@ -6403,9 +6440,20 @@ async function runGrokGeneratorV2(config: {
       imagePath = path.join(BAHAN_DIR, config.bahanFolder, pickedImg);
     }
 
+    grokbotv2Progress.currentVideo = i + 1;
+    grokbotv2Progress.currentVideoTotal = totalRawToGenerate;
+    grokbotv2Progress.currentVideoProgress = 0;
+    grokbotv2Progress.currentPhase = `Memulai raw #${i + 1}/${totalRawToGenerate}`;
+    grokbotv2BroadcastProgress();
     log(`🎬 [GROK_V2] Memulai generate raw #${i + 1}/${totalRawToGenerate} via Grok V2 API...`);
 
     try {
+      if (!grokSession || grokSession.stateName !== grokStateName) {
+        if (grokSession) await closeGrokV2Session(grokSession);
+        log(`[GROK_V2] Membuka satu sesi Grok untuk batch akun ${grokStateName}...`);
+        grokSession = await createGrokV2Session(grokStateName, config.headless ?? true);
+      }
+      let lastGrokMessage = '';
       const res = await generateGrokVideoV2({
         stateName: grokStateName,
         promptText,
@@ -6416,10 +6464,16 @@ async function runGrokGeneratorV2(config: {
         mode: config.mode || 'Video',
         headless: config.headless ?? true
       }, (msg, pct) => {
+        if (msg && msg !== lastGrokMessage) {
+          lastGrokMessage = msg;
+          log(`[GROK_V2_PHASE] ${msg}`);
+        }
+        grokbotv2Progress.currentVideoProgress = Math.min(100, Math.max(0, Number(pct) || 0));
+        grokbotv2Progress.currentPhase = msg || grokbotv2Progress.currentPhase;
         const overallGen = Math.round(((i + (pct / 100)) / totalRawToGenerate) * 100);
         grokbotv2Progress.generate = Math.min(99, overallGen);
         grokbotv2BroadcastProgress();
-      });
+      }, grokSession);
 
       if (res && res.savePath && fs.existsSync(res.savePath)) {
         const destDir = mergeEnabled ? rawDir : targetDir;
@@ -6471,10 +6525,40 @@ async function runGrokGeneratorV2(config: {
             }
           }
         }
+
+        tooManyRequestAttempts.delete(i);
+        if (i + 1 < totalRawToGenerate) {
+          grokbotv2Progress.currentPhase = 'Jeda antar-video untuk mencegah Too Many Requests';
+          grokbotv2BroadcastProgress();
+          log(`[GROK_V2] Jeda ${Math.ceil(interVideoDelayMs / 1000)} detik sebelum raw berikutnya...`);
+          await waitWhileRunning(interVideoDelayMs, () => grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning);
+        }
       } else {
-        log(`❌ [GROK_V2] Gagal generate raw #${i + 1}`);
+        fatalError = `Gagal generate raw #${i + 1}`;
+        log(`❌ [GROK_V2] ${fatalError}`);
+        break;
       }
     } catch (err: any) {
+      if (err instanceof TooManyRequestsError || err.name === 'TooManyRequestsError') {
+        const attempts = (tooManyRequestAttempts.get(i) || 0) + 1;
+        tooManyRequestAttempts.set(i, attempts);
+        if (attempts <= maxTooManyRequestRetries) {
+          const retryAfterMs = Number((err as any).retryAfterMs) || 0;
+          const baseDelayMs = Math.max(interVideoDelayMs, retryAfterMs || 30 * 1000);
+          const backoffMs = Math.min(5 * 60 * 1000, baseDelayMs * Math.pow(2, attempts - 1));
+          const waitSeconds = Math.ceil(backoffMs / 1000);
+          grokbotv2Progress.currentPhase = `Too Many Requests — menunggu ${waitSeconds} detik (percobaan ${attempts}/${maxTooManyRequestRetries})`;
+          grokbotv2BroadcastProgress();
+          log(`⏳ [GROK_V2 BACKOFF] HTTP 429 bukan limit akun. Menunggu ${waitSeconds} detik lalu mengulang raw #${i + 1} (percobaan ${attempts}/${maxTooManyRequestRetries})...`);
+          await waitWhileRunning(backoffMs, () => grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning);
+          if (!grokbotv2Running && !infiniteGenV2Running && !grokbotv2FullAutoRunning) break;
+          i--;
+          continue;
+        }
+        fatalError = `Grok tetap mengirim Too Many Requests setelah ${maxTooManyRequestRetries} percobaan pada raw #${i + 1}`;
+        log(`❌ [GROK_V2] ${fatalError}`);
+        break;
+      }
       if (err instanceof RateLimitError || err.name === 'RateLimitError') {
         // ── Deteksi Rate Limit: catat ke shared grokRateLimits dan hentikan loop ──
         const grokStateKey = config.grokState || 'indra';
@@ -6485,6 +6569,10 @@ async function runGrokGeneratorV2(config: {
         log(`🚫 [GROK_V2 RATE LIMIT] Akun "${limitedState}" terkena rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
         grokbotv2BroadcastProgress(); // broadcast agar UI langsung update
         const replacement: string | undefined = accountPool.find(account => account !== limitedState && !isGrokV2AccountRateLimited(account));
+        if (grokSession) {
+          await closeGrokV2Session(grokSession);
+          grokSession = null;
+        }
         if (config.autoSwitchGrokState && replacement) {
           const previousName = limitedState.replace('grok-state-', '').replace('.json', '');
           currentAccount = replacement;
@@ -6504,8 +6592,15 @@ async function runGrokGeneratorV2(config: {
         sendWAMessageV2(allLimitMessage);
         break;
       }
-      log(`❌ [GROK_V2 ERROR] ${err.message}`);
+      fatalError = err.message || String(err);
+      log(`❌ [GROK_V2 ERROR] ${fatalError}`);
+      break;
     }
+  }
+
+  if (grokSession) {
+    await closeGrokV2Session(grokSession);
+    grokSession = null;
   }
 
   const allAccountsLimited = completedRaw < totalRawToGenerate && accountPool.every(isGrokV2AccountRateLimited);
@@ -6513,7 +6608,7 @@ async function runGrokGeneratorV2(config: {
   if (completedRaw >= totalRawToGenerate) grokbotv2Progress.merge = 100;
   grokbotv2BroadcastProgress();
   log(`${allAccountsLimited ? '🚫' : '✅'} [GROK_V2_GENERATOR] Selesai memproses generasi video V2 untuk ${tiktokStateName}`);
-  return { allAccountsLimited, completedRaw, totalRaw: totalRawToGenerate, limitedAccounts, lastAccount: currentAccount };
+  return { allAccountsLimited, completedRaw, totalRaw: totalRawToGenerate, limitedAccounts, lastAccount: currentAccount, fatalError: fatalError || undefined };
 }
 
 type InfiniteStockTarget = {
@@ -6937,7 +7032,6 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
 
   (async () => {
     const batchSize = 30;
-    const cooldownMs = 3 * 24 * 60 * 60 * 1000;
     try {
       while (infiniteGenV2Running) {
         const data = loadGrokbotV2Data();
@@ -6968,9 +7062,11 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
             const targetCfg = data.states[item.stateFile];
             return getGrokV2AccountPool(!!targetCfg.autoSwitchGrokState, targetCfg.grokState);
           }))];
+          const cooldownMs = getGrokV2RateLimitWaitMs(allAccounts);
           const resumeAt = new Date(Date.now() + cooldownMs);
           infiniteGenV2WaitInfo = { rateLimitTime: new Date().toISOString(), resumeTime: resumeAt.toISOString(), targetState: 'Semua state' };
-          const limitMessage = `🚫 [GrokbotV2] Semua Grok State yang tersedia terkena rate limit (${allAccounts.map(a => a.replace('grok-state-', '').replace('.json', '')).join(', ')}). Infinite Generate dilanjutkan 3 hari lagi (${resumeAt.toLocaleString('id-ID')}).`;
+          const waitMinutes = Math.max(1, Math.ceil(cooldownMs / 60000));
+          const limitMessage = `🚫 [GrokbotV2] Semua Grok State yang tersedia terkena rate limit (${allAccounts.map(a => a.replace('grok-state-', '').replace('.json', '')).join(', ')}). Infinite Generate dilanjutkan sekitar ${waitMinutes} menit lagi (${resumeAt.toLocaleString('id-ID')}).`;
           grokbotv2Log(limitMessage);
           sendWAMessageV2(limitMessage);
           await waitWhileRunning(cooldownMs, () => infiniteGenV2Running);
@@ -6999,7 +7095,7 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
         grokbotv2Log(startMessage);
         sendWAMessageV2(startMessage);
 
-        const generationResult = await runGrokGeneratorV2({
+    const generationResult = await runGrokGeneratorV2({
           stateFile: target.stateFile,
           grokState: cfg.grokState,
           bahanFolder: cfg.bahanFolder,
@@ -7014,9 +7110,13 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
           audioFolder: cfg.audioFolder,
           customDownloadDir: targetDir,
           autoSwitchGrokState: !!cfg.autoSwitchGrokState
-        }, grokbotv2Log);
+    }, grokbotv2Log);
 
         if (generationResult.allAccountsLimited) grokbotv2Log(`🔎 Seluruh akun untuk ${target.stateName} limit; mengaudit akun state lain.`);
+        if (generationResult.fatalError) {
+          grokbotv2Log(`❌ Infinite Generate dihentikan karena error fatal: ${generationResult.fatalError}`);
+          break;
+        }
         await waitWhileRunning(2000, () => infiniteGenV2Running);
       }
     } catch (error: any) {
