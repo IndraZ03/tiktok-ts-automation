@@ -8086,6 +8086,20 @@ app.post('/api/vidabot/schedule-only', async (req, res) => {
     const videoToUpload = path.join(stateDownloadDir, pendingVideos[0]);
     vidabotRunning = true;
     res.json({ success: true, message: `Memulai upload 1 video untuk ${tiktokStateName}` });
+    const onVideoUploaded = (videoFilename) => {
+        marks[videoFilename] = true;
+        fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
+        const uploadedVideoPath = path.join(stateDownloadDir, videoFilename);
+        if (fs.existsSync(uploadedVideoPath)) {
+            try {
+                fs.unlinkSync(uploadedVideoPath);
+                vidabotLog(`File video dihapus setelah upload: ${videoFilename}`);
+            }
+            catch (e) {
+                vidabotLog(`Gagal menghapus file ${videoFilename}: ${e.message}`);
+            }
+        }
+    };
     try {
         vidabotLog(`🚀 [${tiktokStateName}] Memulai upload video: ${pendingVideos[0]}`);
         await runUpload({
@@ -8106,11 +8120,9 @@ app.post('/api/vidabot/schedule-only', async (req, res) => {
             headless: isHeadlessEnabledVida(stateFile),
             threeUploadsPerHour: !!cfg.threeUploadsPerHour,
             randomizeIntervalSchedule: true
-        }, vidabotLog, undefined, items => {
+        }, vidabotLog, onVideoUploaded, items => {
             sendWAMessageVida(buildScheduleListMessage(tiktokStateName, items));
         });
-        marks[pendingVideos[0]] = true;
-        fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
         vidabotLog(`✓ [${tiktokStateName}] Video berhasil diupload dan ditandai!`);
         sendWAMessageVida(`🎬 [${tiktokStateName}] Video ${pendingVideos[0]} berhasil diupload ke TikTok!`);
         sendWAMessageVida(`✅ [${tiktokStateName}] Upload schedule selesai.`);
@@ -8188,6 +8200,20 @@ app.post('/api/vidabot/schedule', async (req, res) => {
                 if (freshPending.length > 0) {
                     try {
                         vidabotLog(`🚀 [${tiktokStateName}] Mengupload: ${freshPending[0]}`);
+                        const onVideoUploaded = (videoFilename) => {
+                            marks[videoFilename] = true;
+                            fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
+                            const uploadedVideoPath = path.join(stateDownloadDir, videoFilename);
+                            if (fs.existsSync(uploadedVideoPath)) {
+                                try {
+                                    fs.unlinkSync(uploadedVideoPath);
+                                    vidabotLog(`File video dihapus setelah upload: ${videoFilename}`);
+                                }
+                                catch (e) {
+                                    vidabotLog(`Gagal menghapus file ${videoFilename}: ${e.message}`);
+                                }
+                            }
+                        };
                         await runUpload({
                             stateFile: sf,
                             statesDir: STATES_DIR,
@@ -8206,11 +8232,9 @@ app.post('/api/vidabot/schedule', async (req, res) => {
                             headless: isHeadlessEnabledVida(sf),
                             threeUploadsPerHour: !!cfg.threeUploadsPerHour,
                             randomizeIntervalSchedule: true
-                        }, vidabotLog, undefined, items => {
+                        }, vidabotLog, onVideoUploaded, items => {
                             sendWAMessageVida(buildScheduleListMessage(tiktokStateName, items));
                         });
-                        marks[freshPending[0]] = true;
-                        fs.writeFileSync(marksFile, JSON.stringify(marks, null, 2));
                         vidabotLog(`✓ [${tiktokStateName}] Berhasil upload!`);
                         sendWAMessageVida(`✅ [${tiktokStateName}] Upload schedule selesai.`);
                     }
