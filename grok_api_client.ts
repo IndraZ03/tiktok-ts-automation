@@ -106,7 +106,7 @@ export async function createGrokV2Session(stateName = 'indra', headless = true, 
     page.on('request', request => {
       if (!request.url().startsWith('https://grok.com/')) return;
       const headers = request.headers();
-      if (!session.statsigId && headers['x-statsig-id']) session.statsigId = headers['x-statsig-id'];
+      if (headers['x-statsig-id']) session.statsigId = headers['x-statsig-id'];
       for (const name of metadataHeaders) {
         if (!session.requestMetadata[name] && headers[name]) session.requestMetadata[name] = headers[name];
       }

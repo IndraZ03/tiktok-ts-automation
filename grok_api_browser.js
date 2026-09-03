@@ -105,13 +105,47 @@
       return null;
     }
 
-    function apiHeaders(extra) {
+    function apiHeaders(extra, options) {
+      const opts = options || {};
       const headers = Object.assign({
-        Accept: '*/*',
-        'X-Xai-Request-Id': crypto.randomUUID()
+        Accept: '*/*'
       }, extra || {});
-      if (o.statsigId) headers['X-Statsig-Id'] = o.statsigId;
+      if (opts.requestId !== false) headers['X-Xai-Request-Id'] = crypto.randomUUID();
+      if (opts.statsig !== false && o.statsigId) headers['X-Statsig-Id'] = o.statsigId;
       return headers;
+    }
+
+    async function waitForUploadedAsset(assetId) {
+      // The upload response arrives before Imagine has finished settling the asset.
+      // The real page waits for the attachment preview before creating the conversation.
+      await sleep(8000);
+      const deadline = Date.now() + 30000;
+      let lastError = '';
+      while (Date.now() < deadline) {
+        try {
+          const assetResponse = await fetchWithTimeout('https://grok.com/rest/assets/' + assetId, {
+            method: 'GET',
+            headers: apiHeaders(),
+            credentials: 'include'
+          }, 45000);
+          const assetText = await assetResponse.text();
+          if (assetResponse.ok) {
+            let asset = null;
+            try { asset = JSON.parse(assetText); } catch {}
+            if (asset && asset.assetId === assetId && asset.key && asset.mimeType
+              && asset.isDeleted !== true && asset.isLatest !== false) {
+              return asset;
+            }
+            lastError = 'respons asset belum lengkap';
+          } else {
+            lastError = 'HTTP ' + assetResponse.status + ': ' + assetText.slice(0, 160);
+          }
+        } catch (error) {
+          lastError = String((error && error.message) || error);
+        }
+        await sleep(1500);
+      }
+      throw new Error('Asset gambar belum siap setelah menunggu 38 detik: ' + lastError);
     }
 
     function handleLine(line) {
@@ -153,7 +187,9 @@
 
         const upload = await fetchWithTimeout('https://grok.com/http/upload-file-v2/direct', {
           method: 'POST',
-          headers: apiHeaders(),
+          // The browser upload request only carries the multipart content and
+          // browser-managed tracing headers; request-id/statsig belong to REST calls.
+          headers: apiHeaders({}, { requestId: false, statsig: false }),
           credentials: 'include',
           body: form
         }, 120000);
@@ -182,13 +218,7 @@
         if (!assetId) {
           throw new Error('Upload gambar tanpa fileMetadataId: ' + uploadText.slice(0, 200));
         }
-        try {
-          await fetchWithTimeout('https://grok.com/rest/assets/' + assetId, {
-            method: 'GET',
-            headers: apiHeaders(),
-            credentials: 'include'
-          }, 45000);
-        } catch (_) {}
+        await waitForUploadedAsset(assetId);
         STATE.message = 'Gambar terunggah';
         STATE.progress = 28;
       }
