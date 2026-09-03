@@ -13,6 +13,8 @@ import { runUpload, stopUploader, getIsRunning, type SchedulePlanItem } from './
 import { runFacebookUpload, stopFacebookUploader, getFacebookIsRunning } from './facebook-uploader.js';
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress, getGrokRateLimits, clearGrokRateLimit, setGrokRateLimit } from './grok-uploader.js';
 import { generateGrokVideoV2, createGrokV2Session, closeGrokV2Session, RateLimitError, TooManyRequestsError, type GrokV2Session } from './grok_api_client.js';
+import { buildDebugInitScript, attachPageDebugListeners, collectFetchLog, filterFetchLogLegends, dumpFetchLogToFile } from './grokv2-debug.js';
+import { generateGrokVideoBrowser } from './grok_browser_client.js';
 import { generateVidabotVideo } from './vidabot_api_client.js';
 import {
   runVidabotGenerator,
@@ -2707,6 +2709,91 @@ app.post('/api/grokv2test/generate', async (req, res) => {
 //  VIDABOT TEST APIs (/vidabotest & /vidabot)
 // ═══════════════════════════════════════════════════════════
 const VIDABOT_DOWNLOAD_DIR = path.join(process.cwd(), 'vidabot-downloads');
+
+// Browser automation variant based on methodgrokbrowser.md
+app.get('/grokv3test', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'grokv3test.html'));
+});
+
+app.get('/api/grokv3test/prompts', (req, res) => {
+  if (!fs.existsSync(PROMPT_DIR)) fs.mkdirSync(PROMPT_DIR, { recursive: true });
+  const files = fs.readdirSync(PROMPT_DIR).filter(f => f.endsWith('.json'));
+  res.json({ files });
+});
+
+app.get('/api/grokv3test/prompt-content/:filename', (req, res) => {
+  const { filename } = req.params;
+  const filePath = path.join(PROMPT_DIR, filename);
+  if (!fs.existsSync(filePath)) {
+    return res.status(404).json({ error: 'File prompt tidak ditemukan' });
+  }
+  try {
+    const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+    let content = data.prompt || '';
+    if (!content && Array.isArray(data.prompts) && data.prompts.length > 0) {
+      content = data.prompts[0];
+    }
+    res.json({ success: true, prompt: content, fullData: data });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.get('/api/grokv3test/bahan', (req, res) => {
+  if (!fs.existsSync(BAHAN_DIR)) fs.mkdirSync(BAHAN_DIR, { recursive: true });
+  const folders = fs.readdirSync(BAHAN_DIR).filter(f => {
+    try {
+      return fs.statSync(path.join(BAHAN_DIR, f)).isDirectory();
+    } catch {
+      return false;
+    }
+  });
+  const bahanMap: Record<string, string[]> = {};
+  const imageExts = ['.jpg', '.jpeg', '.png', '.webp', '.bmp'];
+
+  for (const folder of folders) {
+    const folderPath = path.join(BAHAN_DIR, folder);
+    const files = fs.readdirSync(folderPath).filter(f => imageExts.includes(path.extname(f).toLowerCase()));
+    bahanMap[folder] = files;
+  }
+  res.json({ folders, bahanMap });
+});
+
+app.post('/api/grokv3test/generate', async (req, res) => {
+  const { stateName, promptText, bahanFolder, bahanFile, resolution, duration, aspectRatio, headless } = req.body;
+
+  if (!promptText || promptText.trim() === '') {
+    return res.status(400).json({ error: 'Prompt teks harus diisi' });
+  }
+
+  let imagePath: string | undefined = undefined;
+  if (bahanFolder && bahanFile) {
+    imagePath = path.join(BAHAN_DIR, bahanFolder, bahanFile);
+    if (!fs.existsSync(imagePath)) {
+      return res.status(400).json({ error: `File gambar bahan tidak ditemukan di: ${imagePath}` });
+    }
+  }
+
+  try {
+    console.log(`[GROK_V3_TEST] Memulai browser generate (State: ${stateName || 'indra'}, Res: ${resolution}, Dur: ${duration}, Aspect: ${aspectRatio})...`);
+    const result = await generateGrokVideoBrowser({
+      stateName: stateName || 'indra',
+      promptText,
+      imagePath,
+      resolution: resolution || '720p',
+      duration: duration || '10s',
+      aspectRatio: aspectRatio || '9:16',
+      headless: headless === true
+    }, (msg, progress) => {
+      console.log(`[GROK_V3_TEST] ${msg}${typeof progress === 'number' ? ` (${progress}%)` : ''}`);
+    });
+
+    res.json({ success: true, result });
+  } catch (err: any) {
+    console.error(`[GROK_V3_TEST ERROR] ${err.message}`);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 app.get('/vidabotest', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'vidabotest.html'));
@@ -6374,6 +6461,13 @@ async function runGrokGeneratorV2(config: {
   const tiktokStateName = config.stateFile.replace('tiktok-state-', '').replace('.json', '');
   const targetDir = config.customDownloadDir || path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
   const rawDir = path.join(targetDir, 'raw');
+  // ── Debug log lengkap (grokv2-debug.js): semua event fetch/console di halaman Grok ──
+  const grokDebugDir = path.join(__dirname, 'grokbotv2-logs');
+  if (!fs.existsSync(grokDebugDir)) fs.mkdirSync(grokDebugDir, { recursive: true });
+  const debugRunStamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const debugRunLogPath = path.join(grokDebugDir, `run-${tiktokStateName}-${debugRunStamp}.log`);
+  const debugWrite = (s: string) => { try { fs.appendFileSync(debugRunLogPath, s + '\n'); } catch {} };
+  const debugLegendCache = new Set<string>(); // hindari baris yang sama berulang di UI
   const accountPool = getGrokV2AccountPool(!!config.autoSwitchGrokState, config.grokState);
   const limitedAccounts: string[] = [];
   let currentAccount = accountPool.find(account => !isGrokV2AccountRateLimited(account)) || null;
@@ -6451,7 +6545,23 @@ async function runGrokGeneratorV2(config: {
       if (!grokSession || grokSession.stateName !== grokStateName) {
         if (grokSession) await closeGrokV2Session(grokSession);
         log(`[GROK_V2] Membuka satu sesi Grok untuk batch akun ${grokStateName}...`);
-        grokSession = await createGrokV2Session(grokStateName, config.headless ?? true);
+        grokSession = await createGrokV2Session(grokStateName, config.headless ?? true, {
+          initExtraScript: buildDebugInitScript(fs.readFileSync(path.join(__dirname, 'grok_api_browser.js'), 'utf-8')),
+          afterPageCreated: (page) => {
+            attachPageDebugListeners(page, (event, detail) => {
+              const line = `[${new Date().toISOString()}] [${grokStateName}] ${detail}`;
+              debugWrite(line);
+              // Tampilkan hanya event penting ke console/UI agar tidak membanjiri SSE.
+              if (/429|403|rate.?limit|stale|out of date|pageerror|requestfailed|generate END|generate START/i.test(detail)) {
+                log(`[GROK_V2_DBG] ${detail.slice(0, 320)}`);
+                if (!debugLegendCache.has(detail)) {
+                  debugLegendCache.add(detail);
+                  grokbotv2Log(`[GROK_V2_DBG] ${detail.slice(0, 320)}`);
+                }
+              }
+            });
+          },
+        });
       }
       let lastGrokMessage = '';
       const res = await generateGrokVideoV2({
@@ -6540,6 +6650,13 @@ async function runGrokGeneratorV2(config: {
       }
     } catch (err: any) {
       if (err instanceof TooManyRequestsError || err.name === 'TooManyRequestsError') {
+        // ── Debug: tulis fetch log halaman ke file sebelum backoff/close ──
+        if (grokSession && grokSession.page) {
+          const dump = await dumpFetchLogToFile(grokSession.page, grokDebugDir, `429-${grokStateName}`);
+          log(`[GROK_V2_DBG] 🧾 Fetch log 429 disimpan: ${dump.fname} (${dump.count} entri)`);
+          const legend = filterFetchLogLegends(await collectFetchLog(grokSession.page), 30);
+          for (const l of legend) log(`[GROK_V2_DBG] ${l}`);
+        }
         const attempts = (tooManyRequestAttempts.get(i) || 0) + 1;
         tooManyRequestAttempts.set(i, attempts);
         if (attempts <= maxTooManyRequestRetries) {
@@ -6560,6 +6677,13 @@ async function runGrokGeneratorV2(config: {
         break;
       }
       if (err instanceof RateLimitError || err.name === 'RateLimitError') {
+        // ── Debug: tulis fetch log halaman ke file sebelum close/switch akun ──
+        if (grokSession && grokSession.page) {
+          const dump = await dumpFetchLogToFile(grokSession.page, grokDebugDir, `ratelimit-${grokStateName}`);
+          log(`[GROK_V2_DBG] 🧾 Fetch log rate limit disimpan: ${dump.fname} (${dump.count} entri)`);
+          const legend = filterFetchLogLegends(await collectFetchLog(grokSession.page), 30);
+          for (const l of legend) log(`[GROK_V2_DBG] ${l}`);
+        }
         // ── Deteksi Rate Limit: catat ke shared grokRateLimits dan hentikan loop ──
         const grokStateKey = config.grokState || 'indra';
         const limitedState: string = currentAccount || grokStateKey;

@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
+import { closeGrokV2Session, createGrokV2Session, generateGrokVideoV2, RateLimitError, TooManyRequestsError } from './grok_api_client.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 let activeBrowsers = [];
@@ -205,8 +206,7 @@ export async function runGrokGenerator(config, log, baseDir) {
     browserProgress = perBrowser.map((t, i) => ({
         id: i, status: 'idle', current: 0, total: t, progress: 0, message: 'Menunggu...',
     }));
-    const script = getGrokScript(baseDir);
-    const workers = perBrowser.map((count, idx) => runBrowserWorker(idx, count, config, stateFilePath, stateDownloadDir, bahanFolderPath, promptFilePath, script, log));
+    const workers = perBrowser.map((count, idx) => runApiWorker(idx, count, config, stateDownloadDir, bahanFolderPath, promptFilePath, log));
     await Promise.allSettled(workers);
     for (const b of activeBrowsers) {
         try {
@@ -221,6 +221,120 @@ export async function runGrokGenerator(config, log, baseDir) {
 // ════════════════════════════════════════════════════════════
 //  PER-BROWSER WORKER
 // ════════════════════════════════════════════════════════════
+async function runApiWorker(idx, count, config, downloadDir, bahanFolderPath, promptFilePath, log) {
+    const tag = `[B${idx}]`;
+    const bp = browserProgress[idx];
+    const stateName = config.stateFile.replace('grok-state-', '').replace('.json', '');
+    let session = null;
+    bp.status = 'running';
+    bp.message = 'Launching API session...';
+    try {
+        if (config.mode.toLowerCase() === 'image') {
+            throw new Error('Metode methodgrok hanya mendukung generate video.');
+        }
+        session = await createGrokV2Session(stateName, config.headless ?? true);
+        activeBrowsers.push(session.browser);
+        log(`${tag} API session Grok siap (methodgrok)`);
+        for (let i = 0; i < count && isRunning; i++) {
+            if (grokRateLimits[config.stateFile]) {
+                log(`${tag} Rate limit terdeteksi, menghentikan antrean prompt baru.`);
+                break;
+            }
+            bp.current = i;
+            bp.progress = 0;
+            bp.message = `Generating ${i + 1}/${count}`;
+            const prompt = loadPromptFromFile(promptFilePath);
+            if (!prompt) {
+                log(`${tag} Prompt error`);
+                stats.failed++;
+                bp.status = 'error';
+                break;
+            }
+            let imagePath;
+            if (config.bahanFolder && fs.existsSync(bahanFolderPath)) {
+                imagePath = pickRandomImage(bahanFolderPath) || undefined;
+            }
+            log(`${tag} #${i + 1}/${count} via methodgrok - "${prompt.substring(0, 50)}..."`);
+            if (imagePath)
+                log(`${tag} Gambar referensi: ${path.basename(imagePath)}`);
+            try {
+                const result = await generateGrokVideoV2({
+                    stateName,
+                    promptText: prompt,
+                    imagePath,
+                    resolution: config.resolution,
+                    duration: config.duration,
+                    aspectRatio: config.aspectRatio,
+                    mode: config.mode,
+                    headless: config.headless
+                }, (msg, progress) => {
+                    bp.progress = progress;
+                    bp.message = msg;
+                    log(`${tag} ${msg}`);
+                }, session);
+                stats.success++;
+                const useMerge = !!config.merge;
+                const targetDir = useMerge ? path.join(downloadDir, 'raw') : downloadDir;
+                if (!fs.existsSync(targetDir))
+                    fs.mkdirSync(targetDir, { recursive: true });
+                const targetName = `grok_${Date.now()}_b${idx}_${i + 1}.mp4`;
+                const targetPath = path.join(targetDir, targetName);
+                if (path.resolve(result.savePath) !== path.resolve(targetPath)) {
+                    fs.renameSync(result.savePath, targetPath);
+                }
+                log(`${tag} Tersimpan: ${useMerge ? 'raw/' : ''}${targetName}`);
+                if (useMerge) {
+                    bp.message = `Saved raw #${i + 1}`;
+                    await checkAndMergeVideos(downloadDir, config.audioFolder, log);
+                }
+                else {
+                    stats.saved++;
+                    bp.message = `Saved #${i + 1}`;
+                }
+            }
+            catch (e) {
+                if (e instanceof RateLimitError) {
+                    grokRateLimits[config.stateFile] = { availableAt: e.availableAt || null, detectedAt: Date.now() };
+                    log(`${tag} Rate limited. ${e.availableAt ? 'Tersedia kembali: ' + e.availableAt : ''}`);
+                    stats.failed++;
+                    bp.message = 'Rate limited';
+                    break;
+                }
+                if (e instanceof TooManyRequestsError) {
+                    const availableAt = e.retryAfterMs > 0 ? new Date(Date.now() + e.retryAfterMs).toISOString() : null;
+                    grokRateLimits[config.stateFile] = { availableAt, detectedAt: Date.now() };
+                    log(`${tag} Too many requests. Menghentikan antrean prompt baru.`);
+                    stats.failed++;
+                    bp.message = 'Too many requests';
+                    break;
+                }
+                log(`${tag} Error: ${e.message}`);
+                stats.failed++;
+                bp.message = e.message;
+            }
+            bp.current = i + 1;
+            bp.progress = 100;
+            if (isRunning && i < count - 1)
+                await new Promise(resolve => setTimeout(resolve, 2000));
+        }
+        bp.status = 'done';
+        bp.current = count;
+        bp.progress = 100;
+        bp.message = `Done (${count})`;
+        log(`${tag} Worker API done`);
+    }
+    catch (e) {
+        log(`${tag} Fatal: ${e.message}`);
+        bp.status = 'error';
+        bp.message = e.message;
+    }
+    finally {
+        if (session) {
+            await closeGrokV2Session(session);
+            activeBrowsers = activeBrowsers.filter(browser => browser !== session?.browser);
+        }
+    }
+}
 async function runBrowserWorker(idx, count, config, stateFilePath, downloadDir, bahanFolderPath, promptFilePath, script, log) {
     const tag = `[B${idx}]`;
     const bp = browserProgress[idx];

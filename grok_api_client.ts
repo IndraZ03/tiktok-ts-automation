@@ -34,6 +34,41 @@ export interface GrokV2Session {
   requestMetadata: Record<string, string>;
 }
 
+async function waitForGrokImagineReady(page: Page, context: BrowserContext, timeoutMs = 90000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  try { await page.waitForLoadState('load', { timeout: 30000 }); } catch {}
+  try { await page.waitForLoadState('networkidle', { timeout: 30000 }); } catch {}
+
+  while (Date.now() < deadline) {
+    const cookies = await context.cookies('https://grok.com');
+    const hasClearance = cookies.some(cookie => cookie.name === 'cf_clearance');
+    const state = await page.evaluate(async () => {
+      const hasApi = typeof (window as any).__GROK_API_V2_GENERATE === 'function';
+      let authenticated = false;
+      let stale = false;
+      try {
+        const res = await fetch('https://grok.com/api/auth/session', { credentials: 'include' });
+        const text = await res.text();
+        authenticated = res.ok && /"session"\s*:/.test(text) && !/"session"\s*:\s*null/.test(text);
+        stale = res.status === 403 && /out of date|reload to continue/i.test(text);
+      } catch {}
+      return { hasApi, authenticated, stale, readyState: document.readyState };
+    });
+
+    if (state.stale) {
+      await page.reload({ waitUntil: 'load', timeout: 60000 });
+      try { await page.waitForLoadState('networkidle', { timeout: 30000 }); } catch {}
+    } else if (state.hasApi && state.authenticated && (hasClearance || Date.now() + 15000 > deadline)) {
+      await page.waitForTimeout(8000);
+      return;
+    }
+
+    await page.waitForTimeout(2000);
+  }
+
+  throw new Error('Grok Imagine belum siap setelah menunggu halaman selesai loading.');
+}
+
 export async function checkGrokQuota(stateName = 'indra') {
   const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
   if (!fs.existsSync(statePath)) throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
@@ -53,7 +88,12 @@ export async function checkGrokQuota(stateName = 'indra') {
   return { account: session.session ? `${session.session.givenName} (${session.session.email})` : 'Unauthenticated', quota };
 }
 
-export async function createGrokV2Session(stateName = 'indra', headless = true): Promise<GrokV2Session> {
+export interface GrokV2SessionOptions {
+  initExtraScript?: string;
+  afterPageCreated?: (page: Page, context: BrowserContext) => Promise<void> | void;
+}
+
+export async function createGrokV2Session(stateName = 'indra', headless = true, options: GrokV2SessionOptions = {}): Promise<GrokV2Session> {
   const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
   if (!fs.existsSync(statePath)) throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
 
@@ -72,22 +112,24 @@ export async function createGrokV2Session(stateName = 'indra', headless = true):
       }
     });
 
+    // Opsi debug (grokv2-debug.js):
+    //   options.initExtraScript  = string init-script tambahan (fetch logger, dll)
+    //   options.afterPageCreated = dipanggil sebelum navigasi (pasang listener debug)
+    if (options && typeof options.afterPageCreated === 'function') {
+      await options.afterPageCreated(page, context);
+    }
+
     const browserScriptPath = path.join(process.cwd(), 'grok_api_browser.js');
     if (!fs.existsSync(browserScriptPath)) throw new Error(`File browser script tidak ditemukan: ${browserScriptPath}`);
     const browserScript = fs.readFileSync(browserScriptPath, 'utf-8');
+    const extraInit = (options && typeof options.initExtraScript === 'string') ? options.initExtraScript : '';
     await page.addInitScript({ content: browserScript + `
       Object.defineProperty(navigator, 'webdriver', {
         get: function () { return undefined; }
       });
-    ` });
-    await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 60000 });
-    // The anti-bot clearance cookie is often issued shortly after the first page load.
-    for (let attempt = 0; attempt < 10; attempt++) {
-      const cookies = await context.cookies('https://grok.com');
-      if (cookies.some(cookie => cookie.name === 'cf_clearance')) break;
-      await page.waitForTimeout(1000);
-    }
-    await page.waitForTimeout(2000);
+    ` + (extraInit ? '\n' + extraInit : '') });
+    await page.goto('https://grok.com/imagine', { waitUntil: 'load', timeout: 60000 });
+    await waitForGrokImagineReady(page, context);
     return session;
   } catch (error) {
     try { await browser.close(); } catch {}
@@ -97,11 +139,35 @@ export async function createGrokV2Session(stateName = 'indra', headless = true):
 
 export class TooManyRequestsError extends Error {
   retryAfterMs: number;
+  fetchTrace?: any[];
   constructor(retryAfterMs = 0) {
     super('Grok mengirim HTTP 429 Too Many Requests');
     this.name = 'TooManyRequestsError';
     this.retryAfterMs = retryAfterMs;
   }
+}
+
+async function grabFetchTrace(page: Page | undefined, limit = 60): Promise<any[]> {
+  if (!page) return [];
+  try {
+    return await page.evaluate((n: number) => Array.isArray((window as any).__GROK_FETCH_LOG) ? (window as any).__GROK_FETCH_LOG.slice(-n) : [], limit);
+  } catch (_) {
+    return [];
+  }
+}
+
+function fetchTraceLegend(trace: any[], max = 25): string[] {
+  const rows: string[] = [];
+  for (const e of trace || []) {
+    const important = (e.status >= 400 && e.status !== 404) || e.status === 0
+      || String(e.url).includes('conversations') || String(e.url).includes('quota_info')
+      || String(e.url).includes('upload-file-v2');
+    if (important) {
+      rows.push(`${e.method || '?'} ${e.status || 'ERR'} ${e.ms}ms ${String(e.url).slice(0, 100)}${e.note ? ' | ' + e.note.slice(0, 160) : ''}`);
+    }
+    if (rows.length >= max) break;
+  }
+  return rows;
 }
 
 export async function closeGrokV2Session(session: GrokV2Session | null | undefined): Promise<void> {
@@ -171,17 +237,16 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
 
     let result: any;
     try {
-      result = await runGeneration();
-      if (result?.stalePage) {
-        log('Grok meminta halaman dimuat ulang, mencoba ulang sekali...', 14);
-        await page.reload({ waitUntil: 'domcontentloaded', timeout: 60000 });
-        for (let attempt = 0; attempt < 10; attempt++) {
-          const cookies = await context.cookies('https://grok.com');
-          if (cookies.some(cookie => cookie.name === 'cf_clearance')) break;
-          await page.waitForTimeout(1000);
-        }
-        await page.waitForTimeout(2000);
+      for (let attempt = 0; attempt < 3; attempt++) {
         result = await runGeneration();
+        if (!result?.stalePage) break;
+        if (attempt >= 2) break;
+        log(`Grok meminta halaman dimuat ulang, refresh fresh attempt ${attempt + 1}/2...`, 14);
+        session.statsigId = '';
+        session.requestMetadata = {};
+        await page.goto(`https://grok.com/imagine?fresh=${Date.now()}`, { waitUntil: 'load', timeout: 60000 });
+        await waitForGrokImagineReady(page, context);
+        await page.waitForTimeout(5000);
       }
     } finally { clearInterval(poll); }
 
@@ -193,9 +258,21 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
         || !!detectedRateLimit?.transient;
       if (isTooManyRequests) {
         const retryAfterMs = Number(result?.retryAfterMs) || detectedRateLimit?.retryAfterMs || 0;
+        const fetchTrace = await grabFetchTrace(page);
+        const traceLegend = fetchTraceLegend(fetchTrace);
+        if (traceLegend.length > 0) {
+          log('Trace fetch rate-limit (http 429):\n' + traceLegend.join('\n'));
+        }
         log('Too many requests. Menunggu sebelum mencoba raw yang sama lagi.');
         if (ownsSession) await closeGrokV2Session(session);
-        throw new TooManyRequestsError(retryAfterMs);
+        const err429 = new TooManyRequestsError(retryAfterMs);
+        err429.fetchTrace = fetchTrace;
+        throw err429;
+      }
+      const fetchTrace = await grabFetchTrace(page);
+      const traceLegend = fetchTraceLegend(fetchTrace);
+      if (traceLegend.length > 0) {
+        log('Trace fetch rate-limit (kuota akun):\n' + traceLegend.join('\n'));
       }
       log('Rate limit! Tersedia kembali: ' + (availableAt || 'tidak diketahui'));
       if (ownsSession) await closeGrokV2Session(session);

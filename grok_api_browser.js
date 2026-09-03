@@ -106,7 +106,7 @@
     }
 
     function apiHeaders(extra) {
-      const headers = Object.assign({}, o.requestMetadata || {}, {
+      const headers = Object.assign({
         Accept: '*/*',
         'X-Xai-Request-Id': crypto.randomUUID()
       }, extra || {});
@@ -159,10 +159,17 @@
         }, 120000);
         const uploadText = await upload.text();
         if (!upload.ok) {
+          STATE.stalePage = upload.status === 403
+            && /out of date|reload to continue/i.test(uploadText);
           const uploadRateLimit = upload.status === 429
             || /too\s+many\s+requests|rate\s*limit/i.test(uploadText)
             || /"code"\s*:\s*8\b/.test(uploadText);
-          if (uploadRateLimit) {
+          if (STATE.stalePage) {
+            STATE.status = 'stale';
+            STATE.error = uploadText.slice(0, 300);
+            STATE.httpStatus = upload.status;
+            return STATE;
+          } else if (uploadRateLimit) {
             markRateLimit(uploadText, upload.status, upload.headers);
             return STATE;
           }
@@ -175,6 +182,13 @@
         if (!assetId) {
           throw new Error('Upload gambar tanpa fileMetadataId: ' + uploadText.slice(0, 200));
         }
+        try {
+          await fetchWithTimeout('https://grok.com/rest/assets/' + assetId, {
+            method: 'GET',
+            headers: apiHeaders(),
+            credentials: 'include'
+          }, 45000);
+        } catch (_) {}
         STATE.message = 'Gambar terunggah';
         STATE.progress = 28;
       }
@@ -215,7 +229,11 @@
           || /"code"\s*:\s*8\b/.test(responseText);
         STATE.stalePage = response.status === 403
           && /out of date|reload to continue/i.test(responseText);
-        if (isRateLimit) {
+        if (STATE.stalePage) {
+          STATE.status = 'stale';
+          STATE.error = responseText.slice(0, 300);
+          STATE.httpStatus = response.status;
+        } else if (isRateLimit) {
           markRateLimit(responseText, response.status, response.headers);
         } else {
           throw new Error('Generate video gagal HTTP ' + response.status + ': ' + responseText.slice(0, 300));

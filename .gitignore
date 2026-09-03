@@ -15,3 +15,10 @@ _tmp_uploads/
 .DS_Store
 Thumbs.db
 *.log
+
+# Grok V2 test artifacts
+grov2test-downloads/
+grov2test-captured-*.json
+
+# Grokbot V2 debug logs
+grokbotv2-logs/
