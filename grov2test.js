@@ -201,10 +201,21 @@ function buildInitScript(browserScriptPath, log) {
 })();
 `;
 
-  // 3) Spoof webdriver seperti client asli.
-  const webdriverPatch = `
-Object.defineProperty(navigator, 'webdriver', { get: function () { return undefined; } });
-`;
+  // 3) Spoof webdriver secara aman dan idempotent. Pada Chrome tertentu
+  // properti ini non-configurable sehingga defineProperty langsung memicu
+  // "Cannot redefine property: webdriver".
+  const webdriverPatch = `(function () {
+  try {
+    if (window.__GROK_WEBDRIVER_SPOOFED) return;
+    window.__GROK_WEBDRIVER_SPOOFED = true;
+    var descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.configurable === false) return;
+    Object.defineProperty(Navigator.prototype, 'webdriver', {
+      configurable: true,
+      get: function () { return undefined; }
+    });
+  } catch (_) {}
+})();`;
 
   const combined = fetchPatch + '\n' + browserScript + '\n' + apiHook + '\n' + webdriverPatch;
   log.push(`  [Build] Init script disusun (${combined.length} chars): fetch-logger + grok_api_browser.js + wrapper generate`);
@@ -243,9 +254,9 @@ async function waitGrokReady(page, context, log, timeoutMs = 120000) {
     }
 
     if (stat.stale) {
-      log.push(`  [WARN] Deteksi STALE (session out of date / reload to continue) -> reload halaman...`);
-      await page.reload({ waitUntil: 'load', timeout: 60000 });
-      try { await page.waitForLoadState('networkidle', { timeout: 30000 }); } catch {}
+      // Code 7 invalidates the current browser context. Repeating reload on
+      // the same document only reproduces the stale response.
+      throw new Error('GROK_STALE_PAGE: code:7 / This page is out of date; buat sesi browser baru.');
     } else if (stat.hasApi && stat.authenticated && (hasClearance || Date.now() + 15000 > deadline)) {
       log.push(`  [Ready] Halaman siap dipakai: API ada, auth OK, cf_clearance=${hasClearance}`);
       await page.waitForTimeout(8000);
@@ -450,8 +461,8 @@ async function main() {
 
     // 6) Navigasi + tunggu siap
     banner(log, 'NAVIGASI KE GROK IMAGINE');
-    log.push(`  page.goto('https://grok.com/imagine') ...`);
-    await page.goto('https://grok.com/imagine', { waitUntil: 'load', timeout: 60000 });
+    log.push(`  page.goto('https://grok.com/imagine?fresh=...') ...`);
+    await page.goto(`https://grok.com/imagine?fresh=${Date.now()}`, { waitUntil: 'load', timeout: 60000 });
     await waitGrokReady(page, context, log, 120000);
     log.push(`  [Info] statsigId=${session.statsigId ? 'tertangkap' : 'KOSONG'} requestMetadata=${JSON.stringify(session.requestMetadata)}`);
 
@@ -476,7 +487,8 @@ async function main() {
     };
     log.push(`  Config: resolution=${genCfg.resolution} duration=${genCfg.duration}s aspectRatio=${genCfg.aspectRatio} image=${imagePath ? path.basename(imagePath) : '-'}`);
 
-    // 9) Jalankan generate (dengan retry refresh seperti client asli)
+    // 9) Jalankan generate sekali. Jika code:7 muncul, sesi ini dianggap
+    // rusak; jangan reload halaman yang sama berulang-ulang.
     const runGeneration = () => {
       const p = page.evaluate((o) => window.__GROK_API_V2_GENERATE(o), genCfg);
       if (!opts.genTimeoutMs) return p;
@@ -485,27 +497,33 @@ async function main() {
         new Promise((_, rej) => setTimeout(() => rej(new Error(`GENERATE TIMEOUT setelah ${opts.genTimeoutMs}ms`)), opts.genTimeoutMs)),
       ]);
     };
+    let lastProgressSignature = '';
+    let lastProgressLogAt = 0;
+    const generationStartedAt = Date.now();
     const poll = setInterval(async () => {
       try {
         const st = await page.evaluate(() => window.__GROK_NEW_STATE);
-        if (st) log.push(`  [Progress] ${st.progress}% - ${st.message || ''} | rateLimited=${st.rateLimited} http=${st.httpStatus}`);
+        if (st) {
+          const progress = Number(st.progress) || 0;
+          const phase = st.message || (progress < 20 ? 'Menyiapkan request' : progress < 35 ? 'Mengirim request ke Grok' : 'Menunggu respons/video dari Grok');
+          const signature = `${progress}|${phase}|${st.status}|${st.httpStatus}|${st.rateLimited}|${st.videoUrl ? 'video' : ''}`;
+          const now = Date.now();
+          if (signature !== lastProgressSignature || now - lastProgressLogAt >= 10000) {
+            lastProgressSignature = signature;
+            lastProgressLogAt = now;
+            const elapsed = Math.round((now - generationStartedAt) / 1000);
+            log.push(`  [Progress +${elapsed}s] ${progress}% | tahap=${phase} | status=${st.status || 'running'} | rateLimited=${!!st.rateLimited} | http=${st.httpStatus || 0}${st.videoUrl ? ' | video URL ditemukan' : ''}`);
+          }
+        }
       } catch {}
     }, 2500);
 
     let result = null;
     try {
-      for (let attempt = 0; attempt <= opts.refreshRetries; attempt++) {
-        log.push(`  --- Percobaan generate #${attempt + 1} ---`);
-        result = await runGeneration();
-        if (result && !result.stalePage && result.status !== 'stale') break;
-        log.push(`  [WARN] Hasil percobaan #${attempt + 1}: stalePage=${result.stalePage} status=${result.status}`);
-        if (attempt >= opts.refreshRetries) break;
-        log.push(`  [WARN] Grok minta REFRESH -> reload halaman (attempt ${attempt + 1}/${opts.refreshRetries})...`);
-        session.statsigId = '';
-        session.requestMetadata = {};
-        await page.goto(`https://grok.com/imagine?fresh=${Date.now()}`, { waitUntil: 'load', timeout: 60000 });
-        await waitGrokReady(page, context, log, 60000);
-        await page.waitForTimeout(5000);
+      log.push('  --- Percobaan generate #1 ---');
+      result = await runGeneration();
+      if (result && (result.stalePage || result.status === 'stale')) {
+        log.push('  [STALE] Code:7 terdeteksi. Tidak reload halaman; sesi ini harus dibuat ulang.');
       }
     } finally {
       clearInterval(poll);

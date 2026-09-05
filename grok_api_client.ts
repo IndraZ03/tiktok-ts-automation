@@ -14,6 +14,15 @@ export class RateLimitError extends Error {
   }
 }
 
+export class GrokStalePageError extends Error {
+  httpStatus: number;
+  constructor(message = 'Grok meminta halaman dimuat ulang karena sesi halaman sudah kedaluwarsa.', httpStatus = 403) {
+    super(message);
+    this.name = 'GrokStalePageError';
+    this.httpStatus = httpStatus;
+  }
+}
+
 export interface GrokVideoV2Options {
   stateName?: string;
   promptText: string;
@@ -56,8 +65,9 @@ async function waitForGrokImagineReady(page: Page, context: BrowserContext, time
     });
 
     if (state.stale) {
-      await page.reload({ waitUntil: 'load', timeout: 60000 });
-      try { await page.waitForLoadState('networkidle', { timeout: 30000 }); } catch {}
+      // Do not reload this document repeatedly. Code 7 invalidates the page
+      // session; the orchestrator must recreate the whole browser context.
+      throw new GrokStalePageError('Halaman Grok out of date; sesi browser harus dibuat ulang.');
     } else if (state.hasApi && state.authenticated && (hasClearance || Date.now() + 15000 > deadline)) {
       await page.waitForTimeout(8000);
       return;
@@ -106,7 +116,7 @@ export async function createGrokV2Session(stateName = 'indra', headless = true, 
     page.on('request', request => {
       if (!request.url().startsWith('https://grok.com/')) return;
       const headers = request.headers();
-      if (headers['x-statsig-id']) session.statsigId = headers['x-statsig-id'];
+      if (!session.statsigId && headers['x-statsig-id']) session.statsigId = headers['x-statsig-id'];
       for (const name of metadataHeaders) {
         if (!session.requestMetadata[name] && headers[name]) session.requestMetadata[name] = headers[name];
       }
@@ -123,12 +133,30 @@ export async function createGrokV2Session(stateName = 'indra', headless = true, 
     if (!fs.existsSync(browserScriptPath)) throw new Error(`File browser script tidak ditemukan: ${browserScriptPath}`);
     const browserScript = fs.readFileSync(browserScriptPath, 'utf-8');
     const extraInit = (options && typeof options.initExtraScript === 'string') ? options.initExtraScript : '';
-    await page.addInitScript({ content: browserScript + `
-      Object.defineProperty(navigator, 'webdriver', {
-        get: function () { return undefined; }
-      });
-    ` + (extraInit ? '\n' + extraInit : '') });
-    await page.goto('https://grok.com/imagine', { waitUntil: 'load', timeout: 60000 });
+    const webdriverSpoofInit = /Object\.defineProperty\(navigator,\s*['"]webdriver['"]|Navigator\.prototype,\s*['"]webdriver['"]/.test(extraInit) ? '' : `
+      (function () {
+        try {
+          if (window.__GROK_WEBDRIVER_SPOOFED) return;
+          window.__GROK_WEBDRIVER_SPOOFED = true;
+          const descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+          if (descriptor && descriptor.configurable === false) return;
+          Object.defineProperty(Navigator.prototype, 'webdriver', {
+            configurable: true,
+            get: function () { return undefined; }
+          });
+        } catch (_) {}
+      })();
+    `;
+    // buildDebugInitScript() sudah berisi browser API + wrapper. Jangan
+    // menyuntikkan browser API dasar untuk kedua kalinya karena itu dapat
+    // menimpa wrapper/debug hook yang dipakai runner Grok V2 Test.
+    const hasCompleteDebugInit = extraInit.includes('window.__GROK_API_V2_GENERATE')
+      && extraInit.includes('window.__GROK_FETCH_LOG');
+    const initContent = hasCompleteDebugInit
+      ? extraInit
+      : browserScript + webdriverSpoofInit + (extraInit ? '\n' + extraInit : '');
+    await page.addInitScript({ content: initContent });
+    await page.goto(`https://grok.com/imagine?fresh=${Date.now()}`, { waitUntil: 'load', timeout: 60000 });
     await waitForGrokImagineReady(page, context);
     return session;
   } catch (error) {
@@ -237,17 +265,10 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
 
     let result: any;
     try {
-      for (let attempt = 0; attempt < 3; attempt++) {
-        result = await runGeneration();
-        if (!result?.stalePage) break;
-        if (attempt >= 2) break;
-        log(`Grok meminta halaman dimuat ulang, refresh fresh attempt ${attempt + 1}/2...`, 14);
-        session.statsigId = '';
-        session.requestMetadata = {};
-        await page.goto(`https://grok.com/imagine?fresh=${Date.now()}`, { waitUntil: 'load', timeout: 60000 });
-        await waitForGrokImagineReady(page, context);
-        await page.waitForTimeout(5000);
-      }
+      // A code-7 response is a stale browser context. Re-running on the same
+      // page only repeats the 403, so let the caller recreate the session.
+      result = await runGeneration();
+      if (result?.stalePage) log('Grok mengembalikan code:7; sesi browser akan dibuat ulang oleh Infinite Generate.', 14);
     } finally { clearInterval(poll); }
 
     const detectedRateLimit = rateLimitDetectedAt as { availableAt: string | null; transient: boolean; retryAfterMs: number } | null;
@@ -279,6 +300,16 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
       throw new RateLimitError(availableAt);
     }
     if (!result || result.status !== 'done' || !result.videoUrl) {
+      if (result?.stalePage) {
+        const staleError = new GrokStalePageError(
+          result.error || 'Grok mengirim 403 code:7: This page is out of date.',
+          Number(result.httpStatus) || 403
+        );
+        // A stale response invalidates the whole browser context, not only the
+        // current document. The caller will create a completely fresh session.
+        await closeGrokV2Session(session);
+        throw staleError;
+      }
       throw new Error(result?.error || 'Generasi video gagal di Grok (API baru).');
     }
 

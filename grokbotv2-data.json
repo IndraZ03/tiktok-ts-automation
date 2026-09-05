@@ -125,8 +125,8 @@
     "tiktok-state-tokotabletindonesia.json": {
       "grokState": "",
       "autoSwitchGrokState": true,
-      "promptFile": "",
-      "bahanFolder": "",
+      "promptFile": "xprimes25.json",
+      "bahanFolder": "TOKOTABLETINDONESIA",
       "mode": "Video",
       "resolution": "720p",
       "duration": "10s",

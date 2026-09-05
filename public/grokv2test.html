@@ -203,9 +203,33 @@
       font-family: monospace;
       font-size: 0.8rem;
       color: #38bdf8;
-      max-height: 150px;
+      max-height: 260px;
       overflow-y: auto;
       margin-top: 0.5rem;
+      white-space: pre-wrap;
+    }
+
+    .status-phase {
+      margin-top: 0.5rem;
+      color: #cbd5e1;
+      font-size: 0.82rem;
+    }
+
+    .status-progress {
+      width: 100%;
+      height: 8px;
+      margin-top: 0.55rem;
+      border-radius: 99px;
+      overflow: hidden;
+      background: #1e293b;
+    }
+
+    .status-progress-fill {
+      width: 0%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, #38bdf8, #a78bfa, #f472b6);
+      transition: width 0.25s ease;
     }
 
     .video-container {
@@ -344,6 +368,8 @@
       <!-- STATUS LOG & PROGRESS -->
       <div id="statusCard" class="status-card">
         <label id="statusTitle">Status Generasi:</label>
+        <div id="statusPhase" class="status-phase">Menunggu instruksi...</div>
+        <div class="status-progress"><div id="statusProgressFill" class="status-progress-fill"></div></div>
         <div class="status-log" id="statusLog">Menunggu instruksi...</div>
       </div>
 
@@ -364,12 +390,79 @@
 
 <script>
   let bahanDataMap = {};
+  let activeGrokV2TestEvents = null;
+
+  async function readJsonResponse(response) {
+    const text = await response.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (_) {
+      const preview = text.replace(/\s+/g, ' ').slice(0, 220);
+      throw new Error(`Server mengembalikan respons non-JSON (HTTP ${response.status}): ${preview || '(kosong)'}`);
+    }
+    return data;
+  }
+
+  function renderGrokV2TestJob(job) {
+    if (!job) return;
+    const phase = job.phase || 'Menunggu status...';
+    const progress = Math.max(0, Math.min(100, Number(job.progress) || 0));
+    document.getElementById('statusTitle').textContent = `Status Generasi: ${job.status || 'running'} (${progress}%)`;
+    document.getElementById('statusPhase').textContent = phase;
+    document.getElementById('statusProgressFill').style.width = `${progress}%`;
+    const logBox = document.getElementById('statusLog');
+    logBox.textContent = Array.isArray(job.logs) && job.logs.length > 0
+      ? job.logs.join('\n')
+      : `[${new Date().toLocaleTimeString()}] Menunggu event dari server...`;
+    logBox.scrollTop = logBox.scrollHeight;
+  }
+
+  function waitForGrokV2TestJob(jobId) {
+    return new Promise((resolve, reject) => {
+      const source = new EventSource(`/api/grokv2test/events?jobId=${encodeURIComponent(jobId)}`);
+      activeGrokV2TestEvents = source;
+      let settled = false;
+      const close = () => {
+        source.close();
+        if (activeGrokV2TestEvents === source) activeGrokV2TestEvents = null;
+      };
+      const handleJob = (event) => {
+        try {
+          const job = JSON.parse(event.data);
+          renderGrokV2TestJob(job);
+          if (job.status === 'done') {
+            settled = true;
+            close();
+            resolve(job);
+          } else if (job.status === 'error') {
+            settled = true;
+            close();
+            reject(new Error(job.error || 'Generasi gagal di server'));
+          }
+        } catch (err) {
+          settled = true;
+          close();
+          reject(new Error(`Event status Grok tidak valid: ${err.message}`));
+        }
+      };
+      source.addEventListener('snapshot', handleJob);
+      source.addEventListener('update', handleJob);
+      source.addEventListener('done', handleJob);
+      source.addEventListener('job-error', handleJob);
+      source.onerror = () => {
+        if (!settled) {
+          document.getElementById('statusPhase').textContent = 'Koneksi status terputus sementara; mencoba tersambung kembali...';
+        }
+      };
+    });
+  }
 
   async function loadInitialData() {
     // Load States
     try {
       const res = await fetch('/api/states?platform=grok');
-      const states = await res.json();
+      const states = await readJsonResponse(res);
       const stateSelect = document.getElementById('stateSelect');
       stateSelect.innerHTML = '';
       if (states.length > 0) {
@@ -387,7 +480,7 @@
     // Load Bahan Folders & Files
     try {
       const res = await fetch('/api/grokv2test/bahan');
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       bahanDataMap = data.bahanMap || {};
       const folderSelect = document.getElementById('bahanFolderSelect');
       folderSelect.innerHTML = '<option value="">-- Tanpa Gambar (Text-to-Video) --</option>';
@@ -402,7 +495,7 @@
     // Load Prompt Files
     try {
       const res = await fetch('/api/grokv2test/prompts');
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       const promptSelect = document.getElementById('promptFileSelect');
       promptSelect.innerHTML = '<option value="">-- Pilih Prompt File atau Ketik Kustom --</option>';
       (data.files || []).forEach(p => {
@@ -456,7 +549,7 @@
     if (!filename) return;
     try {
       const res = await fetch(`/api/grokv2test/prompt-content/${filename}`);
-      const data = await res.json();
+      const data = await readJsonResponse(res);
       if (data.success && data.prompt) {
         document.getElementById('promptInput').value = data.prompt;
       }
@@ -488,7 +581,7 @@
     statusCard.style.display = 'block';
     resultCard.style.display = 'none';
 
-    statusLog.textContent = `[${new Date().toLocaleTimeString()}] Memulai request generasi video ke Grok API Headless...\n`;
+    renderGrokV2TestJob({ status: 'starting', phase: 'Mengirim job ke server...', progress: 0, logs: [] });
 
     try {
       const response = await fetch('/api/grokv2test/generate', {
@@ -506,25 +599,28 @@
         })
       });
 
-      const data = await response.json();
+      const data = await readJsonResponse(response);
 
       if (!response.ok || !data.success) {
         throw new Error(data.error || 'Terjadi kesalahan saat generate video');
       }
 
-      statusLog.textContent += `[${new Date().toLocaleTimeString()}] ✅ Video berhasil di-generate dan tersimpan di: ${data.result.savePath}\n`;
+      const job = await waitForGrokV2TestJob(data.jobId);
+      const result = job.result;
+      statusLog.textContent += `\n[${new Date().toLocaleTimeString()}] ✅ Video berhasil di-generate dan tersimpan di: ${result?.savePath || result?.filename || '(path tidak tersedia)'}\n`;
 
       // Show video result
       const player = document.getElementById('videoPlayer');
       const dlBtn = document.getElementById('btnDownload');
       
-      player.src = data.result.downloadUrl;
-      dlBtn.href = data.result.downloadUrl;
-      dlBtn.setAttribute('download', data.result.filename);
+      player.src = result.downloadUrl;
+      dlBtn.href = result.downloadUrl;
+      dlBtn.setAttribute('download', result.filename || 'grokv2-video.mp4');
       
       resultCard.style.display = 'block';
     } catch (err) {
-      statusLog.textContent += `[${new Date().toLocaleTimeString()}] ❌ Error: ${err.message}\n`;
+      statusLog.textContent += `\n[${new Date().toLocaleTimeString()}] ❌ Error: ${err.message}\n`;
+      document.getElementById('statusPhase').textContent = `Error: ${err.message}`;
       alert(`Gagal generate video: ${err.message}`);
     } finally {
       btn.disabled = false;

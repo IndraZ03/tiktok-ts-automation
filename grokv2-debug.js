@@ -77,7 +77,18 @@ export const GROK_GENERATE_WRAPPER_SRC = `(function () {
 `;
 
 // ── Spoof webdriver (sama dengan client asli) ──────────────────────────
-export const GROK_WEBDRIVER_SPOOF_SRC = `Object.defineProperty(navigator, 'webdriver', { get: function () { return undefined; } });`;
+export const GROK_WEBDRIVER_SPOOF_SRC = `(function () {
+  try {
+    if (window.__GROK_WEBDRIVER_SPOOFED) return;
+    window.__GROK_WEBDRIVER_SPOOFED = true;
+    var descriptor = Object.getOwnPropertyDescriptor(Navigator.prototype, 'webdriver');
+    if (descriptor && descriptor.configurable === false) return;
+    Object.defineProperty(Navigator.prototype, 'webdriver', {
+      configurable: true,
+      get: function () { return undefined; }
+    });
+  } catch (_) {}
+})();`;
 
 // ── Gabungkan semua init script ────────────────────────────────────────
 export function buildDebugInitScript(browserScript) {

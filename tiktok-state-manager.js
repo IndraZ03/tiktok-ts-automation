@@ -11,7 +11,7 @@ import { execa } from 'execa';
 import { runUpload, stopUploader, getIsRunning } from './tiktok-uploader.js';
 import { runFacebookUpload, stopFacebookUploader } from './facebook-uploader.js';
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, getGrokRateLimits, clearGrokRateLimit, setGrokRateLimit } from './grok-uploader.js';
-import { generateGrokVideoV2, createGrokV2Session, closeGrokV2Session, RateLimitError, TooManyRequestsError } from './grok_api_client.js';
+import { generateGrokVideoV2, createGrokV2Session, closeGrokV2Session, RateLimitError, TooManyRequestsError, GrokStalePageError } from './grok_api_client.js';
 import { buildDebugInitScript, attachPageDebugListeners, collectFetchLog, filterFetchLogLegends, dumpFetchLogToFile } from './grokv2-debug.js';
 import { generateGrokVideoBrowser } from './grok_browser_client.js';
 import { generateVidabotVideo } from './vidabot_api_client.js';
@@ -2479,10 +2479,109 @@ app.get('/api/grokv2test/bahan', (req, res) => {
     }
     res.json({ folders, bahanMap });
 });
+let grokV2TestJob = null;
+const grokV2TestSseClients = new Map();
+function getGrokV2TestPublicJob(job) {
+    return {
+        id: job.id,
+        stateName: job.stateName,
+        status: job.status,
+        phase: job.phase,
+        progress: job.progress,
+        logs: job.logs,
+        result: job.result,
+        error: job.error,
+        startedAt: job.startedAt,
+        finishedAt: job.finishedAt
+    };
+}
+function broadcastGrokV2TestJob(job, event = 'update') {
+    const payload = JSON.stringify(getGrokV2TestPublicJob(job));
+    const clients = grokV2TestSseClients.get(job.id) || [];
+    clients.forEach(client => {
+        try {
+            client.write(`event: ${event}\ndata: ${payload}\n\n`);
+        }
+        catch { }
+    });
+    if (event === 'done' || event === 'job-error') {
+        clients.forEach(client => { try {
+            client.end();
+        }
+        catch { } });
+        grokV2TestSseClients.delete(job.id);
+    }
+}
+function addGrokV2TestLog(job, message, progress) {
+    const phase = String(message || '').trim();
+    if (!phase)
+        return;
+    if (Number.isFinite(progress))
+        job.progress = Math.max(0, Math.min(100, Number(progress)));
+    job.phase = phase;
+    const line = `[${new Date().toLocaleTimeString('id-ID')}] ${phase}${Number.isFinite(progress) ? ` (${Math.round(Number(progress))}%)` : ''}`;
+    job.logs.push(line);
+    if (job.logs.length > 300)
+        job.logs.splice(0, job.logs.length - 300);
+    console.log(`[GROK_V2_TEST] ${phase}${Number.isFinite(progress) ? ` (${Math.round(Number(progress))}%)` : ''}`);
+    broadcastGrokV2TestJob(job, 'update');
+}
+app.get('/api/grokv2test/status', (req, res) => {
+    const jobId = String(req.query.jobId || '');
+    if (!grokV2TestJob || (jobId && grokV2TestJob.id !== jobId)) {
+        return res.json({ success: true, job: null });
+    }
+    res.json({ success: true, job: getGrokV2TestPublicJob(grokV2TestJob) });
+});
+app.get('/api/grokv2test/events', (req, res) => {
+    const jobId = String(req.query.jobId || '');
+    if (!jobId || !grokV2TestJob || grokV2TestJob.id !== jobId) {
+        return res.status(404).json({ success: false, error: 'Job Grok V2 Test tidak ditemukan.' });
+    }
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
+    res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
+    res.flushHeaders();
+    const clients = grokV2TestSseClients.get(jobId) || [];
+    clients.push(res);
+    grokV2TestSseClients.set(jobId, clients);
+    try {
+        res.write(`event: snapshot\ndata: ${JSON.stringify(getGrokV2TestPublicJob(grokV2TestJob))}\n\n`);
+    }
+    catch { }
+    const heartbeat = setInterval(() => { try {
+        res.write(': keep-alive\n\n');
+    }
+    catch { } }, 15000);
+    if (grokV2TestJob.status === 'done' || grokV2TestJob.status === 'error') {
+        clearInterval(heartbeat);
+        try {
+            res.end();
+        }
+        catch { }
+        grokV2TestSseClients.delete(jobId);
+        return;
+    }
+    req.on('close', () => {
+        clearInterval(heartbeat);
+        const current = grokV2TestSseClients.get(jobId) || [];
+        const index = current.indexOf(res);
+        if (index >= 0)
+            current.splice(index, 1);
+        if (current.length > 0)
+            grokV2TestSseClients.set(jobId, current);
+        else
+            grokV2TestSseClients.delete(jobId);
+    });
+});
 app.post('/api/grokv2test/generate', async (req, res) => {
     const { stateName, promptText, bahanFolder, bahanFile, resolution, duration, aspectRatio, mode } = req.body;
     if (!promptText || promptText.trim() === '') {
         return res.status(400).json({ error: 'Prompt teks harus diisi' });
+    }
+    if (grokV2TestJob && (grokV2TestJob.status === 'starting' || grokV2TestJob.status === 'running')) {
+        return res.status(409).json({ success: false, error: 'Grok V2 Test masih berjalan.', jobId: grokV2TestJob.id });
     }
     let imagePath = undefined;
     if (bahanFolder && bahanFile) {
@@ -2491,28 +2590,48 @@ app.post('/api/grokv2test/generate', async (req, res) => {
             return res.status(400).json({ error: `File gambar bahan tidak ditemukan di: ${imagePath}` });
         }
     }
-    try {
-        console.log(`[GROK_V2_TEST] Memulai generate video (State: ${stateName || 'indra'}, Res: ${resolution}, Dur: ${duration}, Aspect: ${aspectRatio})...`);
-        const result = await generateGrokVideoV2({
-            stateName: stateName || 'indra',
-            promptText,
-            imagePath,
-            resolution: resolution || '720p',
-            duration: duration || '5s',
-            aspectRatio: aspectRatio || '9:16',
-            mode: mode || 'Video'
-        }, (msg, progress) => {
-            console.log(`[GROK_V2_TEST] ${msg} (${progress}%)`);
-        });
-        res.json({
-            success: true,
-            result
-        });
-    }
-    catch (err) {
-        console.error(`[GROK_V2_TEST ERROR] ${err.message}`);
-        res.status(500).json({ error: err.message });
-    }
+    const job = {
+        id: `grokv2test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        stateName: stateName || 'indra',
+        status: 'starting',
+        phase: 'Menyiapkan sesi browser Grok...',
+        progress: 0,
+        logs: [],
+        startedAt: new Date().toISOString()
+    };
+    grokV2TestJob = job;
+    addGrokV2TestLog(job, `Memulai generate video (State: ${job.stateName}, Res: ${resolution || '720p'}, Dur: ${duration || '5s'}, Aspect: ${aspectRatio || '9:16'})...`, 1);
+    res.status(202).json({ success: true, jobId: job.id, message: 'Generasi dimulai. Pantau SSE untuk status realtime.' });
+    void (async () => {
+        try {
+            job.status = 'running';
+            addGrokV2TestLog(job, 'Membuka browser dan memuat Grok Imagine...', 3);
+            const result = await generateGrokVideoV2({
+                stateName: stateName || 'indra',
+                promptText,
+                imagePath,
+                resolution: resolution || '720p',
+                duration: duration || '5s',
+                aspectRatio: aspectRatio || '9:16',
+                mode: mode || 'Video'
+            }, (msg, progress) => {
+                addGrokV2TestLog(job, msg, progress);
+            });
+            job.status = 'done';
+            job.progress = 100;
+            job.result = result;
+            job.finishedAt = new Date().toISOString();
+            addGrokV2TestLog(job, `Selesai. Video tersimpan: ${result?.savePath || result?.filename || '(path tidak tersedia)'}`, 100);
+            broadcastGrokV2TestJob(job, 'done');
+        }
+        catch (err) {
+            job.status = 'error';
+            job.error = err?.message || String(err);
+            job.finishedAt = new Date().toISOString();
+            addGrokV2TestLog(job, `Gagal: ${job.error}`);
+            broadcastGrokV2TestJob(job, 'job-error');
+        }
+    })();
 });
 // ═══════════════════════════════════════════════════════════
 //  VIDABOT TEST APIs (/vidabotest & /vidabot)
@@ -5916,6 +6035,8 @@ let infiniteGenV2Running = false;
 let grokbotv2FullAutoRunning = false;
 let grokbotv2InfiniteScheduleRunning = false;
 let infiniteGenV2WaitInfo = null;
+const GROK_V2_INFINITE_GENERATION_INTERVAL_MS = 15 * 60 * 1000;
+let grokV2NextGenerationAtMs = 0;
 let grokbotv2Queue = [];
 let grokbotv2Progress = {
     generate: 0,
@@ -5936,11 +6057,25 @@ let grokbotv2Progress = {
     currentVideoProgress: 0,
     currentPhase: '',
 };
+function writeGrokbotv2Sse(payload) {
+    const event = String(payload).split(/\r?\n/).map(line => `data: ${line}`).join('\n') + '\n\n';
+    for (let i = grokbotv2SseClients.length - 1; i >= 0; i--) {
+        const client = grokbotv2SseClients[i];
+        if (client.writableEnded || client.destroyed) {
+            grokbotv2SseClients.splice(i, 1);
+            continue;
+        }
+        try {
+            client.write(event);
+        }
+        catch {
+            grokbotv2SseClients.splice(i, 1);
+        }
+    }
+}
 function grokbotv2Log(msg) {
     console.log(`[GROKBOTV2] ${msg}`);
-    grokbotv2SseClients.forEach(c => c.write(`data: ${msg}
-
-`));
+    writeGrokbotv2Sse(msg);
 }
 // Wrapper WA untuk V2 — membaca sendWhatsApp dari grokbotv2-data.json
 function sendWAMessageV2(msg) {
@@ -5950,9 +6085,7 @@ function sendWAMessageV2(msg) {
     }
 }
 function grokbotv2BroadcastQueue() {
-    grokbotv2SseClients.forEach(c => c.write(`data: [QUEUE_UPDATE]:${JSON.stringify(grokbotv2Queue)}
-
-`));
+    writeGrokbotv2Sse(`[QUEUE_UPDATE]:${JSON.stringify(grokbotv2Queue)}`);
 }
 function grokbotv2BroadcastProgress() {
     grokbotv2Progress.browsers = getBrowserProgress();
@@ -5960,9 +6093,7 @@ function grokbotv2BroadcastProgress() {
         ...grokbotv2Progress,
         rateLimits: getGrokRateLimits()
     };
-    grokbotv2SseClients.forEach(c => c.write(`data: [PROGRESS_UPDATE]:${JSON.stringify(progressWithRateLimits)}
-
-`));
+    writeGrokbotv2Sse(`[PROGRESS_UPDATE]:${JSON.stringify(progressWithRateLimits)}`);
 }
 function resetGrokbotv2Progress(overrides = {}) {
     grokbotv2Progress = {
@@ -6033,13 +6164,16 @@ async function runGrokGeneratorV2(config, log) {
     const tiktokStateName = config.stateFile.replace('tiktok-state-', '').replace('.json', '');
     const targetDir = config.customDownloadDir || path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
     const rawDir = path.join(targetDir, 'raw');
-// ── Debug log lengkap (grokv2-debug.js): semua event fetch/console di halaman Grok ──
+    // ── Debug log lengkap (grokv2-debug.js): semua event fetch/console di halaman Grok ──
     const grokDebugDir = path.join(__dirname, 'grokbotv2-logs');
     if (!fs.existsSync(grokDebugDir))
         fs.mkdirSync(grokDebugDir, { recursive: true });
     const debugRunStamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const debugRunLogPath = path.join(grokDebugDir, `run-${tiktokStateName}-${debugRunStamp}.log`);
-    const debugWrite = (s) => { try { fs.appendFileSync(debugRunLogPath, s + '\n'); } catch { } };
+    const debugWrite = (s) => { try {
+        fs.appendFileSync(debugRunLogPath, s + '\n');
+    }
+    catch { } };
     const debugLegendCache = new Set(); // hindari baris yang sama berulang di UI
     const accountPool = getGrokV2AccountPool(!!config.autoSwitchGrokState, config.grokState);
     const limitedAccounts = [];
@@ -6052,6 +6186,7 @@ async function runGrokGeneratorV2(config, log) {
     const mergeEnabled = config.merge !== false;
     const totalRawToGenerate = mergeEnabled ? config.totalVideos * 2 : config.totalVideos;
     let fatalError = null;
+    let recoverableError = null;
     if (!currentAccount) {
         log('🚫 Tidak ada Grok State yang tersedia (seluruh akun limit, kedaluwarsa, atau belum dikonfigurasi).');
         return { allAccountsLimited: true, completedRaw, totalRaw: totalRawToGenerate, limitedAccounts: accountPool, lastAccount: null };
@@ -6059,8 +6194,13 @@ async function runGrokGeneratorV2(config, log) {
     let grokStateName = currentAccount.replace('grok-state-', '').replace('.json', '');
     let grokSession = null;
     const tooManyRequestAttempts = new Map();
-    const interVideoDelayMs = 20 * 1000;
-    const maxTooManyRequestRetries = 6;
+    const transientGenerationAttempts = new Map();
+    const staleGenerationAttempts = new Map();
+    const generationIntervalMs = Math.max(0, Number(config.generationIntervalMs) || 0);
+    // Infinite Generate memakai slot global agar jeda tetap berlaku saat berpindah
+    // state atau memulai batch baru. Mode generate biasa tetap memakai jeda lama.
+    const interVideoDelayMs = generationIntervalMs > 0 ? 0 : 20 * 1000;
+    const maxTooManyRequestRetries = generationIntervalMs > 0 ? 2 : 6;
     const accountMode = config.autoSwitchGrokState ? `Auto Switch (${accountPool.length} akun)` : 'Akun Tetap';
     grokbotv2Progress.activeGrokState = currentAccount;
     grokbotv2Progress.autoSwitchGrokState = !!config.autoSwitchGrokState;
@@ -6108,6 +6248,21 @@ async function runGrokGeneratorV2(config, log) {
         grokbotv2Progress.currentVideoProgress = 0;
         grokbotv2Progress.currentPhase = `Memulai raw #${i + 1}/${totalRawToGenerate}`;
         grokbotv2BroadcastProgress();
+        // Saat Infinite Generate menunggu slot, tutup page lama agar polling
+        // halaman (mis. quota_info) tidak terus berjalan selama cooldown.
+        if (generationIntervalMs > 0 && grokSession) {
+            log('[GROK_V2] Menutup sesi idle sebelum menunggu slot generate berikutnya...');
+            try {
+                await closeGrokV2Session(grokSession);
+            }
+            catch { }
+            grokSession = null;
+        }
+        const generationSlotReady = await waitForGrokV2GenerationSlot(generationIntervalMs, () => grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning, log);
+        if (!generationSlotReady)
+            break;
+        grokbotv2Progress.currentPhase = `Mengirim request generate raw #${i + 1}/${totalRawToGenerate}`;
+        grokbotv2BroadcastProgress();
         log(`🎬 [GROK_V2] Memulai generate raw #${i + 1}/${totalRawToGenerate} via Grok V2 API...`);
         try {
             if (!grokSession || grokSession.stateName !== grokStateName) {
@@ -6122,10 +6277,13 @@ async function runGrokGeneratorV2(config, log) {
                             debugWrite(line);
                             // Tampilkan hanya event penting ke console/UI agar tidak membanjiri SSE.
                             if (/429|403|rate.?limit|stale|out of date|pageerror|requestfailed|generate END|generate START/i.test(detail)) {
-                                log(`[GROK_V2_DBG] ${detail.slice(0, 320)}`);
+                                const debugMessage = `[GROK_V2_DBG] ${detail.slice(0, 320)}`;
+                                log(debugMessage);
+                                grokbotv2Progress.currentPhase = debugMessage;
+                                grokbotv2BroadcastProgress();
                                 if (!debugLegendCache.has(detail)) {
                                     debugLegendCache.add(detail);
-                                    grokbotv2Log(`[GROK_V2_DBG] ${detail.slice(0, 320)}`);
+                                    grokbotv2Log(debugMessage);
                                 }
                             }
                         });
@@ -6159,6 +6317,7 @@ async function runGrokGeneratorV2(config, log) {
                     ? `grok_raw_${Date.now()}_${i + 1}.mp4`
                     : `grok_${Date.now()}_${i + 1}.mp4`;
                 const finalPath = path.join(destDir, newFilename);
+                let producedVideoName = mergeEnabled ? null : newFilename;
                 fs.copyFileSync(res.savePath, finalPath);
                 try {
                     fs.unlinkSync(res.savePath);
@@ -6189,6 +6348,7 @@ async function runGrokGeneratorV2(config, log) {
                         try {
                             await mergeVideosCopyWithOptionalAudio([v1, v2], mergedOutputPath, audioPath, { tempDir: path.join(__dirname, '_tmp_uploads') });
                             log(`[MERGER_V2] ✅ Berhasil merge ke ${mergedFilename}`);
+                            producedVideoName = mergedFilename;
                             try {
                                 fs.unlinkSync(v1);
                             }
@@ -6206,7 +6366,13 @@ async function runGrokGeneratorV2(config, log) {
                         }
                     }
                 }
+                if (config.notifyWhatsApp && producedVideoName) {
+                    const label = config.notificationLabel ? ` (${config.notificationLabel})` : '';
+                    sendWAMessageV2(`✅ [GrokbotV2 Infinite] Berhasil generate 1 video${label} untuk ${tiktokStateName}: ${producedVideoName}`);
+                }
                 tooManyRequestAttempts.delete(i);
+                transientGenerationAttempts.delete(i);
+                staleGenerationAttempts.delete(i);
                 if (i + 1 < totalRawToGenerate) {
                     grokbotv2Progress.currentPhase = 'Jeda antar-video untuk mencegah Too Many Requests';
                     grokbotv2BroadcastProgress();
@@ -6227,14 +6393,31 @@ async function runGrokGeneratorV2(config, log) {
                     const dump = await dumpFetchLogToFile(grokSession.page, grokDebugDir, `429-${grokStateName}`);
                     log(`[GROK_V2_DBG] 🧾 Fetch log 429 disimpan: ${dump.fname} (${dump.count} entri)`);
                     const legend = filterFetchLogLegends(await collectFetchLog(grokSession.page), 30);
-                    legend.forEach(l => log(`[GROK_V2_DBG] ${l}`));
+                    for (const l of legend)
+                        log(`[GROK_V2_DBG] ${l}`);
                 }
                 const attempts = (tooManyRequestAttempts.get(i) || 0) + 1;
                 tooManyRequestAttempts.set(i, attempts);
+                if (config.notifyWhatsApp) {
+                    const label = config.notificationLabel ? ` (${config.notificationLabel})` : '';
+                    sendWAMessageV2(`⚠️ [GrokbotV2 Infinite] Too Many Requests pada ${tiktokStateName}${label}, raw #${i + 1} (percobaan ${attempts}/${maxTooManyRequestRetries}).`);
+                }
                 if (attempts <= maxTooManyRequestRetries) {
                     const retryAfterMs = Number(err.retryAfterMs) || 0;
-                    const baseDelayMs = Math.max(interVideoDelayMs, retryAfterMs || 30 * 1000);
-                    const backoffMs = Math.min(5 * 60 * 1000, baseDelayMs * Math.pow(2, attempts - 1));
+                    if (generationIntervalMs > 0 && grokSession) {
+                        log('[GROK_V2] Menutup sesi setelah HTTP 429 sebelum retry berikutnya...');
+                        try {
+                            await closeGrokV2Session(grokSession);
+                        }
+                        catch { }
+                        grokSession = null;
+                    }
+                    const baseDelayMs = generationIntervalMs > 0
+                        ? Math.max(generationIntervalMs, retryAfterMs)
+                        : Math.max(interVideoDelayMs, retryAfterMs || 30 * 1000);
+                    const backoffMs = generationIntervalMs > 0
+                        ? baseDelayMs
+                        : Math.min(5 * 60 * 1000, baseDelayMs * Math.pow(2, attempts - 1));
                     const waitSeconds = Math.ceil(backoffMs / 1000);
                     grokbotv2Progress.currentPhase = `Too Many Requests — menunggu ${waitSeconds} detik (percobaan ${attempts}/${maxTooManyRequestRetries})`;
                     grokbotv2BroadcastProgress();
@@ -6245,7 +6428,13 @@ async function runGrokGeneratorV2(config, log) {
                     i--;
                     continue;
                 }
-                fatalError = `Grok tetap mengirim Too Many Requests setelah ${maxTooManyRequestRetries} percobaan pada raw #${i + 1}`;
+                const tooManyRequestMessage = `Grok tetap mengirim Too Many Requests setelah ${maxTooManyRequestRetries} percobaan pada raw #${i + 1}`;
+                if (generationIntervalMs > 0) {
+                    recoverableError = tooManyRequestMessage;
+                    log(`⚠️ [GROK_V2] ${tooManyRequestMessage}. Batch Infinite akan dicoba lagi setelah cooldown.`);
+                    break;
+                }
+                fatalError = tooManyRequestMessage;
                 log(`❌ [GROK_V2] ${fatalError}`);
                 break;
             }
@@ -6255,7 +6444,8 @@ async function runGrokGeneratorV2(config, log) {
                     const dump = await dumpFetchLogToFile(grokSession.page, grokDebugDir, `ratelimit-${grokStateName}`);
                     log(`[GROK_V2_DBG] 🧾 Fetch log rate limit disimpan: ${dump.fname} (${dump.count} entri)`);
                     const legend = filterFetchLogLegends(await collectFetchLog(grokSession.page), 30);
-                    legend.forEach(l => log(`[GROK_V2_DBG] ${l}`));
+                    for (const l of legend)
+                        log(`[GROK_V2_DBG] ${l}`);
                 }
                 // ── Deteksi Rate Limit: catat ke shared grokRateLimits dan hentikan loop ──
                 const grokStateKey = config.grokState || 'indra';
@@ -6290,7 +6480,70 @@ async function runGrokGeneratorV2(config, log) {
                 sendWAMessageV2(allLimitMessage);
                 break;
             }
-            fatalError = err.message || String(err);
+            const errorMessage = err?.message || String(err);
+            const isStalePageError = err instanceof GrokStalePageError
+                || err?.name === 'GrokStalePageError'
+                || /page is out of date|out of date|reload to continue|code["']?\s*:\s*7/i.test(errorMessage);
+            if (isStalePageError) {
+                if (grokSession) {
+                    log('[GROK_V2] Menutup sesi stale dan akan membuat browser/context baru...');
+                    try {
+                        await closeGrokV2Session(grokSession);
+                    }
+                    catch { }
+                    grokSession = null;
+                }
+                if (generationIntervalMs > 0) {
+                    const attempts = (staleGenerationAttempts.get(i) || 0) + 1;
+                    staleGenerationAttempts.set(i, attempts);
+                    if (attempts <= 2) {
+                        const waitSeconds = Math.ceil(generationIntervalMs / 1000);
+                        grokbotv2Progress.currentPhase = `Sesi Grok stale — membuat sesi baru dalam ${waitSeconds} detik (percobaan ${attempts}/2)`;
+                        grokbotv2BroadcastProgress();
+                        log(`[GROK_V2 STALE RETRY] ${errorMessage}. Menunggu ${waitSeconds} detik lalu membuat sesi baru untuk raw #${i + 1}...`);
+                        await waitWhileRunning(generationIntervalMs, () => grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning);
+                        if (!grokbotv2Running && !infiniteGenV2Running && !grokbotv2FullAutoRunning)
+                            break;
+                        i--;
+                        continue;
+                    }
+                    recoverableError = `Sesi Grok tetap stale setelah ${attempts} percobaan pada raw #${i + 1}`;
+                    log(`⚠️ [GROK_V2] ${recoverableError}. Batch Infinite tetap aktif dan akan mencoba lagi setelah cooldown.`);
+                    break;
+                }
+                fatalError = errorMessage;
+                log(`❌ [GROK_V2 ERROR] ${fatalError}`);
+                break;
+            }
+            const isTransientNetworkError = generationIntervalMs > 0
+                && /network error|ERR_QUIC|QUIC_TOO_MANY|ERR_NETWORK|ECONNRESET|ETIMEDOUT|fetch failed|socket hang up/i.test(errorMessage);
+            if (isTransientNetworkError) {
+                const attempts = (transientGenerationAttempts.get(i) || 0) + 1;
+                transientGenerationAttempts.set(i, attempts);
+                if (attempts <= 2) {
+                    if (grokSession) {
+                        log('[GROK_V2] Menutup sesi setelah gangguan jaringan sebelum retry berikutnya...');
+                        try {
+                            await closeGrokV2Session(grokSession);
+                        }
+                        catch { }
+                        grokSession = null;
+                    }
+                    const waitSeconds = Math.ceil(generationIntervalMs / 1000);
+                    grokbotv2Progress.currentPhase = `Gangguan jaringan sementara — menunggu ${waitSeconds} detik (percobaan ${attempts}/2)`;
+                    grokbotv2BroadcastProgress();
+                    log(`[GROK_V2 NETWORK RETRY] ${errorMessage}. Menunggu ${waitSeconds} detik lalu mengulang raw #${i + 1}...`);
+                    await waitWhileRunning(generationIntervalMs, () => grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning);
+                    if (!grokbotv2Running && !infiniteGenV2Running && !grokbotv2FullAutoRunning)
+                        break;
+                    i--;
+                    continue;
+                }
+                recoverableError = `Gangguan jaringan berulang pada raw #${i + 1}: ${errorMessage}`;
+                log(`⚠️ [GROK_V2] ${recoverableError}. Batch Infinite akan dicoba lagi setelah cooldown.`);
+                break;
+            }
+            fatalError = errorMessage;
             log(`❌ [GROK_V2 ERROR] ${fatalError}`);
             break;
         }
@@ -6305,7 +6558,15 @@ async function runGrokGeneratorV2(config, log) {
         grokbotv2Progress.merge = 100;
     grokbotv2BroadcastProgress();
     log(`${allAccountsLimited ? '🚫' : '✅'} [GROK_V2_GENERATOR] Selesai memproses generasi video V2 untuk ${tiktokStateName}`);
-    return { allAccountsLimited, completedRaw, totalRaw: totalRawToGenerate, limitedAccounts, lastAccount: currentAccount, fatalError: fatalError || undefined };
+    return {
+        allAccountsLimited,
+        completedRaw,
+        totalRaw: totalRawToGenerate,
+        limitedAccounts,
+        lastAccount: currentAccount,
+        fatalError: fatalError || undefined,
+        recoverableError: recoverableError || undefined
+    };
 }
 function countPendingVideos(folder, marksName, prefix) {
     if (!fs.existsSync(folder))
@@ -6337,6 +6598,22 @@ async function waitWhileRunning(durationMs, isStillRunning) {
         await new Promise(resolve => setTimeout(resolve, waitMs));
         elapsed += waitMs;
     }
+}
+async function waitForGrokV2GenerationSlot(intervalMs, isStillRunning, log) {
+    if (intervalMs <= 0)
+        return isStillRunning();
+    const waitMs = Math.max(0, grokV2NextGenerationAtMs - Date.now());
+    if (waitMs > 0) {
+        const waitMinutes = Math.ceil(waitMs / 60000);
+        grokbotv2Progress.currentPhase = `Menunggu slot generate berikutnya (${waitMinutes} menit)`;
+        grokbotv2BroadcastProgress();
+        log(`[GROK_V2] Pacing Infinite Generate: menunggu ${Math.ceil(waitMs / 1000)} detik sebelum request berikutnya...`);
+        await waitWhileRunning(waitMs, isStillRunning);
+    }
+    if (!isStillRunning())
+        return false;
+    grokV2NextGenerationAtMs = Date.now() + intervalMs;
+    return true;
 }
 function formatLocalDateTime(value) {
     return {
@@ -6496,7 +6773,7 @@ app.get('/api/grokbotv2/stock', (req, res) => {
     let mergedFiles = [];
     if (fs.existsSync(stateDir)) {
         try {
-            mergedFiles = fs.readdirSync(stateDir).filter(f => f.startsWith('grok_merged_') && exts.includes(path.extname(f).toLowerCase()));
+            mergedFiles = fs.readdirSync(stateDir).filter(f => f.startsWith('grok_') && exts.includes(path.extname(f).toLowerCase()));
         }
         catch { }
     }
@@ -6510,7 +6787,7 @@ app.get('/api/grokbotv2/stock', (req, res) => {
     let cadanganFiles = [];
     if (fs.existsSync(cadanganDir)) {
         try {
-            cadanganFiles = fs.readdirSync(cadanganDir).filter(f => f.startsWith('grok_merged_') && exts.includes(path.extname(f).toLowerCase()));
+            cadanganFiles = fs.readdirSync(cadanganDir).filter(f => f.startsWith('grok_') && exts.includes(path.extname(f).toLowerCase()));
         }
         catch { }
     }
@@ -6521,6 +6798,72 @@ app.get('/api/grokbotv2/stock', (req, res) => {
     }
     catch { }
     res.json({ raw: rawCount, utama: unuploaded.length, cadangan: cadanganFiles.filter(f => !cadanganMarks[f]).length });
+});
+// Import video pending dari stok cadangan V2 ke stok utama V2.
+app.post('/api/grokbotv2/import-cadangan', (req, res) => {
+    if (grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning || grokbotv2InfiniteScheduleRunning) {
+        return res.status(400).json({ success: false, error: 'Grokbot V2 sedang menjalankan proses lain.' });
+    }
+    const { stateFile } = req.body;
+    if (typeof stateFile !== 'string' || !stateFile || stateFile.includes('..') || path.basename(stateFile) !== stateFile) {
+        return res.status(400).json({ success: false, error: 'stateFile tidak valid.' });
+    }
+    const stateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
+    const stateDir = path.join(GROK_DOWNLOAD_DIR, stateName);
+    const cadanganDir = path.join(stateDir, 'cadangan');
+    if (!fs.existsSync(cadanganDir)) {
+        return res.status(400).json({ success: false, error: `Folder cadangan tidak ditemukan: ${cadanganDir}` });
+    }
+    const exts = ['.mp4', '.mov', '.avi', '.mkv', '.webm'];
+    const cadanganMarksFile = path.join(cadanganDir, '.downloaded.json');
+    const utamaMarksFile = path.join(stateDir, '.downloaded.json');
+    let cadanganMarks = {};
+    let utamaMarks = {};
+    try {
+        cadanganMarks = JSON.parse(fs.readFileSync(cadanganMarksFile, 'utf-8'));
+    }
+    catch { }
+    try {
+        utamaMarks = JSON.parse(fs.readFileSync(utamaMarksFile, 'utf-8'));
+    }
+    catch { }
+    const pendingFiles = fs.readdirSync(cadanganDir)
+        .filter(file => file.startsWith('grok_') && exts.includes(path.extname(file).toLowerCase()) && !cadanganMarks[file])
+        .sort();
+    if (pendingFiles.length === 0) {
+        return res.status(400).json({ success: false, error: 'Tidak ada video cadangan V2 yang tersedia untuk diimpor.' });
+    }
+    fs.mkdirSync(stateDir, { recursive: true });
+    let movedCount = 0;
+    const skipped = [];
+    for (const file of pendingFiles) {
+        const source = path.join(cadanganDir, file);
+        const destination = path.join(stateDir, file);
+        if (fs.existsSync(destination)) {
+            skipped.push(`${file} (nama sudah ada di stok utama)`);
+            continue;
+        }
+        try {
+            fs.renameSync(source, destination);
+            cadanganMarks[file] = true;
+            delete utamaMarks[file];
+            movedCount++;
+        }
+        catch (error) {
+            skipped.push(`${file} (${error.message})`);
+        }
+    }
+    try {
+        fs.writeFileSync(cadanganMarksFile, JSON.stringify(cadanganMarks, null, 2));
+        fs.writeFileSync(utamaMarksFile, JSON.stringify(utamaMarks, null, 2));
+    }
+    catch (error) {
+        return res.status(500).json({ success: false, error: `Gagal menyimpan status import: ${error.message}` });
+    }
+    const suffix = skipped.length > 0 ? ` Dilewati: ${skipped.join(', ')}` : '';
+    const message = `Berhasil mengimpor ${movedCount} video dari stok cadangan ke stok utama.${suffix}`;
+    grokbotv2Log(`[Manual Import V2] ${stateName}: ${message}`);
+    res.json({ success: true, movedCount, skipped, message });
 });
 app.post('/api/grokbotv2/generate-utama', async (req, res) => {
     if (grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning)
@@ -6548,7 +6891,7 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
     let pendingCount = 0;
     if (fs.existsSync(stateDir)) {
         try {
-            pendingCount = fs.readdirSync(stateDir).filter(f => f.startsWith('grok_merged_') && exts.includes(path.extname(f).toLowerCase()) && !marks[f]).length;
+            pendingCount = fs.readdirSync(stateDir).filter(f => f.startsWith('grok_') && exts.includes(path.extname(f).toLowerCase()) && !marks[f]).length;
         }
         catch { }
     }
@@ -6743,10 +7086,17 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
     if (infiniteGenV2Running || grokbotv2Running || grokbotv2FullAutoRunning) {
         return res.status(400).json({ success: false, error: 'Grokbot V2 sedang menjalankan proses lain!' });
     }
-    const { stateFiles, stateOptions } = req.body;
+    const { stateFiles, stateOptions, intervalMinutes } = req.body;
     if (!Array.isArray(stateFiles) || stateFiles.length === 0) {
         return res.status(400).json({ success: false, error: 'stateFiles diperlukan' });
     }
+    const requestedIntervalMinutes = intervalMinutes === undefined
+        ? GROK_V2_INFINITE_GENERATION_INTERVAL_MS / 60000
+        : Number(intervalMinutes);
+    if (!Number.isFinite(requestedIntervalMinutes) || requestedIntervalMinutes < 1 || requestedIntervalMinutes > 1440) {
+        return res.status(400).json({ success: false, error: 'Interval generate harus antara 1 sampai 1440 menit.' });
+    }
+    const generationIntervalMs = Math.round(requestedIntervalMinutes * 60 * 1000);
     const startData = loadGrokbotV2Data();
     if (Array.isArray(stateOptions)) {
         for (const option of stateOptions) {
@@ -6764,10 +7114,12 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
         saveGrokbotV2Data(startData);
     }
     infiniteGenV2Running = true;
-    res.json({ success: true, message: `Infinite Generate Grokbot V2 dimulai untuk ${stateFiles.length} state` });
-    grokbotv2Log(`♾️ Infinite Generate V2 dimulai untuk ${stateFiles.length} state aktif.`);
+    res.json({ success: true, message: `Infinite Generate Grokbot V2 dimulai untuk ${stateFiles.length} state (interval ${requestedIntervalMinutes} menit)` });
+    grokbotv2Log(`♾️ Infinite Generate V2 dimulai untuk ${stateFiles.length} state aktif (interval ${requestedIntervalMinutes} menit antar-request).`);
     (async () => {
-        const batchSize = 30;
+        // Proses satu video final per siklus. Jika merge aktif, satu video final
+        // tetap membutuhkan dua raw; setiap request raw dipisahkan sesuai setting.
+        const batchSize = 1;
         try {
             while (infiniteGenV2Running) {
                 const data = loadGrokbotV2Data();
@@ -6841,10 +7193,27 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
                     merge: mergeEnabled,
                     audioFolder: cfg.audioFolder,
                     customDownloadDir: targetDir,
-                    autoSwitchGrokState: !!cfg.autoSwitchGrokState
+                    autoSwitchGrokState: !!cfg.autoSwitchGrokState,
+                    generationIntervalMs,
+                    notifyWhatsApp: true,
+                    notificationLabel: target.stockType
                 }, grokbotv2Log);
                 if (generationResult.allAccountsLimited)
                     grokbotv2Log(`🔎 Seluruh akun untuk ${target.stateName} limit; mengaudit akun state lain.`);
+                if (generationResult.recoverableError) {
+                    const retryAt = new Date(Date.now() + generationIntervalMs);
+                    infiniteGenV2WaitInfo = {
+                        rateLimitTime: new Date().toISOString(),
+                        resumeTime: retryAt.toISOString(),
+                        targetState: target.stateName
+                    };
+                    const recoverableMessage = `⚠️ [GrokbotV2] ${generationResult.recoverableError}. Infinite Generate tetap aktif dan akan mencoba kembali sekitar ${retryAt.toLocaleString('id-ID')}.`;
+                    grokbotv2Log(recoverableMessage);
+                    sendWAMessageV2(recoverableMessage);
+                    await waitWhileRunning(generationIntervalMs, () => infiniteGenV2Running);
+                    infiniteGenV2WaitInfo = null;
+                    continue;
+                }
                 if (generationResult.fatalError) {
                     grokbotv2Log(`❌ Infinite Generate dihentikan karena error fatal: ${generationResult.fatalError}`);
                     break;
@@ -7072,11 +7441,27 @@ app.post('/api/grokbotv2/stop-infinite-generate', async (req, res) => {
 });
 app.get('/api/grokbotv2/logs', (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
+    res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders();
+    res.write('retry: 3000\n\n');
     grokbotv2SseClients.push(res);
+    const progressSnapshot = {
+        ...grokbotv2Progress,
+        browsers: getBrowserProgress(),
+        rateLimits: getGrokRateLimits()
+    };
+    res.write(`data: [QUEUE_UPDATE]:${JSON.stringify(grokbotv2Queue)}\n\n`);
+    res.write(`data: [PROGRESS_UPDATE]:${JSON.stringify(progressSnapshot)}\n\n`);
+    const heartbeat = setInterval(() => {
+        try {
+            res.write(': keep-alive\n\n');
+        }
+        catch { }
+    }, 15000);
     req.on('close', () => {
+        clearInterval(heartbeat);
         const idx = grokbotv2SseClients.indexOf(res);
         if (idx >= 0)
             grokbotv2SseClients.splice(idx, 1);
