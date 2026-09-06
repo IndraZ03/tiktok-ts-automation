@@ -6,7 +6,8 @@
     const STATE = {
       status: 'running', progress: 0, message: '', videoUrl: '', videoId: '',
       assetId: '', conversationId: '', error: '', rateLimited: false, availableAt: null,
-      httpStatus: 0, transientRateLimit: false, retryAfterMs: 0
+      httpStatus: 0, transientRateLimit: false, retryAfterMs: 0,
+      failureKind: '', failureEndpoint: '', quota: null
     };
     window.__GROK_NEW_STATE = STATE;
 
@@ -37,6 +38,7 @@
       STATE.error = responseText.slice(0, 300);
       STATE.httpStatus = status || 0;
       STATE.transientRateLimit = status === 429 || /too\s+many\s+requests/i.test(responseText) || /"code"\s*:\s*8\b/.test(responseText);
+      STATE.failureKind = STATE.transientRateLimit ? 'too_many_requests' : 'account_rate_limit';
       STATE.retryAfterMs = parseRetryAfterMs(headers && headers.get('Retry-After'));
       try {
         const parsed = JSON.parse(responseText);
@@ -110,8 +112,55 @@
         Accept: '*/*',
         'X-Xai-Request-Id': crypto.randomUUID()
       }, extra || {});
+      // Do not replay baggage/sentry/traceparent captured during navigation.
+      // Those values are request-scoped (the successful browser request uses
+      // a new span/trace value), and replaying an old value can trigger code 7.
+      // The page's own fetch instrumentation may add fresh tracing metadata.
       if (o.statsigId) headers['X-Statsig-Id'] = o.statsigId;
       return headers;
+    }
+
+    async function probeQuota() {
+      try {
+        const response = await fetchWithTimeout('https://grok.com/rest/media/imagine/quota_info', {
+          method: 'POST',
+          headers: apiHeaders({ 'Content-Type': 'application/json' }),
+          credentials: 'include',
+          body: '{}'
+        }, 20000);
+        const text = await response.text();
+        let body = null;
+        try { body = JSON.parse(text); } catch (_) {}
+        const video = body && typeof body.video === 'object' ? body.video : null;
+        const remaining = body && (body.remainingQuota ?? body.remaining_quota);
+        const limited = video?.available === false
+          || body?.rateLimited === true
+          || (remaining !== undefined && Number.isFinite(Number(remaining)) && Number(remaining) <= 0)
+          || /rate.?limit|too many requests/i.test(text);
+        return { limited, body, text, status: response.status, headers: response.headers };
+      } catch (_) {
+        return null;
+      }
+    }
+
+    async function handleStaleResponse(responseText, status, endpoint) {
+      STATE.stalePage = true;
+      STATE.failureKind = 'stale_page';
+      STATE.failureEndpoint = endpoint || '';
+      STATE.httpStatus = status || 0;
+      STATE.error = responseText ? String(responseText).slice(0, 500) : 'This page is out of date. Reload to continue.';
+
+      // Grok has also returned code 7 when the account video quota is
+      // exhausted. Check quota before making the caller recreate the page.
+      const quota = await probeQuota();
+      if (quota?.limited) {
+        STATE.quota = quota.body || quota.text;
+        STATE.stalePage = false;
+        STATE.rateLimited = true;
+        STATE.failureKind = 'account_rate_limit';
+        STATE.error = quota.text || STATE.error;
+        STATE.httpStatus = quota.status || STATE.httpStatus;
+      }
     }
 
     function handleLine(line) {
@@ -137,7 +186,22 @@
         if (streaming.videoId) STATE.videoId = streaming.videoId;
         if (streaming.progress >= 100) STATE.status = 'done';
       }
-      if (response.error) STATE.error = String(response.error);
+      if (response.error) {
+        const errorText = typeof response.error === 'string'
+          ? response.error
+          : JSON.stringify(response.error);
+        STATE.error = errorText;
+        const errorCode = Number(response.error?.code ?? response.error?.error?.code);
+        if (errorCode === 7 || /out of date|reload to continue/i.test(errorText)) {
+          STATE.stalePage = true;
+          STATE.failureKind = 'stale_page';
+          STATE.failureEndpoint = 'SSE conversation stream';
+        } else if (errorCode === 8 || /too many requests|rate.?limit/i.test(errorText)) {
+          STATE.rateLimited = true;
+          STATE.transientRateLimit = errorCode === 8 || /too many requests/i.test(errorText);
+          STATE.failureKind = 'account_rate_limit';
+        }
+      }
     }
 
     try {
@@ -165,9 +229,8 @@
             || /too\s+many\s+requests|rate\s*limit/i.test(uploadText)
             || /"code"\s*:\s*8\b/.test(uploadText);
           if (STATE.stalePage) {
-            STATE.status = 'stale';
-            STATE.error = uploadText.slice(0, 300);
-            STATE.httpStatus = upload.status;
+            await handleStaleResponse(uploadText, upload.status, 'https://grok.com/http/upload-file-v2/direct');
+            STATE.status = STATE.rateLimited ? 'rate-limited' : 'stale';
             return STATE;
           } else if (uploadRateLimit) {
             markRateLimit(uploadText, upload.status, upload.headers);
@@ -230,9 +293,22 @@
         STATE.stalePage = response.status === 403
           && /out of date|reload to continue/i.test(responseText);
         if (STATE.stalePage) {
-          STATE.status = 'stale';
-          STATE.error = responseText.slice(0, 300);
-          STATE.httpStatus = response.status;
+          await handleStaleResponse(responseText, response.status, 'https://grok.com/rest/app-chat/conversations/new');
+          // After the page passed authentication/readiness and the image
+          // upload succeeded, Grok's current backend uses the same code 7
+          // response for an account generation cooldown. Retrying a fresh
+          // browser context only repeats the rejected request.
+          if (!STATE.rateLimited) {
+            STATE.stalePage = false;
+            STATE.rateLimited = true;
+            STATE.transientRateLimit = false;
+            STATE.failureKind = 'account_rate_limit';
+            try {
+              const parsed = JSON.parse(responseText);
+              STATE.availableAt = parsed?.error?.availableAt || parsed?.availableAt || null;
+            } catch (_) {}
+          }
+          STATE.status = 'rate-limited';
         } else if (isRateLimit) {
           markRateLimit(responseText, response.status, response.headers);
         } else {
@@ -245,7 +321,23 @@
       STATE.message = 'Memproses prompt (0 - 100%)...';
       // Grok may keep the SSE connection alive after sending the final video URL.
       // Do not wait for socket close once the result is already available.
-      await readLines(response, handleLine, () => !!STATE.videoUrl || STATE.status === 'done');
+      await readLines(response, handleLine, () => !!STATE.videoUrl || STATE.status === 'done' || STATE.stalePage || STATE.rateLimited);
+
+      if (STATE.stalePage && !STATE.rateLimited) {
+        const quota = await probeQuota();
+        if (quota?.limited) {
+          STATE.quota = quota.body || quota.text;
+          STATE.stalePage = false;
+          STATE.rateLimited = true;
+          STATE.failureKind = 'account_rate_limit';
+          STATE.error = quota.text || STATE.error;
+          STATE.httpStatus = quota.status || STATE.httpStatus;
+        }
+      }
+      if (STATE.stalePage || STATE.rateLimited) {
+        STATE.status = STATE.rateLimited ? 'rate-limited' : 'stale';
+        return STATE;
+      }
 
       if (!STATE.videoUrl && STATE.conversationId) {
         STATE.message = 'Menunggu video (polling responses)...';
@@ -276,6 +368,7 @@
       STATE.message = 'Selesai, siap diunduh';
     } catch (error) {
       STATE.status = 'error';
+      STATE.failureKind = 'network_error';
       STATE.error = String((error && error.message) || error);
     }
     return STATE;

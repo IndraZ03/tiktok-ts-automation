@@ -84,7 +84,21 @@ export async function createGrokV2Session(stateName = 'indra', headless = true, 
         throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
     const browser = await chromium.launch({ headless, channel: 'chrome', args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'], ignoreDefaultArgs: ['--enable-automation'] });
     try {
-        const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36', locale: 'en-US', timezoneId: 'Asia/Makassar', storageState: statePath, acceptDownloads: true });
+        const context = await browser.newContext({
+            viewport: { width: 1366, height: 768 },
+            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+            locale: 'en-US',
+            timezoneId: 'Asia/Makassar',
+            storageState: statePath,
+            acceptDownloads: true,
+            // Prevent an old cached Imagine shell from being reused after Grok
+            // deploys a new page version. Code 7 is commonly emitted by that shell.
+            extraHTTPHeaders: {
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Cache-Control': 'no-cache',
+                Pragma: 'no-cache',
+            },
+        });
         const page = await context.newPage();
         const session = { browser, context, page, stateName, statsigId: '', requestMetadata: {} };
         const metadataHeaders = ['baggage', 'sentry-trace', 'traceparent'];
@@ -133,8 +147,19 @@ export async function createGrokV2Session(stateName = 'indra', headless = true, 
             ? extraInit
             : browserScript + webdriverSpoofInit + (extraInit ? '\n' + extraInit : '');
         await page.addInitScript({ content: initContent });
-        await page.goto(`https://grok.com/imagine?fresh=${Date.now()}`, { waitUntil: 'load', timeout: 60000 });
+        // Keep the canonical Imagine URL. Grok validates the page/referrer
+        // context for conversations/new and can return code 7 for a query-string
+        // variant such as /imagine?fresh=... . Cache bypass is handled by the
+        // context headers above.
+        await page.goto('https://grok.com/imagine', { waitUntil: 'load', timeout: 60000 });
         await waitForGrokImagineReady(page, context);
+        // Persist refreshed Cloudflare/session cookies (for example cf_clearance
+        // and __cf_bm) back to the selected state. Otherwise a newly obtained
+        // clearance disappears when this browser context is closed.
+        try {
+            await context.storageState({ path: statePath });
+        }
+        catch { }
         return session;
     }
     catch (error) {
@@ -264,6 +289,9 @@ export async function generateGrokVideoV2(options, onProgress, sharedSession) {
         const detectedRateLimit = rateLimitDetectedAt;
         if (result?.rateLimited || detectedRateLimit) {
             const availableAt = result?.availableAt || detectedRateLimit?.availableAt || null;
+            if (result?.failureKind === 'account_rate_limit') {
+                log('Grok code:7 pada conversations/new diklasifikasikan sebagai rate limit akun; retry dihentikan.', 14);
+            }
             const isTooManyRequests = !!result?.transientRateLimit
                 || result?.httpStatus === 429
                 || !!detectedRateLimit?.transient;
@@ -293,7 +321,7 @@ export async function generateGrokVideoV2(options, onProgress, sharedSession) {
         }
         if (!result || result.status !== 'done' || !result.videoUrl) {
             if (result?.stalePage) {
-                const staleError = new GrokStalePageError(result.error || 'Grok mengirim 403 code:7: This page is out of date.', Number(result.httpStatus) || 403);
+                const staleError = new GrokStalePageError(`${result.error || 'Grok mengirim 403 code:7: This page is out of date.'}${result.failureEndpoint ? ` [endpoint: ${result.failureEndpoint}]` : ''}`, Number(result.httpStatus) || 403);
                 // A stale response invalidates the whole browser context, not only the
                 // current document. The caller will create a completely fresh session.
                 await closeGrokV2Session(session);

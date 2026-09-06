@@ -234,6 +234,23 @@
           </div>
         </div>
 
+    <!-- Grok Quota & Reset Panel -->
+    <div id="grok-quota-panel" class="glass-panel rounded-3xl p-6 border border-indigo-500/20 shadow-xl mb-8">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <div>
+          <h2 class="text-lg font-bold flex items-center gap-2 text-indigo-300"><span>📊</span> Quota & Reset Grok</h2>
+          <p class="text-xs text-gray-500 mt-1">Semua akun Grok yang tersimpan akan diperiksa sebelum Infinite Generate.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="grok-quota-checked-at" class="text-[10px] text-gray-500">Belum diperiksa</span>
+          <button id="grok-quota-refresh" onclick="loadGrokQuotas(true)" class="px-3 py-2 rounded-xl bg-indigo-900/40 hover:bg-indigo-800/60 border border-indigo-700/50 text-indigo-200 text-xs font-bold transition">Refresh Quota</button>
+        </div>
+      </div>
+      <div id="grok-quota-list" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div class="text-xs text-gray-500 py-4 text-center md:col-span-2 xl:col-span-3">Memuat quota Grok...</div>
+      </div>
+    </div>
+
     <!-- Rate Limit Banner Container -->
     <div id="grok-rate-limit-container" class="mb-8 hidden"></div>
 
@@ -812,6 +829,7 @@
     
     // Loaded lists from Grok endpoints
     let grokStates = [];         // [{filename, name, expiry}]
+    let grokQuotas = [];         // [{stateFile, stateName, usedPercent, resetAt, status}]
     let promptFiles = [];        // [filename, ...]
     let bahanFolders = [];       // [foldername, ...]
     let audioFolders = [];       // [foldername, ...]
@@ -847,11 +865,16 @@
     // ═══════════════════════════════════════
     window.onload = async () => {
       addLog('🔄 Mempersiapkan Grokbot Dashboard...');
+      const quotaPanel = document.getElementById('grok-quota-panel');
+      const stateSelectorPanel = document.getElementById('state-dropdown')?.parentElement;
+      if (quotaPanel && stateSelectorPanel?.parentElement) stateSelectorPanel.parentElement.insertBefore(quotaPanel, stateSelectorPanel);
       await preloadOptions();
       await loadTikTokStates();
       await loadConfigs();
+      await loadGrokQuotas();
       pollStatus();
       setInterval(pollStatus, 5000);
+      setInterval(() => loadGrokQuotas(false), 60000);
       
       // Start polling stock counts for active cards
       stockPollInterval = setInterval(pollActiveStocks, 10000);
@@ -880,6 +903,79 @@
         addLog(`✓ Memuat ${grokStates.length} Grok State, ${promptFiles.length} Prompt, ${bahanFolders.length} Bahan Folder, ${audioFolders.length} Audio Folder.`);
       } catch (e) {
         addLog('❌ Gagal preload options: ' + e.message);
+      }
+    }
+
+    function formatQuotaReset(resetAt) {
+      if (!resetAt) return 'Tidak diketahui';
+      const date = new Date(resetAt);
+      if (Number.isNaN(date.getTime())) return 'Tidak diketahui';
+      return `${date.toLocaleString('id-ID', { dateStyle: 'short', timeStyle: 'short', timeZone: 'Asia/Jakarta' })} WIB`;
+    }
+
+    function quotaStatusView(info) {
+      const status = info?.status || 'unknown';
+      if (status === 'available') return { label: 'Tersedia', className: 'text-green-300 bg-green-950/40 border-green-800/60' };
+      if (status === 'exhausted') return { label: 'Quota habis', className: 'text-red-300 bg-red-950/40 border-red-800/60' };
+      if (status === 'expired') return { label: 'State expired', className: 'text-gray-300 bg-gray-950/60 border-gray-700' };
+      if (status === 'error') return { label: 'Gagal cek', className: 'text-yellow-300 bg-yellow-950/40 border-yellow-800/60' };
+      return { label: 'Belum diketahui', className: 'text-gray-300 bg-gray-950/60 border-gray-700' };
+    }
+
+    function renderGrokQuotas(accounts) {
+      const list = document.getElementById('grok-quota-list');
+      if (!list) return;
+      if (!Array.isArray(accounts) || accounts.length === 0) {
+        list.innerHTML = '<div class="text-xs text-gray-500 py-4 text-center md:col-span-2 xl:col-span-3">Belum ada state Grok.</div>';
+        return;
+      }
+      list.innerHTML = accounts.map(info => {
+        const view = quotaStatusView(info);
+        const used = Number.isFinite(Number(info.usedPercent)) ? Math.max(0, Math.min(100, Number(info.usedPercent))) : null;
+        const remaining = Number.isFinite(Number(info.remainingPercent)) ? Number(info.remainingPercent) : null;
+        const barClass = view.label === 'Quota habis' ? 'bg-red-500' : view.label === 'Tersedia' ? 'bg-green-500' : 'bg-gray-600';
+        const error = info.error ? `<div class="text-[10px] text-yellow-300 mt-2 break-words">${escHtml(info.error)}</div>` : '';
+        return `<div class="rounded-2xl border border-gray-800 bg-gray-950/50 p-4">
+          <div class="flex items-start justify-between gap-2">
+            <div class="min-w-0">
+              <div class="font-bold text-sm text-gray-200 truncate">${escHtml(info.stateName || info.stateFile || '-')}</div>
+              <div class="text-[10px] text-gray-500 mt-0.5 truncate">${escHtml(info.account || '-')}</div>
+            </div>
+            <span class="shrink-0 px-2 py-1 rounded-lg border text-[10px] font-bold ${view.className}">${view.label}</span>
+          </div>
+          <div class="flex items-center justify-between mt-4 text-xs font-bold">
+            <span class="text-indigo-300">Terpakai: ${used === null ? '-' : `${used.toFixed(0)}%`}</span>
+            <span class="text-gray-400">Sisa: ${remaining === null ? '-' : `${remaining.toFixed(0)}%`}</span>
+          </div>
+          <div class="h-2 rounded-full bg-gray-800 mt-2 overflow-hidden"><div class="h-full ${barClass} transition-all" style="width:${used === null ? 0 : used}%;"></div></div>
+          <div class="text-[10px] text-gray-400 mt-3">Reset: <span class="font-bold text-gray-200">${formatQuotaReset(info.resetAt)}</span></div>
+          ${error}
+        </div>`;
+      }).join('');
+    }
+
+    async function loadGrokQuotas(force = false) {
+      const button = document.getElementById('grok-quota-refresh');
+      if (button && force) {
+        button.disabled = true;
+        button.textContent = 'Memeriksa...';
+      }
+      try {
+        const url = force ? '/api/grokbotv2/quotas?refresh=1' : '/api/grokbotv2/quotas';
+        const res = await fetch(url);
+        const data = await readJsonResponse(res);
+        grokQuotas = Array.isArray(data.accounts) ? data.accounts : [];
+        renderGrokQuotas(grokQuotas);
+        const checkedAt = document.getElementById('grok-quota-checked-at');
+        if (checkedAt) checkedAt.textContent = data.checkedAt ? `Cek: ${formatQuotaReset(data.checkedAt)}` : 'Baru saja dicek';
+      } catch (e) {
+        const list = document.getElementById('grok-quota-list');
+        if (list) list.innerHTML = `<div class="text-xs text-yellow-300 py-4 text-center md:col-span-2 xl:col-span-3">Gagal memuat quota: ${escHtml(e.message || String(e))}</div>`;
+      } finally {
+        if (button && force) {
+          button.disabled = false;
+          button.textContent = 'Refresh Quota';
+        }
       }
     }
 
@@ -1001,6 +1097,7 @@
           scheduleTime: '', intervalMinutes: 60,
           addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
           headless: true, threeUploadsPerHour: false,
+          grokGenerateIntervalMinutes: 15,
           lastUploadDate: '', lastUploadTime: ''
         };
 
@@ -1175,6 +1272,13 @@
                     </label>
                   </div>
 
+                  <div class="mt-3 rounded-2xl bg-indigo-950/20 border border-indigo-900/50 p-3">
+                    <label class="text-[10px] text-indigo-300 font-bold block mb-1">Interval Generate Utama/Cadangan (menit)</label>
+                    <input id="grokGenerateIntervalMinutes-${fn}" type="number" min="1" max="1440" value="${cfg.grokGenerateIntervalMinutes || 15}"
+                           class="w-full bg-gray-900 border border-indigo-800/60 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-indigo-500 transition font-semibold">
+                    <p class="text-[10px] text-gray-500 mt-1">Default 15 menit; satu video diproses per interval.</p>
+                  </div>
+
                   <div class="grid grid-cols-2 gap-2 mb-2">
                     <div>
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Upload Terakhir (Tanggal)</label>
@@ -1323,6 +1427,7 @@
         scheduleDate: document.getElementById(`scheduleDate-${fn}`)?.value || '',
         scheduleTime: document.getElementById(`scheduleTime-${fn}`)?.value || '',
         intervalMinutes: (document.getElementById(`chk-threeUploads-${fn}`)?.checked || false) ? 300 : (parseInt(document.getElementById(`intervalMinutes-${fn}`)?.value) || 60),
+        grokGenerateIntervalMinutes: Number(document.getElementById(`grokGenerateIntervalMinutes-${fn}`)?.value) || 15,
         addProduct: document.getElementById(`chk-product-${fn}`)?.checked || false,
         productNameRadio: document.getElementById(`productNameRadio-${fn}`)?.value || '',
         productTitle: document.getElementById(`productTitle-${fn}`)?.value || '',
@@ -1364,9 +1469,17 @@
         const res = await fetch('/api/grokbotv2/generate-utama', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stateFile: fn })
+          body: JSON.stringify({
+            stateFile: fn,
+            intervalMinutes: Number(document.getElementById(`grokGenerateIntervalMinutes-${fn}`)?.value) || 15
+          })
         });
         const data = await readJsonResponse(res);
+        if (Array.isArray(data.quotas)) {
+          grokQuotas = data.quotas;
+          renderGrokQuotas(grokQuotas);
+        }
+        if (data.quotaWarning) addLog('Quota warning: ' + data.quotaWarning);
         if (!data.success) {
           addLog('❌ Gagal: ' + (data.error || ''));
           setBusy(false);
@@ -1387,9 +1500,17 @@
         const res = await fetch('/api/grokbotv2/generate-cadangan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stateFile: fn })
+          body: JSON.stringify({
+            stateFile: fn,
+            intervalMinutes: Number(document.getElementById(`grokGenerateIntervalMinutes-${fn}`)?.value) || 15
+          })
         });
         const data = await readJsonResponse(res);
+        if (Array.isArray(data.quotas)) {
+          grokQuotas = data.quotas;
+          renderGrokQuotas(grokQuotas);
+        }
+        if (data.quotaWarning) addLog('Quota warning: ' + data.quotaWarning);
         if (!data.success) {
           addLog('❌ Gagal: ' + (data.error || ''));
           setBusy(false);
@@ -1612,14 +1733,26 @@
 
     function setInfiniteGenerateGrokState(index, value) { infiniteGenerateDraft[index].grokState = value; }
 
+    function getGrokQuotaForFile(stateFile) {
+      return grokQuotas.find(item => item.stateFile === stateFile) || null;
+    }
+
     function renderInfiniteGenerateDraft() {
       const validStates = grokStates.filter(item => item.expiry?.status !== 'expired');
       document.getElementById('infinite-generate-state-list').innerHTML = infiniteGenerateDraft.map((item, index) => {
         const options = validStates.map(gs => `<option value="${escHtml(gs.filename)}" ${item.grokState === gs.filename ? 'selected' : ''}>${escHtml(gs.name)}</option>`).join('');
+        const selectedQuota = item.grokState ? getGrokQuotaForFile(item.grokState) : null;
+        const availableCount = grokQuotas.filter(info => info.status === 'available').length;
+        const quotaSummary = item.autoSwitchGrokState
+          ? `<div class="mt-3 rounded-xl border border-indigo-900/50 bg-indigo-950/20 px-3 py-2 text-[10px] text-indigo-200">Quota pool: <b>${availableCount}</b> akun tersedia dari ${grokQuotas.length}. Akun habis akan dilewati otomatis.</div>`
+          : selectedQuota
+            ? `<div class="mt-3 rounded-xl border border-gray-800 bg-gray-950/70 px-3 py-2 text-[10px] text-gray-300">Quota: <b>${selectedQuota.usedPercent ?? '-'}%</b> terpakai · Sisa <b>${selectedQuota.remainingPercent ?? '-'}%</b> · Reset <b>${formatQuotaReset(selectedQuota.resetAt)}</b></div>`
+            : '<div class="mt-3 text-[10px] text-yellow-300">Quota akun belum diperiksa.</div>';
         return `<div class="rounded-2xl border border-gray-800 bg-gray-900/70 p-4">
           <div class="font-extrabold text-gray-200 mb-3">${index + 1}. ${escHtml(getStateName(item.stateFile))}</div>
           <label class="flex items-center gap-2.5 cursor-pointer mb-3"><input type="checkbox" ${item.autoSwitchGrokState ? 'checked' : ''} onchange="setInfiniteGenerateAutoSwitch(${index}, this.checked)" class="w-4 h-4 accent-purple-500"><span class="text-xs text-purple-300 font-bold">🔄 Auto Switch Grok State</span></label>
           <div style="display:${item.autoSwitchGrokState ? 'none' : 'block'}"><label class="text-xs text-gray-400 font-semibold block mb-1">Grok State (Session)</label><select onchange="setInfiniteGenerateGrokState(${index}, this.value)" class="w-full bg-gray-950 border border-gray-700 rounded-xl px-3 py-2.5 text-sm text-white"><option value="">-- Pilih Grok State --</option>${options}</select></div>
+          ${quotaSummary}
           ${item.autoSwitchGrokState ? `<p class="text-xs text-gray-500">Semua session Grok valid akan dipakai bergantian saat akun aktif terkena rate limit.</p>` : ''}
         </div>`;
       }).join('');
@@ -1648,6 +1781,11 @@
           addLog('❌ Gagal: ' + (data.error || ''));
           setBusy(false);
         } else {
+          if (Array.isArray(data.quotas)) {
+            grokQuotas = data.quotas;
+            renderGrokQuotas(grokQuotas);
+          }
+          if (data.quotaWarning) addLog('Quota warning: ' + data.quotaWarning);
           infiniteGenerateDraft.forEach(item => {
             stateConfigs[item.stateFile] = { ...(stateConfigs[item.stateFile] || {}), autoSwitchGrokState: item.autoSwitchGrokState, grokState: item.grokState };
           });
@@ -1922,11 +2060,11 @@
           <div class="bg-red-950/40 border border-red-900/50 rounded-2xl p-4 mb-3 space-y-2">
             <div class="flex items-center gap-2 font-bold text-xs text-red-400">
               <span class="w-2 h-2 rounded-full bg-red-500 running-pulse"></span>
-              <span>Grok Rate Limit Wait</span>
+              <span>${currentWaitInfo.reason === 'quota' ? '📊 Grok Quota Wait' : '🎯 Grok Rate Limit Wait'}</span>
             </div>
             <div class="text-xs text-gray-300 space-y-1">
-              <div>⏰ Tersedia: <span class="font-semibold text-gray-100">${escHtml(currentWaitInfo.rateLimitTime)}</span></div>
-              <div>🔄 Mulai lagi: <span class="font-semibold text-gray-100">${escHtml(currentWaitInfo.resumeTime)}</span></div>
+              <div>⏰ Audit terakhir: <span class="font-semibold text-gray-100">${escHtml(formatQuotaReset(currentWaitInfo.rateLimitTime))}</span></div>
+              <div>🔄 Mulai lagi/reset: <span class="font-semibold text-gray-100">${escHtml(formatQuotaReset(currentWaitInfo.resumeTime))}</span></div>
               <div>🎯 Target state: <span class="font-bold text-pink-400">${escHtml(currentWaitInfo.targetState)}</span></div>
             </div>
           </div>

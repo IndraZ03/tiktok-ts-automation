@@ -43,6 +43,238 @@ export interface GrokV2Session {
   requestMetadata: Record<string, string>;
 }
 
+export type GrokQuotaStatus = 'available' | 'exhausted' | 'expired' | 'unknown' | 'error';
+
+export interface GrokQuotaInfo {
+  stateFile: string;
+  stateName: string;
+  account: string;
+  usedPercent: number | null;
+  remainingPercent: number | null;
+  resetAt: string | null;
+  available: boolean;
+  status: GrokQuotaStatus;
+  checkedAt: string;
+  error?: string;
+}
+
+function normalizeGrokStateName(value: string): string {
+  return String(value || 'indra')
+    .replace(/^grok-state-/i, '')
+    .replace(/\.json$/i, '');
+}
+
+function clampPercent(value: number | null): number | null {
+  if (value === null || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.min(100, value));
+}
+
+function readQuotaVarint(bytes: Uint8Array, offset: number): { value: number; next: number } | null {
+  let value = 0;
+  let shift = 0;
+  let cursor = offset;
+  while (cursor < bytes.length && shift <= 53) {
+    const current = bytes[cursor++];
+    value += (current & 0x7f) * 2 ** shift;
+    if ((current & 0x80) === 0) return { value, next: cursor };
+    shift += 7;
+  }
+  return null;
+}
+
+function readGrpcWebDataFrames(buffer: number[]): Uint8Array[] {
+  const bytes = new Uint8Array(buffer);
+  const frames: Uint8Array[] = [];
+  let offset = 0;
+  while (offset + 5 <= bytes.length) {
+    const flags = bytes[offset];
+    const length = bytes[offset + 1] * 0x1000000
+      + bytes[offset + 2] * 0x10000
+      + bytes[offset + 3] * 0x100
+      + bytes[offset + 4];
+    offset += 5;
+    if (length < 0 || offset + length > bytes.length) break;
+    if ((flags & 0x80) === 0) frames.push(bytes.slice(offset, offset + length));
+    offset += length;
+  }
+  return frames;
+}
+
+function readQuotaTimestamp(bytes: Uint8Array): string | null {
+  let seconds: number | null = null;
+  let nanos = 0;
+  let offset = 0;
+  while (offset < bytes.length) {
+    const tag = readQuotaVarint(bytes, offset);
+    if (!tag) break;
+    offset = tag.next;
+    const field = Math.floor(tag.value / 8);
+    const wire = tag.value % 8;
+    if (wire === 0) {
+      const value = readQuotaVarint(bytes, offset);
+      if (!value) break;
+      offset = value.next;
+      if (field === 1) seconds = value.value;
+      if (field === 2) nanos = value.value;
+    } else if (wire === 2) {
+      const length = readQuotaVarint(bytes, offset);
+      if (!length) break;
+      offset = Math.min(bytes.length, length.next + length.value);
+    } else if (wire === 1) {
+      offset += 8;
+    } else if (wire === 5) {
+      offset += 4;
+    } else {
+      break;
+    }
+  }
+
+  if (seconds === null || !Number.isFinite(seconds) || seconds <= 0) return null;
+  const timestamp = seconds * 1000 + nanos / 1_000_000;
+  const date = new Date(timestamp);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function parseGrokCreditsMessage(payload: Uint8Array, depth = 0): { usedPercent: number | null; resetAt: string | null } {
+  let usedPercent: number | null = null;
+  let resetAt: string | null = null;
+  let offset = 0;
+  while (offset < payload.length) {
+    const tag = readQuotaVarint(payload, offset);
+    if (!tag) break;
+    offset = tag.next;
+    const field = Math.floor(tag.value / 8);
+    const wire = tag.value % 8;
+    if (wire === 5) {
+      if (offset + 4 > payload.length) break;
+      if (field === 1) usedPercent = new DataView(payload.buffer, payload.byteOffset + offset, 4).getFloat32(0, true);
+      offset += 4;
+    } else if (wire === 2) {
+      const length = readQuotaVarint(payload, offset);
+      if (!length) break;
+      offset = length.next;
+      const end = Math.min(payload.length, offset + length.value);
+      if (field === 5) resetAt = readQuotaTimestamp(payload.slice(offset, end)) || resetAt;
+      if (field === 1 && depth < 3) {
+        const nested = parseGrokCreditsMessage(payload.slice(offset, end), depth + 1);
+        usedPercent = nested.usedPercent ?? usedPercent;
+        resetAt = nested.resetAt || resetAt;
+      }
+      offset = end;
+    } else if (wire === 0) {
+      const value = readQuotaVarint(payload, offset);
+      if (!value) break;
+      offset = value.next;
+    } else if (wire === 1) {
+      offset += 8;
+    } else {
+      break;
+    }
+  }
+
+  return { usedPercent: clampPercent(usedPercent), resetAt };
+}
+
+export function parseGrokCreditsConfig(buffer: number[]): { usedPercent: number | null; resetAt: string | null } {
+  const frames = readGrpcWebDataFrames(buffer);
+  const payload = frames[0];
+  if (!payload) return { usedPercent: null, resetAt: null };
+  return parseGrokCreditsMessage(payload);
+}
+
+function buildGrokAccountLabel(sessionBody: any, stateName: string): string {
+  const session = sessionBody?.session;
+  if (!session) return stateName;
+  const name = [session.givenName, session.familyName].filter(Boolean).join(' ').trim();
+  const email = typeof session.email === 'string' ? session.email : '';
+  if (name && email) return `${name} (${email})`;
+  return name || email || stateName;
+}
+
+async function probeGrokQuotaPage(page: Page, stateFile: string, stateName: string): Promise<GrokQuotaInfo> {
+  const checkedAt = new Date().toISOString();
+  const probe = await page.evaluate(async () => {
+    const result: any = {
+      configStatus: 0,
+      configBytes: [],
+      quotaStatus: 0,
+      quotaBody: null,
+      quotaText: '',
+      sessionBody: null,
+      errors: []
+    };
+
+    try {
+      const configResponse = await fetch('https://grok.com/grok_api_v2.GrokBuildBilling/GetGrokCreditsConfig', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/grpc-web+proto', 'X-Grpc-Web': '1' },
+        credentials: 'include',
+        body: new Uint8Array([0, 0, 0, 0, 0])
+      });
+      result.configStatus = configResponse.status;
+      result.configBytes = Array.from(new Uint8Array(await configResponse.arrayBuffer()));
+    } catch (error: any) {
+      result.errors.push(`credits config: ${error?.message || String(error)}`);
+    }
+
+    try {
+      const quotaResponse = await fetch('https://grok.com/rest/media/imagine/quota_info', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: '{}'
+      });
+      result.quotaStatus = quotaResponse.status;
+      result.quotaText = await quotaResponse.text();
+      try { result.quotaBody = JSON.parse(result.quotaText); } catch {}
+    } catch (error: any) {
+      result.errors.push(`quota info: ${error?.message || String(error)}`);
+    }
+
+    try {
+      const sessionResponse = await fetch('https://grok.com/api/auth/session', { credentials: 'include' });
+      result.sessionBody = await sessionResponse.json();
+    } catch (error: any) {
+      result.errors.push(`auth session: ${error?.message || String(error)}`);
+    }
+
+    return result;
+  });
+
+  const config = parseGrokCreditsConfig(probe.configBytes || []);
+  const quotaBody = probe.quotaBody || {};
+  const videoQuota = quotaBody.video && typeof quotaBody.video === 'object' ? quotaBody.video : null;
+  const remainingQuota = quotaBody.remainingQuota ?? quotaBody.remaining_quota;
+  const quotaSaysUnavailable = videoQuota?.available === false
+    || quotaBody.rateLimited === true
+    || (remainingQuota !== undefined && Number.isFinite(Number(remainingQuota)) && Number(remainingQuota) <= 0)
+    || /rate.?limit|too many requests|weekly limit|batas mingguan/i.test(String(probe.quotaText || ''));
+  const configSaysExhausted = config.usedPercent !== null && config.usedPercent >= 100;
+  const hasSuccessfulProbe = Number(probe.configStatus) >= 200 && Number(probe.configStatus) < 300
+    || Number(probe.quotaStatus) >= 200 && Number(probe.quotaStatus) < 300;
+  const status: GrokQuotaStatus = configSaysExhausted || quotaSaysUnavailable
+    ? 'exhausted'
+    : hasSuccessfulProbe && config.usedPercent !== null
+      ? 'available'
+      : probe.errors?.length
+        ? 'error'
+        : 'unknown';
+
+  const error = probe.errors?.length ? probe.errors.join('; ') : undefined;
+  return {
+    stateFile,
+    stateName,
+    account: buildGrokAccountLabel(probe.sessionBody, stateName),
+    usedPercent: config.usedPercent,
+    remainingPercent: config.usedPercent === null ? null : clampPercent(100 - config.usedPercent),
+    resetAt: config.resetAt,
+    available: status === 'available',
+    status,
+    checkedAt,
+    ...(error ? { error } : {})
+  };
+}
+
 async function waitForGrokImagineReady(page: Page, context: BrowserContext, timeoutMs = 90000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   try { await page.waitForLoadState('load', { timeout: 30000 }); } catch {}
@@ -79,23 +311,46 @@ async function waitForGrokImagineReady(page: Page, context: BrowserContext, time
   throw new Error('Grok Imagine belum siap setelah menunggu halaman selesai loading.');
 }
 
-export async function checkGrokQuota(stateName = 'indra') {
-  const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
-  if (!fs.existsSync(statePath)) throw new Error(`File state grok-state-${stateName}.json tidak ditemukan`);
-  const browser = await chromium.launch({ headless: true });
-  const context = await browser.newContext({ storageState: statePath });
+export async function checkGrokQuota(stateNameOrFile = 'indra'): Promise<GrokQuotaInfo> {
+  const stateName = normalizeGrokStateName(stateNameOrFile);
+  const stateFile = `grok-state-${stateName}.json`;
+  const statePath = path.join(process.cwd(), 'grok-states', stateFile);
+  if (!fs.existsSync(statePath)) throw new Error(`File state ${stateFile} tidak ditemukan`);
+
+  const browser = await chromium.launch({ headless: true, channel: 'chrome', args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'], ignoreDefaultArgs: ['--enable-automation'] });
+  const context = await browser.newContext({
+    viewport: { width: 1366, height: 768 },
+    userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+    locale: 'en-US',
+    timezoneId: 'Asia/Jakarta',
+    storageState: statePath,
+    extraHTTPHeaders: {
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Cache-Control': 'no-cache',
+      Pragma: 'no-cache',
+    },
+  });
   const page = await context.newPage();
-  await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded' });
-  const quota = await page.evaluate(async () => {
-    const res = await fetch('https://grok.com/rest/media/imagine/quota_info', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
-    return res.json();
-  });
-  const session = await page.evaluate(async () => {
-    const res = await fetch('https://grok.com/api/auth/session');
-    return res.json();
-  });
-  await browser.close();
-  return { account: session.session ? `${session.session.givenName} (${session.session.email})` : 'Unauthenticated', quota };
+  try {
+    await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    return await probeGrokQuotaPage(page, stateFile, stateName);
+  } catch (error: any) {
+    return {
+      stateFile,
+      stateName,
+      account: stateName,
+      usedPercent: null,
+      remainingPercent: null,
+      resetAt: null,
+      available: false,
+      status: 'error',
+      checkedAt: new Date().toISOString(),
+      error: error?.message || String(error)
+    };
+  } finally {
+    try { await context.close(); } catch {}
+    try { await browser.close(); } catch {}
+  }
 }
 
 export interface GrokV2SessionOptions {
@@ -109,7 +364,21 @@ export async function createGrokV2Session(stateName = 'indra', headless = true, 
 
   const browser = await chromium.launch({ headless, channel: 'chrome', args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'], ignoreDefaultArgs: ['--enable-automation'] });
   try {
-    const context = await browser.newContext({ viewport: { width: 1366, height: 768 }, userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36', locale: 'en-US', timezoneId: 'Asia/Makassar', storageState: statePath, acceptDownloads: true });
+    const context = await browser.newContext({
+      viewport: { width: 1366, height: 768 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+      locale: 'en-US',
+      timezoneId: 'Asia/Makassar',
+      storageState: statePath,
+      acceptDownloads: true,
+      // Prevent an old cached Imagine shell from being reused after Grok
+      // deploys a new page version. Code 7 is commonly emitted by that shell.
+      extraHTTPHeaders: {
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+      },
+    });
     const page = await context.newPage();
     const session: GrokV2Session = { browser, context, page, stateName, statsigId: '', requestMetadata: {} };
     const metadataHeaders = ['baggage', 'sentry-trace', 'traceparent'];
@@ -156,8 +425,16 @@ export async function createGrokV2Session(stateName = 'indra', headless = true, 
       ? extraInit
       : browserScript + webdriverSpoofInit + (extraInit ? '\n' + extraInit : '');
     await page.addInitScript({ content: initContent });
-    await page.goto(`https://grok.com/imagine?fresh=${Date.now()}`, { waitUntil: 'load', timeout: 60000 });
+    // Keep the canonical Imagine URL. Grok validates the page/referrer
+    // context for conversations/new and can return code 7 for a query-string
+    // variant such as /imagine?fresh=... . Cache bypass is handled by the
+    // context headers above.
+    await page.goto('https://grok.com/imagine', { waitUntil: 'load', timeout: 60000 });
     await waitForGrokImagineReady(page, context);
+    // Persist refreshed Cloudflare/session cookies (for example cf_clearance
+    // and __cf_bm) back to the selected state. Otherwise a newly obtained
+    // clearance disappears when this browser context is closed.
+    try { await context.storageState({ path: statePath }); } catch {}
     return session;
   } catch (error) {
     try { await browser.close(); } catch {}
@@ -274,6 +551,9 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
     const detectedRateLimit = rateLimitDetectedAt as { availableAt: string | null; transient: boolean; retryAfterMs: number } | null;
     if (result?.rateLimited || detectedRateLimit) {
       const availableAt = result?.availableAt || detectedRateLimit?.availableAt || null;
+      if (result?.failureKind === 'account_rate_limit') {
+        log('Grok code:7 pada conversations/new diklasifikasikan sebagai rate limit akun; retry dihentikan.', 14);
+      }
       const isTooManyRequests = !!result?.transientRateLimit
         || result?.httpStatus === 429
         || !!detectedRateLimit?.transient;
@@ -302,7 +582,8 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
     if (!result || result.status !== 'done' || !result.videoUrl) {
       if (result?.stalePage) {
         const staleError = new GrokStalePageError(
-          result.error || 'Grok mengirim 403 code:7: This page is out of date.',
+          `${result.error || 'Grok mengirim 403 code:7: This page is out of date.'}`
+            + (result.failureEndpoint ? ` [endpoint: ${result.failureEndpoint}]` : ''),
           Number(result.httpStatus) || 403
         );
         // A stale response invalidates the whole browser context, not only the
