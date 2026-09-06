@@ -3,7 +3,7 @@
 // Atau compile dulu: npx tsc && node dist/tiktok-state-manager.js
 
 import express, { Request, Response } from 'express';
-import { chromium, BrowserContext } from 'playwright';
+import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -12,7 +12,7 @@ import { execa } from 'execa';
 import { runUpload, stopUploader, getIsRunning, type SchedulePlanItem } from './tiktok-uploader.js';
 import { runFacebookUpload, stopFacebookUploader, getFacebookIsRunning } from './facebook-uploader.js';
 import { runGrokGenerator, stopGrokGenerator, getGrokIsRunning, getGrokStats, getBrowserProgress, BrowserProgress, getGrokRateLimits, clearGrokRateLimit, setGrokRateLimit } from './grok-uploader.js';
-import { generateGrokVideoV2, createGrokV2Session, closeGrokV2Session, RateLimitError, TooManyRequestsError, GrokStalePageError, type GrokV2Session } from './grok_api_client.js';
+import { generateGrokVideoV2, createGrokV2Session, closeGrokV2Session, checkGrokQuota, RateLimitError, TooManyRequestsError, GrokStalePageError, type GrokV2Session, type GrokQuotaInfo } from './grok_api_client.js';
 import { buildDebugInitScript, attachPageDebugListeners, collectFetchLog, filterFetchLogLegends, dumpFetchLogToFile } from './grokv2-debug.js';
 import { generateGrokVideoBrowser } from './grok_browser_client.js';
 import { generateVidabotVideo } from './vidabot_api_client.js';
@@ -239,6 +239,359 @@ function getSavedStates(platform: 'tiktok' | 'grok' | 'facebook' = 'tiktok') {
   });
 }
 
+// === GROK INSPECTION ===
+// Sesi ini sengaja dipisahkan dari currentContext agar inspector tidak
+// mengganggu proses login atau automation lain yang sedang berjalan.
+interface GrokInspectionSelection {
+  id: number;
+  capturedAt: string;
+  pageUrl: string;
+  tagName: string;
+  idAttribute: string;
+  className: string;
+  text: string;
+  ariaLabel: string;
+  role: string;
+  name: string;
+  type: string;
+  value: string;
+  placeholder: string;
+  href: string;
+  selector: string;
+  xpath: string;
+  outerHTML: string;
+  attributes: Array<{ name: string; value: string }>;
+  rect: { x: number; y: number; width: number; height: number };
+  candidates: string[];
+  automationCode: string;
+}
+
+const grokInspectionClients: Response[] = [];
+let grokInspectionBrowser: Browser | null = null;
+let grokInspectionContext: BrowserContext | null = null;
+let grokInspectionPage: Page | null = null;
+let grokInspectionActive = false;
+let grokInspectionState = '';
+let grokInspectionMode: 'inspect' | 'operate' = 'operate';
+let grokInspectionModeRevision = 0;
+let grokInspectionSelection: GrokInspectionSelection | null = null;
+let grokInspectionSelectionId = 0;
+
+function broadcastGrokInspection(event: string, data: Record<string, unknown> = {}) {
+  const payload = JSON.stringify({ event, ...data });
+  grokInspectionClients.forEach(client => {
+    try {
+      client.write(`data: ${payload}\n\n`);
+    } catch {
+      // Client yang sudah menutup koneksi akan dibersihkan oleh event close.
+    }
+  });
+}
+
+function safeInspectionText(value: unknown, maxLength = 500): string {
+  return typeof value === 'string' ? value.slice(0, maxLength) : '';
+}
+
+function isInspectionRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function buildInspectionAutomationCode(selection: Omit<GrokInspectionSelection, 'id' | 'capturedAt' | 'automationCode'>): string {
+  const selector = JSON.stringify(selection.selector || selection.candidates[0] || '*');
+  const target = `page.locator(${selector})`;
+
+  if (selection.tagName === 'INPUT' || selection.tagName === 'TEXTAREA') {
+    if (selection.type === 'checkbox' || selection.type === 'radio') {
+      return `await ${target}.check();`;
+    }
+    if (selection.type !== 'file') {
+      return `await ${target}.fill(${JSON.stringify(selection.value || '')});`;
+    }
+  }
+
+  if (selection.tagName === 'SELECT') {
+    return `await ${target}.selectOption(${JSON.stringify(selection.value || '')});`;
+  }
+
+  return `await ${target}.click();`;
+}
+
+function normalizeGrokInspectionSelection(payload: unknown): GrokInspectionSelection {
+  const item = isInspectionRecord(payload) ? payload : {};
+  const rawRect = isInspectionRecord(item.rect) ? item.rect : {};
+  const rawAttributes = Array.isArray(item.attributes) ? item.attributes : [];
+  const attributes = rawAttributes
+    .filter(isInspectionRecord)
+    .slice(0, 80)
+    .map(attribute => ({
+      name: safeInspectionText(attribute.name, 120),
+      value: safeInspectionText(attribute.value, 500)
+    }))
+    .filter(attribute => attribute.name);
+
+  const selection = {
+    pageUrl: safeInspectionText(item.pageUrl, 2000),
+    tagName: safeInspectionText(item.tagName, 40).toUpperCase(),
+    idAttribute: safeInspectionText(item.idAttribute, 300),
+    className: safeInspectionText(item.className, 1000),
+    text: safeInspectionText(item.text, 1000),
+    ariaLabel: safeInspectionText(item.ariaLabel, 500),
+    role: safeInspectionText(item.role, 200),
+    name: safeInspectionText(item.name, 300),
+    type: safeInspectionText(item.type, 100),
+    value: safeInspectionText(item.value, 1000),
+    placeholder: safeInspectionText(item.placeholder, 500),
+    href: safeInspectionText(item.href, 2000),
+    selector: safeInspectionText(item.selector, 2000),
+    xpath: safeInspectionText(item.xpath, 2000),
+    outerHTML: safeInspectionText(item.outerHTML, 6000),
+    attributes,
+    rect: {
+      x: Number(rawRect.x) || 0,
+      y: Number(rawRect.y) || 0,
+      width: Number(rawRect.width) || 0,
+      height: Number(rawRect.height) || 0
+    },
+    candidates: Array.isArray(item.candidates)
+      ? item.candidates.filter(value => typeof value === 'string').slice(0, 12).map(value => value.slice(0, 2000))
+      : []
+  };
+
+  return {
+    ...selection,
+    id: ++grokInspectionSelectionId,
+    capturedAt: new Date().toISOString(),
+    automationCode: buildInspectionAutomationCode(selection)
+  };
+}
+
+async function closeGrokInspectionBrowser(announce = true) {
+  const context = grokInspectionContext;
+  const browser = grokInspectionBrowser;
+  grokInspectionBrowser = null;
+  grokInspectionContext = null;
+  grokInspectionPage = null;
+  grokInspectionActive = false;
+  grokInspectionState = '';
+  grokInspectionMode = 'operate';
+  grokInspectionModeRevision = 0;
+
+  try {
+    if (context) await context.close();
+  } catch (error) {
+    console.error('[GROK INSPECTION] Gagal menutup context:', error);
+  }
+  try {
+    if (browser) await browser.close();
+  } catch (error) {
+    console.error('[GROK INSPECTION] Gagal menutup browser:', error);
+  }
+
+  if (announce) broadcastGrokInspection('stopped');
+}
+
+const GROK_INSPECTION_INIT_SCRIPT = `
+(() => {
+  if (window.__grokInspectionInstalled) return;
+  window.__grokInspectionInstalled = true;
+
+  let mode = 'operate';
+  let modeRevision = 0;
+  let highlightedElement = null;
+  let highlightBox = null;
+  let modeBadge = null;
+  const inspectionMarker = 'data-grok-inspector-marker';
+
+  const escapeCss = (value) => {
+    if (window.CSS && typeof window.CSS.escape === 'function') return window.CSS.escape(value);
+    return String(value).replace(/([\\\\.#:[\\],>+~*^$|=() ])/g, '\\\\$1');
+  };
+
+  const quoteAttribute = (value) => JSON.stringify(String(value));
+
+  const visibleText = (element) => String(element.innerText || element.textContent || '')
+    .replace(/\\s+/g, ' ').trim().slice(0, 500);
+
+  const getCssPath = (element) => {
+    if (element.id) return '#' + escapeCss(element.id);
+    const segments = [];
+    let current = element;
+    while (current && current.nodeType === 1 && current !== document.body && segments.length < 8) {
+      let segment = current.tagName.toLowerCase();
+      const testId = current.getAttribute('data-testid') || current.getAttribute('data-test-id');
+      if (testId) {
+        segment += '[data-testid=' + quoteAttribute(testId) + ']';
+      } else {
+        const stableClasses = Array.from(current.classList || [])
+          .filter((name) => name.length < 80 && !/^\\d/.test(name) && !/^(active|selected|hover|focus|open|closed|disabled)$/.test(name))
+          .slice(0, 3);
+        if (stableClasses.length) segment += stableClasses.map((name) => '.' + escapeCss(name)).join('');
+        const parent = current.parentElement;
+        if (parent) {
+          const siblings = Array.from(parent.children).filter((child) => child.tagName === current.tagName);
+          if (siblings.length > 1) segment += ':nth-of-type(' + (siblings.indexOf(current) + 1) + ')';
+        }
+      }
+      segments.unshift(segment);
+      current = current.parentElement;
+    }
+    return segments.join(' > ') || element.tagName.toLowerCase();
+  };
+
+  const getXPath = (element) => {
+    if (element.id) return '//*[@id=' + quoteAttribute(element.id) + ']';
+    const parts = [];
+    let current = element;
+    while (current && current.nodeType === 1 && parts.length < 8) {
+      let index = 1;
+      let sibling = current.previousElementSibling;
+      while (sibling) {
+        if (sibling.tagName === current.tagName) index++;
+        sibling = sibling.previousElementSibling;
+      }
+      parts.unshift(current.tagName.toLowerCase() + '[' + index + ']');
+      current = current.parentElement;
+    }
+    return '/' + parts.join('/');
+  };
+
+  const getCandidates = (element, selector) => {
+    const candidates = [];
+    if (element.id) candidates.push('#' + escapeCss(element.id));
+    const testId = element.getAttribute('data-testid') || element.getAttribute('data-test-id');
+    if (testId) candidates.push('[data-testid=' + quoteAttribute(testId) + ']');
+    const aria = element.getAttribute('aria-label');
+    if (aria) candidates.push('[aria-label=' + quoteAttribute(aria) + ']');
+    const name = element.getAttribute('name');
+    if (name) candidates.push(element.tagName.toLowerCase() + '[name=' + quoteAttribute(name) + ']');
+    if (selector) candidates.push(selector);
+    return Array.from(new Set(candidates));
+  };
+
+  const getTarget = (target) => {
+    if (!(target instanceof Element)) return null;
+    if (target.closest('[' + inspectionMarker + ']')) return null;
+    return target;
+  };
+
+  const ensureHighlightBox = () => {
+    if (highlightBox || !document.body) return highlightBox;
+    highlightBox = document.createElement('div');
+    highlightBox.setAttribute(inspectionMarker, 'true');
+    highlightBox.style.cssText = 'position:fixed;z-index:2147483646;pointer-events:none;border:2px solid #8b5cf6;background:rgba(139,92,246,.12);box-shadow:0 0 0 1px rgba(255,255,255,.35),0 0 18px rgba(139,92,246,.55);border-radius:4px;transition:all 60ms ease;display:none;';
+    document.body.appendChild(highlightBox);
+    return highlightBox;
+  };
+
+  const reportMode = () => {
+    if (typeof window.__reportGrokInspectionMode === 'function') {
+      Promise.resolve(window.__reportGrokInspectionMode({ mode, revision: modeRevision })).catch(() => {});
+    }
+  };
+
+  const ensureModeBadge = () => {
+    if (modeBadge || !document.body) return modeBadge;
+    modeBadge = document.createElement('div');
+    modeBadge.setAttribute(inspectionMarker, 'true');
+    modeBadge.style.cssText = 'position:fixed;right:18px;bottom:18px;z-index:2147483647;pointer-events:none;padding:7px 10px;border:1px solid rgba(196,181,253,.45);border-radius:999px;color:#ede9fe;background:rgba(25,18,52,.92);box-shadow:0 8px 25px rgba(0,0,0,.28);font:600 11px/1.2 Arial,sans-serif;letter-spacing:.04em;';
+    document.body.appendChild(modeBadge);
+    return modeBadge;
+  };
+
+  const updateModeBadge = () => {
+    const badge = ensureModeBadge();
+    if (!badge) return;
+    badge.textContent = mode === 'inspect' ? '⌖ INSPECT · Esc untuk operate' : '↗ OPERATE · Esc untuk inspect';
+    badge.style.borderColor = mode === 'inspect' ? 'rgba(196,181,253,.45)' : 'rgba(52,211,153,.4)';
+    badge.style.color = mode === 'inspect' ? '#ede9fe' : '#a7f3d0';
+    badge.style.background = mode === 'inspect' ? 'rgba(25,18,52,.92)' : 'rgba(6,36,30,.92)';
+    if (mode === 'operate' && highlightBox) highlightBox.style.display = 'none';
+  };
+
+  window.__setGrokInspectionMode = (nextMode) => {
+    const next = nextMode === 'operate' ? 'operate' : 'inspect';
+    if (next !== mode) modeRevision++;
+    mode = next;
+    updateModeBadge();
+    reportMode();
+    return { mode, revision: modeRevision };
+  };
+
+  const updateHighlight = (element) => {
+    const box = ensureHighlightBox();
+    if (!box || !element) return;
+    const rect = element.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) { box.style.display = 'none'; return; }
+    highlightedElement = element;
+    box.style.display = 'block';
+    box.style.left = Math.max(0, rect.left - 2) + 'px';
+    box.style.top = Math.max(0, rect.top - 2) + 'px';
+    box.style.width = Math.max(0, rect.width) + 'px';
+    box.style.height = Math.max(0, rect.height) + 'px';
+  };
+
+  const report = (element) => {
+    const selector = getCssPath(element);
+    const attributes = Array.from(element.attributes || []).map((attribute) => ({ name: attribute.name, value: attribute.value }));
+    const info = {
+      pageUrl: window.location.href,
+      tagName: element.tagName,
+      idAttribute: element.id || '',
+      className: typeof element.className === 'string' ? element.className : '',
+      text: visibleText(element),
+      ariaLabel: element.getAttribute('aria-label') || '',
+      role: element.getAttribute('role') || '',
+      name: element.getAttribute('name') || '',
+      type: element.getAttribute('type') || '',
+      value: 'value' in element ? String(element.value || '') : '',
+      placeholder: element.getAttribute('placeholder') || '',
+      href: element.href || element.getAttribute('href') || '',
+      selector,
+      xpath: getXPath(element),
+      outerHTML: element.outerHTML || '',
+      attributes,
+      rect: (() => { const r = element.getBoundingClientRect(); return { x: r.x, y: r.y, width: r.width, height: r.height }; })(),
+      candidates: getCandidates(element, selector)
+    };
+    if (typeof window.__reportGrokInspection === 'function') {
+      Promise.resolve(window.__reportGrokInspection(info)).catch(() => {});
+    }
+  };
+
+  document.addEventListener('mousemove', (event) => {
+    if (mode === 'inspect' || event.altKey) updateHighlight(getTarget(event.target));
+    else if (highlightBox) highlightBox.style.display = 'none';
+  }, true);
+
+  document.addEventListener('click', (event) => {
+    if (mode !== 'inspect' && !event.altKey) return;
+    const element = getTarget(event.target);
+    if (!element) return;
+    event.preventDefault();
+    event.stopPropagation();
+    event.stopImmediatePropagation();
+    updateHighlight(element);
+    report(element);
+  }, true);
+
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      mode = mode === 'inspect' ? 'operate' : 'inspect';
+      modeRevision++;
+      updateModeBadge();
+      reportMode();
+    }
+  }, true);
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => { updateModeBadge(); reportMode(); }, { once: true });
+  } else {
+    updateModeBadge();
+    reportMode();
+  }
+})();
+`;
+
 // ═══════════════════════════════════════════════════════════
 //  FBBOT CONSTANTS & PERSISTENCE
 // ═══════════════════════════════════════════════════════════
@@ -308,6 +661,166 @@ function getFbbotStateVideoDir(stateFile: string): string {
 app.get('/api/states', (req, res) => {
   const platform = req.query.platform === 'grok' ? 'grok' : (req.query.platform === 'facebook' ? 'facebook' : 'tiktok');
   res.json(getSavedStates(platform));
+});
+
+// === Grok Element Inspector APIs ===
+app.get('/api/grokinspection/events', (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const client = res;
+  grokInspectionClients.push(client);
+  client.write(`data: ${JSON.stringify({
+    event: 'status',
+    active: grokInspectionActive,
+    state: grokInspectionState,
+    mode: grokInspectionMode,
+    selection: grokInspectionSelection
+  })}\n\n`);
+
+  req.on('close', () => {
+    const index = grokInspectionClients.indexOf(client);
+    if (index >= 0) grokInspectionClients.splice(index, 1);
+  });
+});
+
+app.get('/api/grokinspection/status', (req, res) => {
+  res.json({
+    active: grokInspectionActive,
+    state: grokInspectionState,
+    mode: grokInspectionMode,
+    url: grokInspectionPage?.url() || '',
+    selection: grokInspectionSelection
+  });
+});
+
+app.post('/api/grokinspection/start', async (req, res) => {
+  const filename = typeof req.body?.filename === 'string' ? req.body.filename : '';
+
+  if (!filename || path.basename(filename) !== filename || !filename.startsWith('grok-state-') || !filename.endsWith('.json')) {
+    return res.status(400).json({ error: 'Pilih state Grok yang valid.' });
+  }
+
+  const filepath = path.join(GROK_STATES_DIR, filename);
+  if (!fs.existsSync(filepath)) {
+    return res.status(404).json({ error: 'File state Grok tidak ditemukan.' });
+  }
+
+  await closeGrokInspectionBrowser(false);
+  grokInspectionSelection = null;
+  grokInspectionMode = 'operate';
+  grokInspectionModeRevision = 0;
+  grokInspectionState = filename.replace(/^grok-state-/, '').replace(/\.json$/, '');
+
+  let browser: Browser | null = null;
+  let context: BrowserContext | null = null;
+
+  try {
+    browser = await chromium.launch({
+      headless: false,
+      slowMo: 100,
+      channel: 'chrome',
+      args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
+      ignoreDefaultArgs: ['--enable-automation']
+    });
+
+    context = await browser.newContext({
+      viewport: { width: 1366, height: 768 },
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36',
+      locale: 'id-ID',
+      timezoneId: 'Asia/Makassar',
+      permissions: ['geolocation'],
+      extraHTTPHeaders: { 'Accept-Language': 'id-ID,id;q=0.9,en;q=0.8' },
+      storageState: filepath
+    });
+
+    await context.addInitScript({ content: GROK_INSPECTION_INIT_SCRIPT });
+    const page = await context.newPage();
+    await page.exposeFunction('__reportGrokInspection', (payload: unknown) => {
+      grokInspectionSelection = normalizeGrokInspectionSelection(payload);
+      broadcastGrokInspection('selection', { selection: grokInspectionSelection });
+    });
+    await page.exposeFunction('__reportGrokInspectionMode', (payload: unknown) => {
+      const reportedMode = isInspectionRecord(payload) ? payload.mode : payload;
+      const reportedRevision = isInspectionRecord(payload) && typeof payload.revision === 'number' ? payload.revision : 0;
+      if (reportedRevision < grokInspectionModeRevision) return;
+      grokInspectionModeRevision = reportedRevision;
+      grokInspectionMode = reportedMode === 'operate' ? 'operate' : 'inspect';
+      broadcastGrokInspection('mode', { mode: grokInspectionMode });
+    });
+
+    grokInspectionBrowser = browser;
+    grokInspectionContext = context;
+    grokInspectionPage = page;
+    grokInspectionActive = true;
+    broadcastGrokInspection('opening', { state: grokInspectionState });
+
+    page.on('framenavigated', frame => {
+      if (frame === page.mainFrame()) {
+        grokInspectionMode = 'operate';
+        grokInspectionModeRevision = 0;
+        broadcastGrokInspection('mode', { mode: grokInspectionMode });
+        broadcastGrokInspection('navigated', { url: frame.url() });
+      }
+    });
+    page.on('close', () => {
+      if (grokInspectionPage === page && grokInspectionActive) {
+        grokInspectionActive = false;
+        grokInspectionPage = null;
+        broadcastGrokInspection('browser-closed');
+      }
+    });
+
+    await page.goto('https://grok.com', { waitUntil: 'domcontentloaded', timeout: 60000 });
+    broadcastGrokInspection('started', { state: grokInspectionState, mode: grokInspectionMode, url: page.url() });
+    res.json({ success: true, state: grokInspectionState, mode: grokInspectionMode, url: page.url() });
+  } catch (error: any) {
+    if (context) await context.close().catch(() => {});
+    if (browser) await browser.close().catch(() => {});
+    grokInspectionBrowser = null;
+    grokInspectionContext = null;
+    grokInspectionPage = null;
+    grokInspectionActive = false;
+    grokInspectionState = '';
+    grokInspectionMode = 'operate';
+    grokInspectionModeRevision = 0;
+    broadcastGrokInspection('error', { message: error?.message || 'Gagal membuka browser inspector.' });
+    res.status(500).json({ error: 'Gagal membuka browser inspector: ' + (error?.message || 'unknown error') });
+  }
+});
+
+app.post('/api/grokinspection/mode', async (req, res) => {
+  const requestedMode = req.body?.mode === 'operate' ? 'operate' : 'inspect';
+  if (!grokInspectionPage || !grokInspectionActive) {
+    return res.status(400).json({ error: 'Browser inspector belum aktif.' });
+  }
+
+  try {
+    const result = await grokInspectionPage.evaluate((nextMode: string) => {
+      const setMode = (window as any).__setGrokInspectionMode;
+      return typeof setMode === 'function' ? setMode(nextMode) : nextMode;
+    }, requestedMode);
+    const modeResult = isInspectionRecord(result) ? result : { mode: result, revision: grokInspectionModeRevision + 1 };
+    grokInspectionMode = modeResult.mode === 'operate' ? 'operate' : 'inspect';
+    if (typeof modeResult.revision === 'number') grokInspectionModeRevision = Math.max(grokInspectionModeRevision, modeResult.revision);
+    broadcastGrokInspection('mode', { mode: grokInspectionMode });
+    res.json({ success: true, mode: grokInspectionMode });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'Gagal mengganti mode inspector.' });
+  }
+});
+
+app.post('/api/grokinspection/stop', async (req, res) => {
+  await closeGrokInspectionBrowser();
+  res.json({ success: true });
+});
+
+app.post('/api/grokinspection/clear', (req, res) => {
+  grokInspectionSelection = null;
+  broadcastGrokInspection('selection-cleared');
+  res.json({ success: true });
 });
 
 app.post('/api/start-login', async (req, res) => {
@@ -1298,6 +1811,10 @@ app.get('/tiktok', (req, res) => {
 });
 app.get('/grok', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'grok.html'));
+});
+
+app.get('/grokinspection', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'grokinspection.html'));
 });
 
 app.get('/merge', (req, res) => {
@@ -2797,17 +3314,33 @@ app.post('/api/grokv2test/generate', async (req, res) => {
     try {
       job.status = 'running';
       addGrokV2TestLog(job, 'Membuka browser dan memuat Grok Imagine...', 3);
-      const result = await generateGrokVideoV2({
-      stateName: stateName || 'indra',
-      promptText,
-      imagePath,
-      resolution: resolution || '720p',
-      duration: duration || '5s',
-      aspectRatio: aspectRatio || '9:16',
-      mode: mode || 'Video'
-    }, (msg, progress) => {
-      addGrokV2TestLog(job, msg, progress);
-    });
+      const generationOptions = {
+        stateName: stateName || 'indra',
+        promptText,
+        imagePath,
+        resolution: resolution || '720p',
+        duration: duration || '5s',
+        aspectRatio: aspectRatio || '9:16',
+        mode: mode || 'Video'
+      };
+      let result: any;
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          result = await generateGrokVideoV2(generationOptions, (msg, progress) => {
+            addGrokV2TestLog(job, msg, progress);
+          });
+          break;
+        } catch (err: any) {
+          const message = err?.message || String(err);
+          const isStalePage = err instanceof GrokStalePageError
+            || err?.name === 'GrokStalePageError'
+            || /page is out of date|out of date|reload to continue|code["']?\s*:\s*7/i.test(message);
+          if (!isStalePage || attempt === 2) throw err;
+          addGrokV2TestLog(job, 'Grok mengembalikan code 7. Membuat browser/context baru dan mencoba ulang...', 15);
+          await new Promise(resolve => setTimeout(resolve, 1500));
+        }
+      }
+      if (!result) throw new Error('Grok tidak mengembalikan hasil generate.');
       job.status = 'done';
       job.progress = 100;
       job.result = result;
@@ -4512,6 +5045,7 @@ const GROKBOT_DATA_FILE = path.join(__dirname, 'grokbot-data.json');
 interface GrokbotStateConfig {
   grokState: string;
   autoSwitchGrokState?: boolean;
+  grokGenerateIntervalMinutes?: number;
   promptFile: string;
   bahanFolder: string;
   mode: string;
@@ -6420,7 +6954,7 @@ let grokbotv2Running = false;
 let infiniteGenV2Running = false;
 let grokbotv2FullAutoRunning = false;
 let grokbotv2InfiniteScheduleRunning = false;
-let infiniteGenV2WaitInfo: { rateLimitTime: string; resumeTime: string; targetState: string } | null = null;
+let infiniteGenV2WaitInfo: { rateLimitTime: string; resumeTime: string; targetState: string; reason?: 'quota' | 'rate_limit' } | null = null;
 const GROK_V2_INFINITE_GENERATION_INTERVAL_MS = 15 * 60 * 1000;
 let grokV2NextGenerationAtMs = 0;
 let grokbotv2Queue: Array<{ stateName: string; stateFile: string; videoCount: number; scheduleStart: string; scheduleEnd: string; active: boolean }> = [];
@@ -6539,6 +7073,106 @@ function getGrokV2AccountPool(autoSwitch: boolean, fixedState?: string): string[
 }
 
 const GROK_V2_UNKNOWN_RATE_LIMIT_MS = 15 * 60 * 1000;
+const GROK_V2_QUOTA_CACHE_TTL_MS = 45 * 1000;
+
+interface GrokV2QuotaCacheEntry {
+  value?: GrokQuotaInfo;
+  expiresAt: number;
+  promise?: Promise<GrokQuotaInfo>;
+}
+
+const grokV2QuotaCache = new Map<string, GrokV2QuotaCacheEntry>();
+
+function makeExpiredGrokQuotaInfo(stateFile: string, stateName: string, checkedAt = new Date().toISOString()): GrokQuotaInfo {
+  return {
+    stateFile,
+    stateName,
+    account: stateName,
+    usedPercent: null,
+    remainingPercent: null,
+    resetAt: null,
+    available: false,
+    status: 'expired',
+    checkedAt,
+    error: 'State Grok sudah expired.'
+  };
+}
+
+async function getGrokV2Quota(stateFile: string, force = false): Promise<GrokQuotaInfo> {
+  const now = Date.now();
+  const cached = grokV2QuotaCache.get(stateFile);
+  if (!force && cached?.value && cached.expiresAt > now) return cached.value;
+  if (cached?.promise) return cached.promise;
+
+  const stateName = stateFile.replace(/^grok-state-/, '').replace(/\.json$/i, '');
+  const savedState = getSavedStates('grok').find(item => item.filename === stateFile);
+  const promise = (async () => {
+    if (savedState?.expiry.status === 'expired') return makeExpiredGrokQuotaInfo(stateFile, stateName);
+    try {
+      return await checkGrokQuota(stateFile);
+    } catch (error: any) {
+      return {
+        stateFile,
+        stateName,
+        account: stateName,
+        usedPercent: null,
+        remainingPercent: null,
+        resetAt: null,
+        available: false,
+        status: 'error' as const,
+        checkedAt: new Date().toISOString(),
+        error: error?.message || String(error)
+      };
+    }
+  })();
+
+  grokV2QuotaCache.set(stateFile, { expiresAt: 0, promise });
+  try {
+    const value = await promise;
+    grokV2QuotaCache.set(stateFile, { value, expiresAt: Date.now() + GROK_V2_QUOTA_CACHE_TTL_MS });
+    return value;
+  } catch (error) {
+    grokV2QuotaCache.delete(stateFile);
+    throw error;
+  }
+}
+
+async function refreshGrokV2Quotas(stateFiles: string[], force = false): Promise<GrokQuotaInfo[]> {
+  const uniqueFiles = [...new Set(stateFiles)].filter(Boolean);
+  const values: GrokQuotaInfo[] = [];
+  // Query sequentially so checking many accounts does not launch many Chrome
+  // instances simultaneously and overload the host/Cloudflare session.
+  for (const stateFile of uniqueFiles) values.push(await getGrokV2Quota(stateFile, force));
+  return values;
+}
+
+function getCachedGrokV2Quota(stateFile: string): GrokQuotaInfo | undefined {
+  const value = grokV2QuotaCache.get(stateFile)?.value;
+  if (value?.resetAt && Date.now() >= Date.parse(value.resetAt)) return undefined;
+  return value;
+}
+
+function isGrokV2AccountQuotaUnavailable(stateFile: string): boolean {
+  const info = getCachedGrokV2Quota(stateFile);
+  return !!info && !info.available;
+}
+
+function getGrokV2QuotaWaitMs(accounts: string[]): number {
+  const now = Date.now();
+  const delays = accounts
+    .map(account => getCachedGrokV2Quota(account))
+    .filter((info): info is GrokQuotaInfo => !!info && !info.available)
+    .map(info => info.resetAt ? Math.max(0, Date.parse(info.resetAt) - now) : GROK_V2_UNKNOWN_RATE_LIMIT_MS);
+  return delays.length > 0 ? Math.min(...delays) : GROK_V2_UNKNOWN_RATE_LIMIT_MS;
+}
+
+function isGrokV2AccountUnavailable(stateFile: string): boolean {
+  return isGrokV2AccountRateLimited(stateFile) || isGrokV2AccountQuotaUnavailable(stateFile);
+}
+
+function getGrokV2AvailableAccountPool(autoSwitch: boolean, fixedState?: string): string[] {
+  return getGrokV2AccountPool(autoSwitch, fixedState).filter(account => !isGrokV2AccountUnavailable(account));
+}
 
 function isGrokV2AccountRateLimited(stateFile: string): boolean {
   const info = getGrokRateLimits()[stateFile];
@@ -6573,7 +7207,65 @@ function getGrokV2RateLimitWaitMs(accounts: string[]): number {
   return delays.length > 0 ? Math.min(...delays) : GROK_V2_UNKNOWN_RATE_LIMIT_MS;
 }
 
+function getGrokV2WaitMs(accounts: string[]): number {
+  const now = Date.now();
+  const delays: number[] = [];
+  const rateLimits = getGrokRateLimits();
+  for (const account of accounts) {
+    if (isGrokV2AccountRateLimited(account)) {
+      const info = rateLimits[account];
+      if (info?.availableAt) {
+        const expiry = getRateLimitExpiryDate(info.availableAt, info.detectedAt || now);
+        delays.push(expiry && expiry.getTime() > now ? expiry.getTime() - now : GROK_V2_UNKNOWN_RATE_LIMIT_MS);
+      } else {
+        delays.push(GROK_V2_UNKNOWN_RATE_LIMIT_MS);
+      }
+      continue;
+    }
+
+    if (isGrokV2AccountQuotaUnavailable(account)) {
+      const info = getCachedGrokV2Quota(account);
+      if (info?.resetAt) {
+        const resetAt = Date.parse(info.resetAt);
+        delays.push(Number.isFinite(resetAt) && resetAt > now ? resetAt - now : GROK_V2_UNKNOWN_RATE_LIMIT_MS);
+      } else {
+        delays.push(GROK_V2_UNKNOWN_RATE_LIMIT_MS);
+      }
+    }
+  }
+  return delays.length > 0 ? Math.min(...delays) : GROK_V2_UNKNOWN_RATE_LIMIT_MS;
+}
+
 // ── GROKBOT V2 GENERATOR FUNCTION USING generateGrokVideoV2 ──
+function resolveGrokV2GenerationIntervalMinutes(value: unknown, fallback = 15): number | null {
+  const parsed = value === undefined || value === null || value === '' ? fallback : Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1 || parsed > 1440) return null;
+  return parsed;
+}
+
+async function preflightGrokV2GenerationQuota(autoSwitch: boolean, fixedState: string): Promise<{
+  accounts: string[];
+  quotas: GrokQuotaInfo[];
+  available: string[];
+  unavailable: GrokQuotaInfo[];
+}> {
+  const accounts = getGrokV2AccountPool(autoSwitch, fixedState);
+  const quotas = await refreshGrokV2Quotas(accounts, true);
+  return {
+    accounts,
+    quotas,
+    available: quotas.filter(info => info.available).map(info => info.stateFile),
+    unavailable: quotas.filter(info => !info.available)
+  };
+}
+
+function formatGrokV2QuotaPreflightDetails(unavailable: GrokQuotaInfo[]): string {
+  return unavailable.map(info => {
+    const reset = info.resetAt ? new Date(info.resetAt).toLocaleString('id-ID') : 'reset tidak diketahui';
+    return `${info.stateName} (${info.usedPercent === null ? '?' : `${info.usedPercent}%`} terpakai, ${reset})`;
+  }).join(', ');
+}
+
 async function runGrokGeneratorV2(config: {
   stateFile: string;
   grokState: string;
@@ -6605,7 +7297,7 @@ async function runGrokGeneratorV2(config: {
   const debugLegendCache = new Set<string>(); // hindari baris yang sama berulang di UI
   const accountPool = getGrokV2AccountPool(!!config.autoSwitchGrokState, config.grokState);
   const limitedAccounts: string[] = [];
-  let currentAccount = accountPool.find(account => !isGrokV2AccountRateLimited(account)) || null;
+  let currentAccount = accountPool.find(account => !isGrokV2AccountUnavailable(account)) || null;
   let completedRaw = 0;
 
   if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
@@ -6633,8 +7325,8 @@ async function runGrokGeneratorV2(config: {
   const accountMode = config.autoSwitchGrokState ? `Auto Switch (${accountPool.length} akun)` : 'Akun Tetap';
   grokbotv2Progress.activeGrokState = currentAccount;
   grokbotv2Progress.autoSwitchGrokState = !!config.autoSwitchGrokState;
-  grokbotv2Progress.availableGrokAccounts = accountPool.filter(account => !isGrokV2AccountRateLimited(account)).length;
-  grokbotv2Progress.limitedGrokAccounts = accountPool.filter(isGrokV2AccountRateLimited);
+  grokbotv2Progress.availableGrokAccounts = accountPool.filter(account => !isGrokV2AccountUnavailable(account)).length;
+  grokbotv2Progress.limitedGrokAccounts = accountPool.filter(isGrokV2AccountUnavailable);
   grokbotv2BroadcastProgress();
   log(`🚀 [GROK_V2_GENERATOR] Memulai generasi ${config.totalVideos} video (${totalRawToGenerate} raw) untuk TikTok State ${tiktokStateName} (${accountMode}, akun: ${grokStateName})...`);
   sendWAMessageV2(`🔑 [GrokbotV2] Menggunakan akun Grok "${grokStateName}" untuk state ${tiktokStateName} (${accountMode}).`);
@@ -6881,7 +7573,7 @@ async function runGrokGeneratorV2(config: {
         if (!limitedAccounts.includes(limitedState)) limitedAccounts.push(limitedState);
         log(`🚫 [GROK_V2 RATE LIMIT] Akun "${limitedState}" terkena rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
         grokbotv2BroadcastProgress(); // broadcast agar UI langsung update
-        const replacement: string | undefined = accountPool.find(account => account !== limitedState && !isGrokV2AccountRateLimited(account));
+        const replacement: string | undefined = accountPool.find(account => account !== limitedState && !isGrokV2AccountUnavailable(account));
         if (grokSession) {
           await closeGrokV2Session(grokSession);
           grokSession = null;
@@ -6891,8 +7583,8 @@ async function runGrokGeneratorV2(config: {
           currentAccount = replacement;
           grokStateName = replacement.replace('grok-state-', '').replace('.json', '');
           grokbotv2Progress.activeGrokState = replacement;
-          grokbotv2Progress.availableGrokAccounts = accountPool.filter(account => !isGrokV2AccountRateLimited(account)).length;
-          grokbotv2Progress.limitedGrokAccounts = accountPool.filter(isGrokV2AccountRateLimited);
+          grokbotv2Progress.availableGrokAccounts = accountPool.filter(account => !isGrokV2AccountUnavailable(account)).length;
+          grokbotv2Progress.limitedGrokAccounts = accountPool.filter(isGrokV2AccountUnavailable);
           grokbotv2BroadcastProgress();
           const switchMessage = `🔄 [GrokbotV2] Akun ${previousName} terkena rate limit. Beralih ke akun ${grokStateName} dan mengulang video #${i + 1}.`;
           log(switchMessage);
@@ -6971,7 +7663,7 @@ async function runGrokGeneratorV2(config: {
     grokSession = null;
   }
 
-  const allAccountsLimited = completedRaw < totalRawToGenerate && accountPool.every(isGrokV2AccountRateLimited);
+  const allAccountsLimited = completedRaw < totalRawToGenerate && accountPool.every(isGrokV2AccountUnavailable);
   grokbotv2Progress.generate = completedRaw >= totalRawToGenerate ? 100 : Math.round((completedRaw / totalRawToGenerate) * 100);
   if (completedRaw >= totalRawToGenerate) grokbotv2Progress.merge = 100;
   grokbotv2BroadcastProgress();
@@ -7088,8 +7780,18 @@ app.get('/api/grokbotv2/config', (req, res) => {
   res.json(loadGrokbotV2Data());
 });
 
+app.get('/api/grokbotv2/quotas', async (req, res) => {
+  try {
+    const stateFiles = getSavedStates('grok').map(item => item.filename).sort((a, b) => a.localeCompare(b));
+    const accounts = await refreshGrokV2Quotas(stateFiles, req.query.refresh === '1');
+    res.json({ accounts, checkedAt: new Date().toISOString() });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || String(error), accounts: [], checkedAt: new Date().toISOString() });
+  }
+});
+
 app.post('/api/grokbotv2/config/save', (req, res) => {
-  const { stateFile, grokState, autoSwitchGrokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, addProduct, productNameRadio, productTitle, productDescription, headless, threeUploadsPerHour, lastUploadDate, lastUploadTime } = req.body;
+  const { stateFile, grokState, autoSwitchGrokState, promptFile, bahanFolder, mode, resolution, duration, aspectRatio, merge, audioFolder, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, grokGenerateIntervalMinutes, addProduct, productNameRadio, productTitle, productDescription, headless, threeUploadsPerHour, lastUploadDate, lastUploadTime } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
   const data = loadGrokbotV2Data();
   if (!data.states[stateFile]) {
@@ -7097,7 +7799,7 @@ app.post('/api/grokbotv2/config/save', (req, res) => {
       grokState: '', autoSwitchGrokState: false, promptFile: '', bahanFolder: '', mode: 'Video',
       resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
       audioFolder: '', description: '', hashtags: '', scheduleDate: '',
-      scheduleTime: '', intervalMinutes: 60,
+      scheduleTime: '', intervalMinutes: 60, grokGenerateIntervalMinutes: 15,
       addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
       headless: true, threeUploadsPerHour: false, lastUploadDate: '', lastUploadTime: ''
     };
@@ -7118,6 +7820,7 @@ app.post('/api/grokbotv2/config/save', (req, res) => {
   if (scheduleDate !== undefined) s.scheduleDate = scheduleDate;
   if (scheduleTime !== undefined) s.scheduleTime = scheduleTime;
   if (intervalMinutes !== undefined) s.intervalMinutes = intervalMinutes;
+  if (grokGenerateIntervalMinutes !== undefined) s.grokGenerateIntervalMinutes = grokGenerateIntervalMinutes;
   if (addProduct !== undefined) s.addProduct = addProduct;
   if (productNameRadio !== undefined) s.productNameRadio = productNameRadio;
   if (productTitle !== undefined) s.productTitle = productTitle;
@@ -7256,7 +7959,7 @@ app.post('/api/grokbotv2/import-cadangan', (req, res) => {
 
 app.post('/api/grokbotv2/generate-utama', async (req, res) => {
   if (grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning) return res.status(400).json({ error: 'Grokbot V2 sedang berjalan!' });
-  const { stateFile } = req.body;
+  const { stateFile, intervalMinutes } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
 
   const data = loadGrokbotV2Data();
@@ -7264,6 +7967,17 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
   if (!cfg) return res.status(400).json({ error: 'Config tidak ditemukan' });
   if (!cfg.autoSwitchGrokState && !cfg.grokState) return res.status(400).json({ error: 'Grok State belum dipilih atau aktifkan Auto Switch!' });
   if (getGrokV2AccountPool(!!cfg.autoSwitchGrokState, cfg.grokState).length === 0) return res.status(400).json({ error: 'Tidak ada Grok State valid yang dapat digunakan!' });
+
+  const generationIntervalMinutes = resolveGrokV2GenerationIntervalMinutes(intervalMinutes ?? cfg.grokGenerateIntervalMinutes);
+  if (generationIntervalMinutes === null) return res.status(400).json({ error: 'Interval generate harus antara 1 sampai 1440 menit.' });
+  const quotaPreflight = await preflightGrokV2GenerationQuota(!!cfg.autoSwitchGrokState, cfg.grokState);
+  if (quotaPreflight.available.length === 0) {
+    return res.status(409).json({
+      success: false,
+      error: `Tidak ada quota Grok yang tersedia. Akun diperiksa: ${formatGrokV2QuotaPreflightDetails(quotaPreflight.unavailable)}.`,
+      quotas: quotaPreflight.quotas
+    });
+  }
 
   const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
   const stateDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
@@ -7279,7 +7993,14 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
 
   const needed = Math.max(1, 30 - pendingCount);
 
-  res.json({ success: true, message: `Generasi Stok Utama V2 dimulai untuk ${tiktokStateName} (butuh ${needed} video)` });
+  res.json({
+    success: true,
+    message: `Generasi Stok Utama V2 dimulai untuk ${tiktokStateName} (butuh ${needed} video, interval ${generationIntervalMinutes} menit)`,
+    quotas: quotaPreflight.quotas,
+    quotaWarning: quotaPreflight.unavailable.length > 0
+      ? `Auto Switch akan melewati ${quotaPreflight.unavailable.length} akun yang quota-nya tidak tersedia.`
+      : null
+  });
 
   grokbotv2Running = true;
   grokbotv2Queue = [{ stateName: tiktokStateName, stateFile, videoCount: needed, scheduleStart: 'Utama Gen V2', scheduleEnd: 'Utama Gen V2', active: true }];
@@ -7304,7 +8025,8 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
       totalVideos: needed,
       merge: cfg.merge,
       audioFolder: cfg.audioFolder,
-      autoSwitchGrokState: !!cfg.autoSwitchGrokState
+      autoSwitchGrokState: !!cfg.autoSwitchGrokState,
+      generationIntervalMs: Math.round(generationIntervalMinutes * 60 * 1000)
     }, grokbotv2Log);
     grokbotv2Log('===== GENERATE UTAMA V2 FINISHED =====');
     sendWAMessageV2(result.allAccountsLimited
@@ -7322,7 +8044,7 @@ app.post('/api/grokbotv2/generate-utama', async (req, res) => {
 
 app.post('/api/grokbotv2/generate-cadangan', async (req, res) => {
   if (grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning) return res.status(400).json({ error: 'Grokbot V2 sedang berjalan!' });
-  const { stateFile } = req.body;
+  const { stateFile, intervalMinutes } = req.body;
   if (!stateFile) return res.status(400).json({ error: 'stateFile diperlukan' });
 
   const data = loadGrokbotV2Data();
@@ -7331,10 +8053,28 @@ app.post('/api/grokbotv2/generate-cadangan', async (req, res) => {
   if (!cfg.autoSwitchGrokState && !cfg.grokState) return res.status(400).json({ error: 'Grok State belum dipilih atau aktifkan Auto Switch!' });
   if (getGrokV2AccountPool(!!cfg.autoSwitchGrokState, cfg.grokState).length === 0) return res.status(400).json({ error: 'Tidak ada Grok State valid yang dapat digunakan!' });
 
+  const generationIntervalMinutes = resolveGrokV2GenerationIntervalMinutes(intervalMinutes ?? cfg.grokGenerateIntervalMinutes);
+  if (generationIntervalMinutes === null) return res.status(400).json({ error: 'Interval generate harus antara 1 sampai 1440 menit.' });
+  const quotaPreflight = await preflightGrokV2GenerationQuota(!!cfg.autoSwitchGrokState, cfg.grokState);
+  if (quotaPreflight.available.length === 0) {
+    return res.status(409).json({
+      success: false,
+      error: `Tidak ada quota Grok yang tersedia. Akun diperiksa: ${formatGrokV2QuotaPreflightDetails(quotaPreflight.unavailable)}.`,
+      quotas: quotaPreflight.quotas
+    });
+  }
+
   const tiktokStateName = stateFile.replace('tiktok-state-', '').replace('.json', '');
   const cadanganDir = path.join(GROK_DOWNLOAD_DIR, tiktokStateName, 'cadangan');
 
-  res.json({ success: true, message: `Generasi Stok Cadangan V2 dimulai untuk ${tiktokStateName}` });
+  res.json({
+    success: true,
+    message: `Generasi Stok Cadangan V2 dimulai untuk ${tiktokStateName} (30 video, interval ${generationIntervalMinutes} menit)`,
+    quotas: quotaPreflight.quotas,
+    quotaWarning: quotaPreflight.unavailable.length > 0
+      ? `Auto Switch akan melewati ${quotaPreflight.unavailable.length} akun yang quota-nya tidak tersedia.`
+      : null
+  });
 
   grokbotv2Running = true;
   grokbotv2Queue = [{ stateName: tiktokStateName, stateFile, videoCount: 30, scheduleStart: 'Cadangan Gen V2', scheduleEnd: 'Cadangan Gen V2', active: true }];
@@ -7360,7 +8100,8 @@ app.post('/api/grokbotv2/generate-cadangan', async (req, res) => {
       merge: cfg.merge,
       audioFolder: cfg.audioFolder,
       customDownloadDir: cadanganDir,
-      autoSwitchGrokState: !!cfg.autoSwitchGrokState
+      autoSwitchGrokState: !!cfg.autoSwitchGrokState,
+      generationIntervalMs: Math.round(generationIntervalMinutes * 60 * 1000)
     }, grokbotv2Log);
     grokbotv2Log('===== GENERATE CADANGAN V2 FINISHED =====');
     sendWAMessageV2(result.allAccountsLimited
@@ -7466,7 +8207,7 @@ app.post('/api/grokbotv2/schedule-only', async (req, res) => {
   }
 });
 
-app.post('/api/grokbotv2/infinite-generate', (req, res) => {
+app.post('/api/grokbotv2/infinite-generate', async (req, res) => {
   if (infiniteGenV2Running || grokbotv2Running || grokbotv2FullAutoRunning) {
     return res.status(400).json({ success: false, error: 'Grokbot V2 sedang menjalankan proses lain!' });
   }
@@ -7496,8 +8237,32 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
     saveGrokbotV2Data(startData);
   }
 
+  const preflightAccounts = [...new Set(stateFiles.flatMap(stateFile => {
+    const cfg = startData.states[stateFile];
+    return cfg ? getGrokV2AccountPool(!!cfg.autoSwitchGrokState, cfg.grokState) : [];
+  }))];
+  const preflightQuotas = await refreshGrokV2Quotas(preflightAccounts, true);
+  const preflightExhausted = preflightQuotas.filter(info => !info.available);
+  const preflightAvailable = preflightQuotas.filter(info => info.available).length;
+
   infiniteGenV2Running = true;
-  res.json({ success: true, message: `Infinite Generate Grokbot V2 dimulai untuk ${stateFiles.length} state (interval ${requestedIntervalMinutes} menit)` });
+  res.json({
+    success: true,
+    message: `Infinite Generate Grokbot V2 dimulai untuk ${stateFiles.length} state (interval ${requestedIntervalMinutes} menit)`,
+    quotas: preflightQuotas,
+    quotaWarning: preflightExhausted.length > 0
+      ? `${preflightExhausted.length} akun tidak tersedia dan akan dilewati.${preflightAvailable === 0 ? ' Semua akun tidak tersedia; proses menunggu akun yang dapat digunakan.' : ''}`
+      : null
+  });
+  if (preflightExhausted.length > 0) {
+    const details = preflightExhausted.map(info => {
+      const reset = info.resetAt ? new Date(info.resetAt).toLocaleString('id-ID') : 'waktu reset tidak diketahui';
+      return `${info.stateName} (reset ${reset})`;
+    }).join(', ');
+    grokbotv2Log(`Pre-check quota: akun yang dilewati: ${details}.`);
+  } else {
+    grokbotv2Log(`Pre-check quota selesai: ${preflightAvailable} akun Grok tersedia.`);
+  }
   grokbotv2Log(`♾️ Infinite Generate V2 dimulai untuk ${stateFiles.length} state aktif (interval ${requestedIntervalMinutes} menit antar-request).`);
 
   (async () => {
@@ -7525,20 +8290,31 @@ app.post('/api/grokbotv2/infinite-generate', (req, res) => {
           continue;
         }
 
+        const cycleAccounts = [...new Set(targets.flatMap(item => {
+          const targetCfg = data.states[item.stateFile];
+          return getGrokV2AccountPool(!!targetCfg.autoSwitchGrokState, targetCfg.grokState);
+        }))];
+        const cycleQuotas = await refreshGrokV2Quotas(cycleAccounts);
+        const cycleQuotaUnavailable = cycleQuotas.filter(info => !info.available);
+        if (cycleQuotaUnavailable.length > 0) {
+          grokbotv2Log(`Audit quota: ${cycleQuotaUnavailable.map(info => `${info.stateName}=${info.usedPercent ?? '?'}%`).join(', ')}`);
+        }
+
         const availableTargets = targets.filter(item => {
           const targetCfg = data.states[item.stateFile];
-          return getGrokV2AccountPool(!!targetCfg.autoSwitchGrokState, targetCfg.grokState).some(account => !isGrokV2AccountRateLimited(account));
+          return getGrokV2AccountPool(!!targetCfg.autoSwitchGrokState, targetCfg.grokState).some(account => !isGrokV2AccountUnavailable(account));
         });
         if (availableTargets.length === 0) {
           const allAccounts = [...new Set(targets.flatMap(item => {
             const targetCfg = data.states[item.stateFile];
             return getGrokV2AccountPool(!!targetCfg.autoSwitchGrokState, targetCfg.grokState);
           }))];
-          const cooldownMs = getGrokV2RateLimitWaitMs(allAccounts);
+          const cooldownMs = getGrokV2WaitMs(allAccounts);
           const resumeAt = new Date(Date.now() + cooldownMs);
-          infiniteGenV2WaitInfo = { rateLimitTime: new Date().toISOString(), resumeTime: resumeAt.toISOString(), targetState: 'Semua state' };
+          const waitingForQuota = allAccounts.some(isGrokV2AccountQuotaUnavailable);
+          infiniteGenV2WaitInfo = { rateLimitTime: new Date().toISOString(), resumeTime: resumeAt.toISOString(), targetState: 'Semua state', reason: waitingForQuota ? 'quota' : 'rate_limit' };
           const waitMinutes = Math.max(1, Math.ceil(cooldownMs / 60000));
-          const limitMessage = `🚫 [GrokbotV2] Semua Grok State yang tersedia terkena rate limit (${allAccounts.map(a => a.replace('grok-state-', '').replace('.json', '')).join(', ')}). Infinite Generate dilanjutkan sekitar ${waitMinutes} menit lagi (${resumeAt.toLocaleString('id-ID')}).`;
+          const limitMessage = `🚫 [GrokbotV2] Semua Grok State yang tersedia terkena ${waitingForQuota ? 'quota limit/rate limit' : 'rate limit'} (${allAccounts.map(a => a.replace('grok-state-', '').replace('.json', '')).join(', ')}). Infinite Generate dilanjutkan sekitar ${waitMinutes} menit lagi (${resumeAt.toLocaleString('id-ID')}).`;
           grokbotv2Log(limitMessage);
           sendWAMessageV2(limitMessage);
           await waitWhileRunning(cooldownMs, () => infiniteGenV2Running);
