@@ -552,7 +552,7 @@ export async function generateGrokVideoV2(options: GrokVideoV2Options, onProgres
     if (result?.rateLimited || detectedRateLimit) {
       const availableAt = result?.availableAt || detectedRateLimit?.availableAt || null;
       if (result?.failureKind === 'account_rate_limit') {
-        log('Grok code:7 pada conversations/new diklasifikasikan sebagai rate limit akun; retry dihentikan.', 14);
+        log('Grok mengembalikan sinyal rate limit akun; retry dihentikan.', 14);
       }
       const isTooManyRequests = !!result?.transientRateLimit
         || result?.httpStatus === 429

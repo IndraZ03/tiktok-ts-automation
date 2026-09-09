@@ -120,47 +120,12 @@
       return headers;
     }
 
-    async function probeQuota() {
-      try {
-        const response = await fetchWithTimeout('https://grok.com/rest/media/imagine/quota_info', {
-          method: 'POST',
-          headers: apiHeaders({ 'Content-Type': 'application/json' }),
-          credentials: 'include',
-          body: '{}'
-        }, 20000);
-        const text = await response.text();
-        let body = null;
-        try { body = JSON.parse(text); } catch (_) {}
-        const video = body && typeof body.video === 'object' ? body.video : null;
-        const remaining = body && (body.remainingQuota ?? body.remaining_quota);
-        const limited = video?.available === false
-          || body?.rateLimited === true
-          || (remaining !== undefined && Number.isFinite(Number(remaining)) && Number(remaining) <= 0)
-          || /rate.?limit|too many requests/i.test(text);
-        return { limited, body, text, status: response.status, headers: response.headers };
-      } catch (_) {
-        return null;
-      }
-    }
-
     async function handleStaleResponse(responseText, status, endpoint) {
       STATE.stalePage = true;
       STATE.failureKind = 'stale_page';
       STATE.failureEndpoint = endpoint || '';
       STATE.httpStatus = status || 0;
       STATE.error = responseText ? String(responseText).slice(0, 500) : 'This page is out of date. Reload to continue.';
-
-      // Grok has also returned code 7 when the account video quota is
-      // exhausted. Check quota before making the caller recreate the page.
-      const quota = await probeQuota();
-      if (quota?.limited) {
-        STATE.quota = quota.body || quota.text;
-        STATE.stalePage = false;
-        STATE.rateLimited = true;
-        STATE.failureKind = 'account_rate_limit';
-        STATE.error = quota.text || STATE.error;
-        STATE.httpStatus = quota.status || STATE.httpStatus;
-      }
     }
 
     function handleLine(line) {
@@ -228,10 +193,10 @@
           const uploadRateLimit = upload.status === 429
             || /too\s+many\s+requests|rate\s*limit/i.test(uploadText)
             || /"code"\s*:\s*8\b/.test(uploadText);
-          if (STATE.stalePage) {
-            await handleStaleResponse(uploadText, upload.status, 'https://grok.com/http/upload-file-v2/direct');
-            STATE.status = STATE.rateLimited ? 'rate-limited' : 'stale';
-            return STATE;
+        if (STATE.stalePage) {
+          await handleStaleResponse(uploadText, upload.status, 'https://grok.com/http/upload-file-v2/direct');
+          STATE.status = 'stale';
+          return STATE;
           } else if (uploadRateLimit) {
             markRateLimit(uploadText, upload.status, upload.headers);
             return STATE;
@@ -294,21 +259,7 @@
           && /out of date|reload to continue/i.test(responseText);
         if (STATE.stalePage) {
           await handleStaleResponse(responseText, response.status, 'https://grok.com/rest/app-chat/conversations/new');
-          // After the page passed authentication/readiness and the image
-          // upload succeeded, Grok's current backend uses the same code 7
-          // response for an account generation cooldown. Retrying a fresh
-          // browser context only repeats the rejected request.
-          if (!STATE.rateLimited) {
-            STATE.stalePage = false;
-            STATE.rateLimited = true;
-            STATE.transientRateLimit = false;
-            STATE.failureKind = 'account_rate_limit';
-            try {
-              const parsed = JSON.parse(responseText);
-              STATE.availableAt = parsed?.error?.availableAt || parsed?.availableAt || null;
-            } catch (_) {}
-          }
-          STATE.status = 'rate-limited';
+          STATE.status = 'stale';
         } else if (isRateLimit) {
           markRateLimit(responseText, response.status, response.headers);
         } else {
@@ -323,17 +274,6 @@
       // Do not wait for socket close once the result is already available.
       await readLines(response, handleLine, () => !!STATE.videoUrl || STATE.status === 'done' || STATE.stalePage || STATE.rateLimited);
 
-      if (STATE.stalePage && !STATE.rateLimited) {
-        const quota = await probeQuota();
-        if (quota?.limited) {
-          STATE.quota = quota.body || quota.text;
-          STATE.stalePage = false;
-          STATE.rateLimited = true;
-          STATE.failureKind = 'account_rate_limit';
-          STATE.error = quota.text || STATE.error;
-          STATE.httpStatus = quota.status || STATE.httpStatus;
-        }
-      }
       if (STATE.stalePage || STATE.rateLimited) {
         STATE.status = STATE.rateLimited ? 'rate-limited' : 'stale';
         return STATE;

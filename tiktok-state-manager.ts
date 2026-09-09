@@ -7,6 +7,7 @@ import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { AsyncLocalStorage } from 'async_hooks';
 import { exec, spawn } from 'child_process';
 import { execa } from 'execa';
 import { runUpload, stopUploader, getIsRunning, type SchedulePlanItem } from './tiktok-uploader.js';
@@ -67,6 +68,25 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = 5000;
+
+type GrokbotDashboardVersion = 2 | 3;
+const grokbotDashboardContext = new AsyncLocalStorage<{ version: GrokbotDashboardVersion }>();
+
+function isGrokbotV3Context(): boolean {
+  return grokbotDashboardContext.getStore()?.version === 3;
+}
+
+// Grokbot V3 shares the proven V2 orchestration routes. The async context keeps
+// its configuration and generator engine isolated, including work that
+// continues after an HTTP response (Infinite Generate / Infinite Schedule).
+app.use((req, _res, next) => {
+  if (req.url === '/api/grokbotv3' || req.url.startsWith('/api/grokbotv3/')) {
+    req.url = req.url.replace(/^\/api\/grokbotv3(?=\/|$)/, '/api/grokbotv2');
+    grokbotDashboardContext.run({ version: 3 }, next);
+    return;
+  }
+  next();
+});
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static('public'));
@@ -3427,9 +3447,9 @@ app.post('/api/grokv3test/generate', async (req, res) => {
   }
 
   try {
-    console.log(`[GROK_V3_TEST] Memulai browser generate (State: ${stateName || 'indra'}, Res: ${resolution}, Dur: ${duration}, Aspect: ${aspectRatio})...`);
+    console.log(`[GROK_V3_TEST] Memulai browser generate (State: ${stateName || 'inovasi2'}, Res: ${resolution}, Dur: ${duration}, Aspect: ${aspectRatio})...`);
     const result = await generateGrokVideoBrowser({
-      stateName: stateName || 'indra',
+      stateName: stateName || 'inovasi2',
       promptText,
       imagePath,
       resolution: resolution || '720p',
@@ -6892,6 +6912,7 @@ app.get('/api/grokbot/logs', (req, res) => {
 //  GROKBOT V2 CONSTANTS & PERSISTENCE
 // ═══════════════════════════════════════════════════════════
 const GROKBOTV2_DATA_FILE = path.join(__dirname, 'grokbotv2-data.json');
+const GROKBOTV3_DATA_FILE = path.join(__dirname, 'grokbotv3-data.json');
 
 interface InfiniteScheduleStateConfig {
   stateFile: string;
@@ -6927,14 +6948,16 @@ interface GrokbotV2Data {
 
 function loadGrokbotV2Data(): GrokbotV2Data {
   try {
-    return JSON.parse(fs.readFileSync(GROKBOTV2_DATA_FILE, 'utf-8'));
+    const dataFile = isGrokbotV3Context() ? GROKBOTV3_DATA_FILE : GROKBOTV2_DATA_FILE;
+    return JSON.parse(fs.readFileSync(dataFile, 'utf-8'));
   } catch {
     return { states: {} };
   }
 }
 
 function saveGrokbotV2Data(data: GrokbotV2Data) {
-  fs.writeFileSync(GROKBOTV2_DATA_FILE, JSON.stringify(data, null, 2));
+  const dataFile = isGrokbotV3Context() ? GROKBOTV3_DATA_FILE : GROKBOTV2_DATA_FILE;
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
 function isHeadlessEnabledV2(stateFile?: string): boolean {
@@ -7285,6 +7308,10 @@ async function runGrokGeneratorV2(config: {
   notifyWhatsApp?: boolean;
   notificationLabel?: string;
 }, log: (msg: string) => void): Promise<GrokV2GenerationResult> {
+  // V3 uses the browser automation implementation from /grokv3test. V2 keeps
+  // its existing API/session implementation.
+  const useGrokBrowserV3 = isGrokbotV3Context();
+  const grokEngineLabel = useGrokBrowserV3 ? 'GROK_V3_BROWSER' : 'GROK_V2';
   const tiktokStateName = config.stateFile.replace('tiktok-state-', '').replace('.json', '');
   const targetDir = config.customDownloadDir || path.join(GROK_DOWNLOAD_DIR, tiktokStateName);
   const rawDir = path.join(targetDir, 'raw');
@@ -7375,7 +7402,7 @@ async function runGrokGeneratorV2(config: {
 
     // Saat Infinite Generate menunggu slot, tutup page lama agar polling
     // halaman (mis. quota_info) tidak terus berjalan selama cooldown.
-    if (generationIntervalMs > 0 && grokSession) {
+    if (!useGrokBrowserV3 && generationIntervalMs > 0 && grokSession) {
       log('[GROK_V2] Menutup sesi idle sebelum menunggu slot generate berikutnya...');
       try { await closeGrokV2Session(grokSession); } catch {}
       grokSession = null;
@@ -7392,7 +7419,7 @@ async function runGrokGeneratorV2(config: {
     log(`🎬 [GROK_V2] Memulai generate raw #${i + 1}/${totalRawToGenerate} via Grok V2 API...`);
 
     try {
-      if (!grokSession || grokSession.stateName !== grokStateName) {
+      if (!useGrokBrowserV3 && (!grokSession || grokSession.stateName !== grokStateName)) {
         if (grokSession) await closeGrokV2Session(grokSession);
         log(`[GROK_V2] Membuka satu sesi Grok untuk batch akun ${grokStateName}...`);
         grokSession = await createGrokV2Session(grokStateName, config.headless ?? true, {
@@ -7417,26 +7444,29 @@ async function runGrokGeneratorV2(config: {
         });
       }
       let lastGrokMessage = '';
-      const res = await generateGrokVideoV2({
+      const generationOptions = {
         stateName: grokStateName,
         promptText,
         imagePath,
         resolution: config.resolution || '720p',
         duration: config.duration || '10s',
         aspectRatio: config.aspectRatio || '9:16',
-        mode: config.mode || 'Video',
         headless: config.headless ?? true
-      }, (msg, pct) => {
+      };
+      const progressHandler = (msg: string, pct = 0) => {
         if (msg && msg !== lastGrokMessage) {
           lastGrokMessage = msg;
-          log(`[GROK_V2_PHASE] ${msg}`);
+          log(`[${grokEngineLabel}_PHASE] ${msg}`);
         }
         grokbotv2Progress.currentVideoProgress = Math.min(100, Math.max(0, Number(pct) || 0));
         grokbotv2Progress.currentPhase = msg || grokbotv2Progress.currentPhase;
         const overallGen = Math.round(((i + (pct / 100)) / totalRawToGenerate) * 100);
         grokbotv2Progress.generate = Math.min(99, overallGen);
         grokbotv2BroadcastProgress();
-      }, grokSession);
+      };
+      const res = useGrokBrowserV3
+        ? await generateGrokVideoBrowser(generationOptions, progressHandler)
+        : await generateGrokVideoV2({ ...generationOptions, mode: config.mode || 'Video' }, progressHandler, grokSession || undefined);
 
       if (res && res.savePath && fs.existsSync(res.savePath)) {
         const destDir = mergeEnabled ? rawDir : targetDir;
@@ -7511,7 +7541,9 @@ async function runGrokGeneratorV2(config: {
         break;
       }
     } catch (err: any) {
-      if (err instanceof TooManyRequestsError || err.name === 'TooManyRequestsError') {
+      const grokErrorMessage = err?.message || String(err);
+      const browserTooManyRequests = useGrokBrowserV3 && /too many requests|terlalu banyak permintaan|http\s*429/i.test(grokErrorMessage);
+      if (err instanceof TooManyRequestsError || err.name === 'TooManyRequestsError' || browserTooManyRequests) {
         // ── Debug: tulis fetch log halaman ke file sebelum backoff/close ──
         if (grokSession && grokSession.page) {
           const dump = await dumpFetchLogToFile(grokSession.page, grokDebugDir, `429-${grokStateName}`);
@@ -7557,7 +7589,8 @@ async function runGrokGeneratorV2(config: {
         log(`❌ [GROK_V2] ${fatalError}`);
         break;
       }
-      if (err instanceof RateLimitError || err.name === 'RateLimitError') {
+      const browserRateLimit = useGrokBrowserV3 && /rate limit|kuota|quota|upgrade|try again later|coba lagi nanti/i.test(grokErrorMessage);
+      if (err instanceof RateLimitError || err.name === 'RateLimitError' || browserRateLimit) {
         // ── Debug: tulis fetch log halaman ke file sebelum close/switch akun ──
         if (grokSession && grokSession.page) {
           const dump = await dumpFetchLogToFile(grokSession.page, grokDebugDir, `ratelimit-${grokStateName}`);
@@ -7571,6 +7604,8 @@ async function runGrokGeneratorV2(config: {
         const availableAt = (err as any).availableAt || null;
         setGrokRateLimit(limitedState, availableAt);
         if (!limitedAccounts.includes(limitedState)) limitedAccounts.push(limitedState);
+        grokbotv2Progress.availableGrokAccounts = accountPool.filter(account => !isGrokV2AccountUnavailable(account)).length;
+        grokbotv2Progress.limitedGrokAccounts = accountPool.filter(isGrokV2AccountUnavailable);
         log(`🚫 [GROK_V2 RATE LIMIT] Akun "${limitedState}" terkena rate limit! Tersedia kembali: ${availableAt || 'tidak diketahui'}`);
         grokbotv2BroadcastProgress(); // broadcast agar UI langsung update
         const replacement: string | undefined = accountPool.find(account => account !== limitedState && !isGrokV2AccountUnavailable(account));
@@ -7611,11 +7646,12 @@ async function runGrokGeneratorV2(config: {
           const attempts = (staleGenerationAttempts.get(i) || 0) + 1;
           staleGenerationAttempts.set(i, attempts);
           if (attempts <= 2) {
-            const waitSeconds = Math.ceil(generationIntervalMs / 1000);
+            const staleRetryMs = Math.min(30 * 1000, generationIntervalMs);
+            const waitSeconds = Math.ceil(staleRetryMs / 1000);
             grokbotv2Progress.currentPhase = `Sesi Grok stale — membuat sesi baru dalam ${waitSeconds} detik (percobaan ${attempts}/2)`;
             grokbotv2BroadcastProgress();
             log(`[GROK_V2 STALE RETRY] ${errorMessage}. Menunggu ${waitSeconds} detik lalu membuat sesi baru untuk raw #${i + 1}...`);
-            await waitWhileRunning(generationIntervalMs, () => grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning);
+            await waitWhileRunning(staleRetryMs, () => grokbotv2Running || infiniteGenV2Running || grokbotv2FullAutoRunning);
             if (!grokbotv2Running && !infiniteGenV2Running && !grokbotv2FullAutoRunning) break;
             i--;
             continue;
@@ -7774,6 +7810,24 @@ function validateInfiniteSchedulePayload(initialRunAt: unknown, states: unknown)
 // ── GROKBOT V2 API ROUTES ──
 app.get('/grokbotv2', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'grokbotv2.html'));
+});
+
+// Render from the V2 dashboard source so V3 stays a true UI duplicate while
+// keeping its own API namespace and browser-generator identity.
+app.get('/grokbotv3', (_req, res) => {
+  try {
+    const source = fs.readFileSync(path.join(__dirname, 'public', 'grokbotv2.html'), 'utf-8');
+    const html = source
+      .replaceAll('/api/grokbotv2', '/api/grokbotv3')
+      .replaceAll('grokbotv2_', 'grokbotv3_')
+      .replaceAll('GROKBOT V2', 'GROKBOT V3')
+      .replaceAll('Grokbot V2', 'Grokbot V3')
+      .replaceAll('GrokbotV2', 'GrokbotV3')
+      .replaceAll('Grok V2 to TikTok Bot', 'Grok V3 Browser to TikTok Bot');
+    res.type('html').send(html);
+  } catch (error: any) {
+    res.status(500).send(`Gagal memuat Grokbot V3: ${error?.message || String(error)}`);
+  }
 });
 
 app.get('/api/grokbotv2/config', (req, res) => {
@@ -10320,6 +10374,7 @@ app.listen(PORT, () => {
   console.log(`🤖 Grok to TikTok Bot: http://localhost:${PORT}/grokbot`);
   console.log(`🎬 Vidabot to TikTok Bot: http://localhost:${PORT}/vidabot`);
   console.log(`🤖 Grok V2 to TikTok Bot: http://localhost:${PORT}/grokbotv2`);
+  console.log(`🤖 Grok V3 Browser to TikTok Bot: http://localhost:${PORT}/grokbotv3`);
   console.log(`📁 Folder state: ${STATES_DIR} & ${GROK_STATES_DIR}`);
 });
 

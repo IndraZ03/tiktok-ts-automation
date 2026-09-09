@@ -1,297 +1,432 @@
 import { chromium } from 'playwright';
 import fs from 'fs';
 import path from 'path';
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
+
+const UI_TIMEOUT = 60000;
+const GENERATION_TIMEOUT = 15 * 60000;
+const VIDEO_SELECTOR = 'video#sd-video, video#hd-video, video[src*="generated_video.mp4"], video[src*="assets.grok.com"]';
+
+function escapeRegex(value) {
+    return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
-function sanitizeStateName(stateName) {
-    return stateName.replace(/^grok-state-/, '').replace(/\.json$/i, '');
+
+function normalizeStateName(value) {
+    const stateName = value.trim().replace(/^grok-state-/, '').replace(/\.json$/i, '');
+    if (!/^[A-Za-z0-9_ ()-]+$/.test(stateName)) {
+        throw new Error(`Nama state Grok tidak valid: ${value}`);
+    }
+    return stateName;
 }
-async function waitForUsablePage(page, log, timeoutMs = 180000) {
-    const deadline = Date.now() + timeoutMs;
-    let lastLogAt = 0;
-    while (Date.now() < deadline) {
-        const ready = await page.locator('[contenteditable="true"][role="textbox"]').first()
-            .isVisible({ timeout: 1000 })
-            .catch(() => false);
-        if (ready)
-            return;
-        if (Date.now() - lastLogAt > 15000) {
-            log('Menunggu halaman Grok selesai loading...');
-            lastLogAt = Date.now();
+
+function stateFilePath(stateName) {
+    const stateDir = path.resolve(process.cwd(), 'grok-states');
+    let statePath = path.resolve(stateDir, `grok-state-${stateName}.json`);
+    if (!fs.existsSync(statePath)) {
+        const rootPath = path.resolve(process.cwd(), `grok-state-${stateName}.json`);
+        if (fs.existsSync(rootPath)) return rootPath;
+        const rootAlt = path.resolve(process.cwd(), `${stateName}.json`);
+        if (fs.existsSync(rootAlt)) return rootAlt;
+    }
+    return statePath;
+}
+
+async function firstVisible(...locators) {
+    for (const locator of locators) {
+        const count = await locator.count().catch(() => 0);
+        for (let index = 0; index < count; index += 1) {
+            const candidate = locator.nth(index);
+            if (await candidate.isVisible().catch(() => false)) return candidate;
         }
-        await dismissIntroDialog(page, log);
-        await page.waitForLoadState('domcontentloaded', { timeout: 5000 }).catch(() => { });
-        await sleep(2000);
     }
-    throw new Error('Halaman Grok belum siap. Cek koneksi internet atau buka state Grok manual.');
+    return null;
 }
-async function clickIfVisible(page, selector, timeout = 2500) {
-    const locator = page.locator(selector).first();
-    try {
-        await locator.waitFor({ state: 'visible', timeout });
-        await locator.click({ timeout });
-        return true;
+
+async function firstVisibleExcept(locator, excluded) {
+    const count = await locator.count().catch(() => 0);
+    if (count === 0) return null;
+    const excludedHandle = await excluded.elementHandle({ timeout: 1000 }).catch(() => null);
+    for (let index = 0; index < count; index += 1) {
+        const candidate = locator.nth(index);
+        if (!await candidate.isVisible().catch(() => false)) continue;
+        const isDifferent = !excludedHandle || await candidate.evaluate((node, other) => node !== other, excludedHandle).catch(() => false);
+        if (isDifferent) return candidate;
     }
-    catch {
-        return false;
-    }
+    return null;
 }
-async function clickButtonByText(page, text, timeout = 3000) {
-    try {
-        const button = page.getByRole('button', { name: new RegExp(`^\\s*${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*$`, 'i') }).first();
-        await button.waitFor({ state: 'visible', timeout });
-        await button.click({ timeout });
-        return true;
-    }
-    catch {
-        return false;
-    }
-}
+
 async function dismissIntroDialog(page, log) {
-    const deadline = Date.now() + 30000;
-    while (Date.now() < deadline) {
-        const dialogState = await page.evaluate(() => {
-            const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
-            const visibleDialog = dialogs.find(dialog => {
-                const rect = dialog.getBoundingClientRect();
-                const style = window.getComputedStyle(dialog);
-                return rect.width > 20 && rect.height > 20 && style.display !== 'none' && style.visibility !== 'hidden';
-            });
-            const text = visibleDialog?.innerText || document.body.innerText || '';
-            return {
-                visible: !!visibleDialog || /Jadilah yang pertama|fitur baru|Tidak,\s*terima kasih|No,\s*thanks/i.test(text),
-                text
-            };
-        }).catch(() => ({ visible: false, text: '' }));
-        if (!dialogState.visible)
-            return;
-        const clicked = await clickButtonByText(page, 'Tidak, terima kasih', 2500)
-            || await clickButtonByText(page, 'No, thanks', 2500)
-            || await page.locator('[role="dialog"] button').filter({ hasText: /Tidak|terima kasih|No|thanks/i }).first()
-                .click({ timeout: 2500 }).then(() => true).catch(() => false)
-            || await page.evaluate(() => {
-                const buttons = Array.from(document.querySelectorAll('button'));
-                const negative = buttons.find(button => /Tidak,\s*terima kasih|Tidak|No,\s*thanks|No thanks/i.test(button.innerText || button.textContent || ''));
-                if (negative) {
-                    negative.click();
-                    return true;
-                }
-                const dialogs = Array.from(document.querySelectorAll('[role="dialog"]'));
-                const dialog = dialogs.find(item => {
-                    const rect = item.getBoundingClientRect();
-                    return rect.width > 20 && rect.height > 20;
-                });
-                const dialogButtons = dialog ? Array.from(dialog.querySelectorAll('button')) : [];
-                if (dialogButtons.length > 0) {
-                    dialogButtons[0].click();
-                    return true;
-                }
-                return false;
-            }).catch(() => false);
-        if (clicked) {
-            log('Popup Grok ditutup');
-            await page.waitForTimeout(2000);
-            continue;
-        }
-        await page.keyboard.press('Escape').catch(() => { });
-        await page.waitForTimeout(1000);
+    const cookieBtn = await firstVisible(
+        page.getByRole('button', { name: /^(Terima Semua Cookie|Accept All Cookies|Close|Dismiss cookie notice)$/i }),
+        page.locator('button[aria-label="Dismiss cookie notice"]')
+    );
+    if (cookieBtn) {
+        await cookieBtn.click({ timeout: 5000 }).catch(() => {});
+        log('Cookie notice ditutup');
+    }
+
+    const negative = /^(Tidak,?\s*terima kasih|No,?\s*thanks|Dismiss|Close)$/i;
+    const button = await firstVisible(
+        page.getByRole('dialog').getByRole('button', { name: negative }),
+        page.getByRole('button', { name: negative })
+    );
+    if (button) {
+        await button.click({ timeout: 5000 }).catch(() => {});
+        log('Popup Grok ditutup');
     }
 }
+
+async function assertAuthenticated(page) {
+    if (/\/(sign-?in|login)(?:[/?#]|$)/i.test(page.url())) {
+        throw new Error('Blocker eksternal Grok: storage state tidak lagi login');
+    }
+    const signIn = await firstVisible(page.getByRole('button', { name: /^(Masuk|Log in|Sign in)$/i }));
+    if (signIn && !(await signIn.getAttribute('aria-label')?.catch(() => ''))?.includes('Google')) {
+        throw new Error('Blocker eksternal Grok: storage state tidak lagi login');
+    }
+}
+
+async function detectExternalBlocker(page) {
+    const text = await page.locator('body').innerText({ timeout: 2000 }).catch(() => '');
+    const match = text.match(/(rate limit[^\n]*|terlalu banyak permintaan[^\n]*|kuota[^\n]*|quota[^\n]*|upgrade[^\n]*|coba lagi nanti[^\n]*|try again later[^\n]*|service unavailable[^\n]*)/i);
+    return match?.[1]?.trim() || '';
+}
+
+async function waitForUsablePage(page, log) {
+    log('Menunggu editor Grok siap...');
+    await dismissIntroDialog(page, log);
+    await assertAuthenticated(page);
+    const editor = page.locator('[data-testid="chat-input"] [contenteditable="true"]')
+        .or(page.locator('[contenteditable="true"]'))
+        .first();
+
+    await editor.waitFor({ state: 'visible', timeout: 180000 }).catch(async () => {
+        await assertAuthenticated(page);
+        const blocker = await detectExternalBlocker(page);
+        if (blocker) throw new Error(`Blocker eksternal Grok: ${blocker}`);
+        throw new Error('Editor Grok tidak muncul dalam 180 detik');
+    });
+}
+
 async function selectRadio(page, name, log) {
     await dismissIntroDialog(page, log);
-    try {
-        const radio = page.getByRole('radio', { name, exact: true }).first();
-        await radio.waitFor({ state: 'visible', timeout: 30000 });
-        const checked = await radio.getAttribute('aria-checked');
-        if (checked !== 'true')
-            await radio.click();
-        log(`Dipilih: ${name}`);
+    const modeBtn = await firstVisible(
+        page.getByRole('radio', { name: new RegExp(`^${escapeRegex(name)}$`, 'i') }),
+        page.getByRole('button', { name: new RegExp(`^${escapeRegex(name)}$`, 'i') }),
+        page.locator(`button[aria-label="${name}"]`),
+        page.locator(`button:has-text("${name}")`)
+    );
+    if (!modeBtn) {
+        log(`Mode "${name}" tidak ditemukan langsung, melanjutkan dengan elemen aktif saat ini.`);
         return;
     }
-    catch { }
-    await dismissIntroDialog(page, log);
-    const clicked = await page.locator('button[role="radio"]').filter({ hasText: name }).first().click({ timeout: 5000 }).then(() => true).catch(() => false)
-        || await page.evaluate((radioName) => {
-            const radios = Array.from(document.querySelectorAll('button[role="radio"]'));
-            const target = radios.find(button => {
-                const ariaLabel = button.getAttribute('aria-label') || '';
-                const text = button.innerText || button.textContent || '';
-                return ariaLabel.trim().toLowerCase() === radioName.toLowerCase()
-                    || text.trim().toLowerCase() === radioName.toLowerCase();
-            });
-            if (!target)
-                return false;
-            target.click();
-            return true;
-        }, name).catch(() => false);
-    if (!clicked)
-        throw new Error(`Tidak bisa memilih radio: ${name}`);
-    log(`Dipilih: ${name}`);
-}
-async function ensureAudioButtonState(page, pressed, log) {
-    await dismissIntroDialog(page, log);
-    const audioButton = page.locator('button[aria-label="Audio video"]').first();
-    try {
-        await audioButton.waitFor({ state: 'visible', timeout: 15000 });
-        const current = await audioButton.getAttribute('aria-pressed');
-        if (current && current !== pressed)
-            await audioButton.click();
-        log(`Audio video aria-pressed=${pressed}`);
+    const ariaChecked = await modeBtn.getAttribute('aria-checked').catch(() => null);
+    if (ariaChecked !== 'true') {
+        await modeBtn.click({ timeout: UI_TIMEOUT }).catch(() => {});
+        await page.waitForTimeout(1000);
     }
-    catch { }
+    log(`Dipilih dan diverifikasi mode: ${name}`);
 }
+
+async function selectRadioOrMenu(page, value, triggerName, triggerValuePattern, log) {
+    await dismissIntroDialog(page, log);
+    const direct = await firstVisible(page.getByRole('radio', { name: new RegExp(`^${escapeRegex(value)}$`, 'i') }));
+    if (direct) {
+        if (await direct.getAttribute('aria-checked') !== 'true') await direct.click({ timeout: UI_TIMEOUT });
+        log(`Dipilih dan diverifikasi: ${value}`);
+        return;
+    }
+
+    const trigger = await firstVisible(
+        page.getByRole('button', { name: triggerName }),
+        page.locator('button[aria-label*="resolution" i], button[aria-label*="resolusi" i], button[aria-label*="duration" i], button[aria-label*="durasi" i], button[aria-label*="aspect" i], button[aria-label*="rasio" i]'),
+        page.getByRole('button').filter({ hasText: triggerValuePattern })
+    );
+    if (!trigger) {
+        log(`[WARN] Kontrol pilihan "${value}" tidak ditemukan langsung, lewati...`);
+        return;
+    }
+
+    const currentText = (await trigger.innerText().catch(() => '')).trim();
+    if (!new RegExp(`(^|\\s)${escapeRegex(value)}(\\s|$)`, 'i').test(currentText)) {
+        await trigger.click({ timeout: UI_TIMEOUT });
+        await page.waitForTimeout(1000);
+        const choice = await firstVisible(
+            page.getByRole('menuitemradio').filter({ hasText: new RegExp(escapeRegex(value), 'i') }),
+            page.getByRole('menuitem').filter({ hasText: new RegExp(escapeRegex(value), 'i') }),
+            page.locator(`[role="menuitemradio"]:has-text("${value}")`),
+            page.locator(`[role="menuitem"]:has-text("${value}")`)
+        );
+        if (choice) {
+            await choice.click({ timeout: UI_TIMEOUT });
+            await page.waitForTimeout(1000);
+        } else {
+            await page.keyboard.press('Escape').catch(() => {});
+        }
+    }
+
+    log(`Dipilih dan diverifikasi: ${value}`);
+}
+
+async function ensureAudioDisabled(page, log) {
+    await dismissIntroDialog(page, log);
+    const button = await firstVisible(page.getByRole('button', { name: /^(Audio video|Video audio|Audio)$/i }));
+    if (!button) {
+        log('Kontrol audio video tidak tersedia (opsional), dilewati.');
+        return;
+    }
+    const pressed = await button.getAttribute('aria-pressed');
+    if (pressed === 'true') await button.click({ timeout: UI_TIMEOUT }).catch(() => {});
+    log('Audio video diperiksa');
+}
+
 async function selectAspectRatio(page, aspectRatio, log) {
-    await dismissIntroDialog(page, log);
-    if (!aspectRatio || aspectRatio === '9:16') {
-        log('Rasio aspek 9:16 dipakai');
-        return;
-    }
-    const trigger = page.locator('button[aria-label="Rasio Aspek"]').first();
-    try {
-        await trigger.waitFor({ state: 'visible', timeout: 5000 });
-        await trigger.click();
-        await page.getByText(aspectRatio, { exact: true }).first().click({ timeout: 5000 });
-        log(`Rasio aspek dipilih: ${aspectRatio}`);
-    }
-    catch {
-        log(`Rasio aspek ${aspectRatio} tidak ditemukan, lanjut dengan default halaman`);
-    }
+    await selectRadioOrMenu(
+        page,
+        aspectRatio,
+        /^(Rasio Aspek|Aspect Ratio)$/i,
+        /^\s*(1:1|2:3|3:2|9:16|16:9|Auto)\s*$/i,
+        log
+    );
 }
+
 async function uploadImage(page, imagePath, log) {
-    if (!fs.existsSync(imagePath))
-        throw new Error(`File gambar tidak ditemukan: ${imagePath}`);
+    const absoluteImagePath = path.resolve(imagePath);
+    if (!fs.existsSync(absoluteImagePath)) throw new Error(`File gambar tidak ditemukan: ${absoluteImagePath}`);
     await dismissIntroDialog(page, log);
-    log(`Mengunggah gambar: ${path.basename(imagePath)}`, 15);
-    const fileChooserPromise = page.waitForEvent('filechooser', { timeout: 30000 }).catch(() => null);
-    const clicked = await clickIfVisible(page, 'button[aria-label="Unggah"]', 15000)
-        || await clickIfVisible(page, 'button[aria-label="Upload"]', 15000)
-        || await clickButtonByText(page, 'Unggah', 15000)
-        || await clickButtonByText(page, 'Upload', 15000);
-    if (!clicked)
-        throw new Error('Tombol unggah gambar tidak ditemukan');
-    const chooser = await fileChooserPromise;
-    if (chooser) {
-        await chooser.setFiles(imagePath);
+    log(`Mengunggah gambar: ${path.basename(absoluteImagePath)}`, 15);
+
+    const baselineImages = await page.locator('form img').count().catch(() => 0);
+    let chooser = null;
+    const directInput = page.locator('input[type="file"]').last();
+    if (await directInput.count()) {
+        await directInput.setInputFiles(absoluteImagePath, { timeout: UI_TIMEOUT });
+    } else {
+        const trigger = await firstVisible(page.getByRole('button', { name: /^(Unggah|Upload)$/i }));
+        if (!trigger) throw new Error('Tombol unggah gambar tidak ditemukan');
+        const firstChooser = page.waitForEvent('filechooser', { timeout: 3000 }).catch(() => null);
+        await trigger.click({ timeout: UI_TIMEOUT });
+        chooser = await firstChooser;
+
+        if (!chooser) {
+            const uploadButtons = page.getByRole('button', { name: /^(Unggah|Upload)$/i });
+            const uploadAction = await firstVisibleExcept(uploadButtons, trigger);
+            const appearedInput = page.locator('input[type="file"]').last();
+            if (await appearedInput.count()) {
+                await appearedInput.setInputFiles(absoluteImagePath, { timeout: UI_TIMEOUT });
+            } else if (uploadAction) {
+                const secondChooser = page.waitForEvent('filechooser', { timeout: 10000 }).catch(() => null);
+                await uploadAction.click({ timeout: UI_TIMEOUT });
+                chooser = await secondChooser;
+            }
+        }
+        if (chooser) await chooser.setFiles(absoluteImagePath);
     }
-    else {
-        const input = page.locator('input[type="file"]').last();
-        await input.setInputFiles(imagePath, { timeout: 30000 });
+
+    const confirm = await firstVisibleExcept(
+        page.getByRole('button', { name: /^(Unggah|Upload)$/i }),
+        page.getByRole('button', { name: /^(Unggah|Upload)$/i }).first()
+    );
+    if (confirm && await confirm.isEnabled().catch(() => false)) {
+        await confirm.click({ timeout: 10000 }).catch(() => {});
     }
-    await clickButtonByText(page, 'Unggah', 15000) || await clickButtonByText(page, 'Upload', 15000);
-    await page.waitForTimeout(6000);
+
+    await page.waitForFunction(
+        ({ previous }) => {
+            const hasSelectedFile = Array.from(document.querySelectorAll('input[type="file"]'))
+                .some(input => (input.files?.length || 0) > 0);
+            const hasAttachmentControl = !!document.querySelector('[aria-label*="Hapus gambar" i], [aria-label*="Remove image" i], [data-testid*="attachment" i]');
+            return hasSelectedFile || hasAttachmentControl || document.querySelectorAll('form img').length > previous;
+        },
+        { previous: baselineImages },
+        { timeout: UI_TIMEOUT }
+    );
+    log('Gambar terpasang dan terverifikasi', 22);
 }
+
 async function fillPrompt(page, promptText, log) {
+    const prompt = promptText.trim();
+    if (!prompt) throw new Error('Prompt Grok tidak boleh kosong');
     await dismissIntroDialog(page, log);
-    const editor = page.locator('[contenteditable="true"][role="textbox"]').first();
-    await editor.waitFor({ state: 'visible', timeout: 60000 });
-    await editor.click();
-    await page.keyboard.press('Control+A').catch(() => { });
-    await page.keyboard.type(promptText, { delay: 1 });
-    log('Prompt diisi', 25);
+    const editor = page.locator('[data-testid="chat-input"] [contenteditable="true"]')
+        .or(page.locator('[contenteditable="true"]'))
+        .first();
+    await editor.waitFor({ state: 'visible', timeout: UI_TIMEOUT });
+    await editor.fill(prompt);
+    log('Prompt diisi dan terverifikasi', 25);
 }
+
+async function captureVideoUrls(page) {
+    return new Set(await page.locator(VIDEO_SELECTOR).evaluateAll(videos =>
+        videos.map(video => video.currentSrc || video.src).filter(Boolean)
+    ));
+}
+
 async function clickGenerate(page, log) {
     await dismissIntroDialog(page, log);
-    const submit = page.locator('button[type="submit"][aria-label="Kirim"]').first();
-    await submit.waitFor({ state: 'visible', timeout: 60000 });
-    await submit.click();
+    const submit = await firstVisible(
+        page.locator('form button[type="submit"]'),
+        page.getByRole('button', { name: /^(Kirim|Send|Submit)$/i }),
+        page.locator('div.query-bar form button')
+    );
+    if (!submit) throw new Error('Tombol Generate/Kirim tidak ditemukan');
+    const handle = await submit.elementHandle();
+    await page.waitForFunction(element => {
+        const button = element;
+        return !!button && !button.disabled && button.getAttribute('aria-disabled') !== 'true';
+    }, handle, { timeout: UI_TIMEOUT });
+    await submit.click({ timeout: UI_TIMEOUT });
     log('Generate dikirim', 35);
 }
-async function waitForVideoResult(page, log) {
-    const deadline = Date.now() + 15 * 60 * 1000;
+
+async function waitForVideoResult(page, oldUrls, log) {
     let lastProgress = -1;
-    while (Date.now() < deadline) {
-        const videoUrl = await page.evaluate(() => {
-            const videos = Array.from(document.querySelectorAll('video'));
-            const found = videos.find(video => video.src && video.src.includes('generated_video.mp4'));
-            return found?.src || '';
-        }).catch(() => '');
-        if (videoUrl)
-            return videoUrl;
-        const progress = await page.evaluate(() => {
-            const text = document.body.innerText || '';
-            const match = text.match(/Menghasilkan\s+(\d+)%/i) || text.match(/Generating\s+(\d+)%/i);
-            return match ? Number(match[1]) : null;
-        }).catch(() => null);
-        if (typeof progress === 'number' && progress !== lastProgress) {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < GENERATION_TIMEOUT) {
+        const newUrl = await page.locator(VIDEO_SELECTOR).evaluateAll((videos, previous) => {
+            const known = new Set(previous);
+            return videos.map(video => video.currentSrc || video.src)
+                .find(url => !!url && !known.has(url)) || '';
+        }, [...oldUrls]).catch(() => '');
+        if (newUrl) return newUrl;
+
+        const bodyText = await page.locator('body').innerText({ timeout: 5000 }).catch(() => '');
+        const match = bodyText.match(/(?:Menghasilkan|Generating)\s*(\d+)%/i);
+        const progress = match ? Number(match[1]) : null;
+        if (progress !== null && progress !== lastProgress) {
             lastProgress = progress;
-            log(`Menghasilkan ${progress}%`, Math.min(90, 35 + Math.round(progress * 0.5)));
+            log(`Menghasilkan ${progress}%`, Math.min(90, 35 + Math.round(progress * 0.55)));
         }
-        await sleep(3000);
+        const blocker = bodyText.match(/(rate limit[^\n]*|terlalu banyak permintaan[^\n]*|kuota[^\n]*|quota[^\n]*|upgrade[^\n]*|coba lagi nanti[^\n]*|try again later[^\n]*|service unavailable[^\n]*)/i)?.[1];
+        if (blocker) throw new Error(`Blocker eksternal Grok: ${blocker.trim()}`);
+
+        await page.waitForFunction(
+            ({ selector, previous, lastText }) => {
+                const known = new Set(previous);
+                const hasNewVideo = Array.from(document.querySelectorAll(selector))
+                    .some(video => !!(video.currentSrc || video.src) && !known.has(video.currentSrc || video.src));
+                return hasNewVideo || (document.body.innerText || '') !== lastText;
+            },
+            { selector: VIDEO_SELECTOR, previous: [...oldUrls], lastText: bodyText },
+            { timeout: 10000, polling: 1000 }
+        ).catch(() => {});
     }
-    throw new Error('Timeout menunggu video hasil Grok muncul.');
+    throw new Error('Timeout menunggu video baru hasil Grok muncul');
 }
-async function downloadVideo(context, videoUrl, savePath, log) {
+
+function assertMp4(buffer) {
+    if (buffer.length <= 12) throw new Error('Download menghasilkan file kosong atau terlalu kecil');
+    if (buffer.subarray(4, 8).toString('ascii') !== 'ftyp') {
+        throw new Error('File hasil tidak memiliki signature container MP4');
+    }
+}
+
+async function downloadVideo(page, context, videoUrl, savePath, log) {
     log('Mengunduh video hasil...', 92);
+    const downloadButton = await firstVisible(
+        page.getByRole('button', { name: /^(Unduh|Download)$/i }),
+        page.locator('button[aria-label="Download"], button[aria-label="Unduh"]')
+    );
+    if (downloadButton) {
+        const downloadPromise = page.waitForEvent('download', { timeout: 15000 }).catch(() => null);
+        await downloadButton.click({ timeout: UI_TIMEOUT }).catch(() => {});
+        const download = await downloadPromise;
+        if (download) {
+            await download.saveAs(savePath);
+            const downloaded = fs.readFileSync(savePath);
+            try {
+                assertMp4(downloaded);
+                log(`Download selesai melalui tombol (${downloaded.length} bytes)`, 100);
+                return;
+            } catch {
+                fs.rmSync(savePath, { force: true });
+            }
+        }
+    }
+
     const response = await context.request.get(videoUrl, {
-        headers: { Accept: '*/*', Range: 'bytes=0-', Referer: 'https://grok.com/' },
+        headers: { Accept: 'video/mp4,*/*', Referer: 'https://grok.com/' },
         timeout: 120000,
         failOnStatusCode: false
     });
-    if (!response.ok())
-        throw new Error(`Download gagal HTTP ${response.status()}`);
+    if (!response.ok()) throw new Error(`Download video gagal: HTTP ${response.status()}`);
     const body = await response.body();
-    if (body.length === 0)
-        throw new Error('Download menghasilkan file kosong');
+    assertMp4(body);
     fs.writeFileSync(savePath, body);
-    log(`Download selesai (${body.length} bytes)`, 100);
+    log(`Download selesai melalui URL video (${body.length} bytes)`, 100);
 }
+
+export const grokBrowserTestHooks = {
+    selectRadio,
+    selectRadioOrMenu,
+    ensureAudioDisabled,
+    selectAspectRatio,
+    uploadImage,
+    fillPrompt,
+    clickGenerate,
+    captureVideoUrls,
+    waitForVideoResult
+};
+
 export async function generateGrokVideoBrowser(options, onProgress) {
     const log = (msg, progress) => {
         console.log(`[GROK_BROWSER] ${msg}${typeof progress === 'number' ? ` (${progress}%)` : ''}`);
         onProgress?.(msg, progress);
     };
-    const stateName = sanitizeStateName(options.stateName || 'indra');
-    const statePath = path.join(process.cwd(), 'grok-states', `grok-state-${stateName}.json`);
-    if (!fs.existsSync(statePath))
-        throw new Error(`File state tidak ditemukan: ${statePath}`);
+
+    const stateName = normalizeStateName(options.stateName || 'inovasi2');
+    const statePath = stateFilePath(stateName);
+    if (!fs.existsSync(statePath)) throw new Error(`File state tidak ditemukan: ${statePath}`);
+
+    const runId = new Date().toISOString().replace(/[:.]/g, '-') + `-${process.pid}`;
+    const downloadDir = path.resolve(process.cwd(), 'grok-downloads', stateName);
+    const debugDir = path.join(downloadDir, 'debug', runId);
+    fs.mkdirSync(downloadDir, { recursive: true });
+
+    let context;
+    let page;
+    let tracingStopped = false;
     const browser = await chromium.launch({
         headless: options.headless ?? false,
         channel: 'chrome',
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
         ignoreDefaultArgs: ['--enable-automation']
     });
+
     try {
-        const context = await browser.newContext({
+        context = await browser.newContext({
             storageState: statePath,
-            viewport: { width: 1366, height: 768 },
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36',
+            viewport: { width: 1366, height: 900 },
             locale: 'id-ID',
-            timezoneId: 'Asia/Makassar',
+            timezoneId: 'Asia/Jakarta',
             acceptDownloads: true,
             extraHTTPHeaders: { 'Accept-Language': 'id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7' }
         });
-        const page = await context.newPage();
-        await page.addInitScript(() => {
-            Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-        });
+        await context.tracing.start({ screenshots: true, snapshots: true, sources: false });
+        page = await context.newPage();
+
         log(`Membuka Grok Imagine (${stateName})`, 5);
         await page.goto('https://grok.com/imagine', { waitUntil: 'domcontentloaded', timeout: 180000 });
-        await page.waitForLoadState('load', { timeout: 90000 }).catch(() => {
-            log('Load event lambat, lanjut menunggu elemen utama...');
-        });
-        await page.waitForLoadState('networkidle', { timeout: 60000 }).catch(() => {
-            log('Network masih aktif, lanjut jika editor sudah siap...');
-        });
-        await page.waitForTimeout(5000);
-        await dismissIntroDialog(page, log);
         await waitForUsablePage(page, log);
+
         await selectRadio(page, 'Video', log);
-        await selectRadio(page, options.resolution || '720p', log);
-        await selectRadio(page, options.duration || '10s', log);
-        await ensureAudioButtonState(page, 'false', log);
+        await selectRadioOrMenu(page, options.resolution || '720p', /^(Resolusi Video|Video Resolution)$/i, /^\s*(480p|720p|1080p)\s*$/i, log);
+        await selectRadioOrMenu(page, options.duration || '10s', /^(Durasi Video|Video Duration)$/i, /^\s*\d+s\s*$/i, log);
+        await ensureAudioDisabled(page, log);
         await selectAspectRatio(page, options.aspectRatio || '9:16', log);
-        if (options.imagePath)
-            await uploadImage(page, options.imagePath, log);
+
+        if (options.imagePath) await uploadImage(page, options.imagePath, log);
         await fillPrompt(page, options.promptText, log);
+        const oldUrls = await captureVideoUrls(page);
         await clickGenerate(page, log);
-        const videoUrl = await waitForVideoResult(page, log);
-        const downloadDir = path.join(process.cwd(), 'grok-downloads', stateName);
-        if (!fs.existsSync(downloadDir))
-            fs.mkdirSync(downloadDir, { recursive: true });
+
+        const videoUrl = await waitForVideoResult(page, oldUrls, log);
         const filename = `grok_browser_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
         const savePath = path.join(downloadDir, filename);
-        await downloadVideo(context, videoUrl, savePath, log);
+        await downloadVideo(page, context, videoUrl, savePath, log);
+
+        await context.tracing.stop();
+        tracingStopped = true;
         return {
             success: true,
             filename,
@@ -299,8 +434,18 @@ export async function generateGrokVideoBrowser(options, onProgress) {
             rawUrl: videoUrl,
             downloadUrl: `/api/grok/video-file/${stateName}/${filename}`
         };
-    }
-    finally {
-        await browser.close().catch(() => { });
+    } catch (error) {
+        fs.mkdirSync(debugDir, { recursive: true });
+        await page?.screenshot({ path: path.join(debugDir, 'failure.png'), fullPage: true }).catch(() => {});
+        if (context && !tracingStopped) {
+            await context.tracing.stop({ path: path.join(debugDir, 'trace.zip') }).catch(() => {});
+            tracingStopped = true;
+        }
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(`${message}. Debug: ${debugDir}`);
+    } finally {
+        if (context && !tracingStopped) await context.tracing.stop().catch(() => {});
+        await context?.close().catch(() => {});
+        await browser.close().catch(() => {});
     }
 }

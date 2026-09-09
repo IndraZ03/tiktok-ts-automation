@@ -272,7 +272,7 @@
       <div class="form-group">
         <label for="stateSelect">1. Session Account (Grok State)</label>
         <select id="stateSelect">
-          <option value="indra">indra (grok-state-indra.json)</option>
+          <option value="inovasi2">inovasi2 (grok-state-inovasi2.json)</option>
         </select>
       </div>
 
@@ -385,8 +385,9 @@
           opt.textContent = `${s.name} (${s.filename})`;
           stateSelect.appendChild(opt);
         });
+        if (states.some(s => s.name === 'inovasi2')) stateSelect.value = 'inovasi2';
       } else {
-        stateSelect.innerHTML = '<option value="indra">indra (Default)</option>';
+        stateSelect.innerHTML = '<option value="inovasi2">inovasi2 (Default)</option>';
       }
     } catch (e) { console.error('Error loading states:', e); }
 
