@@ -322,7 +322,7 @@
             </button>
             <button id="btn-infinite-generate" onclick="startInfiniteGenerate()"
                     class="w-full bg-gradient-to-r from-teal-600 via-sky-600 to-sky-700 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
-              ♾️ Infinite Generate (Stok Utama & Cadangan)
+              ♾️ Infinite Generate (Utama 30, Cadangan ∞)
             </button>
             <button id="btn-infinite-schedule" onclick="openInfiniteScheduleModal()"
                     class="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-orange-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
@@ -880,7 +880,7 @@
         // Default configs mapping
         const cfg = stateConfigs[fn] || {
           promptFile: '', bahanFolder: '',
-          aspectRatio: '9:16', merge: true,
+          aspectRatio: '9:16', merge: true, permutation4Videos: false,
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
           scheduleTime: '', intervalMinutes: 60,
           addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
@@ -971,6 +971,10 @@
                       </select>
                     </div>
                   </div>
+                  <label class="mt-2 flex items-start gap-2 rounded-xl border border-teal-900/50 bg-teal-950/20 p-2.5 cursor-pointer">
+                    <input id="permutation4Videos-${fn}" type="checkbox" class="mt-0.5 w-4 h-4 accent-teal-500" ${cfg.permutation4Videos === true ? 'checked' : ''}>
+                    <span class="text-xs text-gray-200 font-semibold">Permutasi 4 Video <span class="text-gray-400 font-normal">(4P2 = 12 output)</span></span>
+                  </label>
                 </div>
               </div>
             </div>
@@ -1154,6 +1158,7 @@
         bahanFolder: document.getElementById(`bahanFolder-${fn}`)?.value || '',
         aspectRatio: document.getElementById(`aspectRatio-${fn}`)?.value || '9:16',
         merge: document.getElementById(`merge-${fn}`)?.value === 'true',
+        permutation4Videos: document.getElementById(`permutation4Videos-${fn}`)?.checked || false,
         audioFolder: document.getElementById(`audioFolder-${fn}`)?.value || '',
         description: document.getElementById(`description-${fn}`)?.value || '',
         hashtags: document.getElementById(`hashtags-${fn}`)?.value || '',
@@ -1502,7 +1507,7 @@
         btnInfGen.setAttribute('onclick', 'stopInfiniteGenerate()');
         btnInfGen.disabled = false;
       } else {
-        btnInfGen.textContent = '♾️ Infinite Generate (Stok Utama & Cadangan)';
+        btnInfGen.textContent = '♾️ Infinite Generate (Utama 30, Cadangan ∞)';
         btnInfGen.className = 'w-full bg-gradient-to-r from-teal-600 via-sky-600 to-sky-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-sky-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'startInfiniteGenerate()');
         btnInfGen.disabled = false;

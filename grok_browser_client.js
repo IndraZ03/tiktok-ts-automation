@@ -54,6 +54,8 @@ async function firstVisibleExcept(locator, excluded) {
     return null;
 }
 
+const TERMS_UPDATE_HEADING = /(Pembaruan.*Ketentuan Layanan.*Kebijakan Penggunaan yang Dapat Diterima|Updates?.*Terms of Service.*Acceptable Use Policy)/i;
+
 async function dismissIntroDialog(page, log) {
     const cookieBtn = await firstVisible(
         page.getByRole('button', { name: /^(Terima Semua Cookie|Accept All Cookies|Close|Dismiss cookie notice)$/i }),
@@ -62,6 +64,25 @@ async function dismissIntroDialog(page, log) {
     if (cookieBtn) {
         await cookieBtn.click({ timeout: 5000 }).catch(() => {});
         log('Cookie notice ditutup');
+    }
+
+    const termsUpdate = await firstVisible(
+        page.getByRole('heading', { name: TERMS_UPDATE_HEADING }),
+        page.locator('h1, h2, [role="heading"]').filter({ hasText: TERMS_UPDATE_HEADING })
+    );
+    if (termsUpdate) {
+        const acknowledge = await firstVisible(
+            page.getByRole('button', { name: /^(Mengerti|Saya mengerti|Got it|I understand)$/i })
+        );
+        if (!acknowledge) {
+            throw new Error('Blocker eksternal Grok: pembaruan ketentuan layanan muncul, tetapi tombol persetujuan tidak ditemukan');
+        }
+        await acknowledge.click({ timeout: 10000 }).catch(error => {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Blocker eksternal Grok: tombol persetujuan ketentuan gagal diklik (${message})`);
+        });
+        log('Pembaruan ketentuan layanan Grok disetujui');
+        await page.waitForTimeout(1000);
     }
 
     const negative = /^(Tidak,?\s*terima kasih|No,?\s*thanks|Dismiss|Close)$/i;
@@ -93,18 +114,27 @@ async function detectExternalBlocker(page) {
 
 async function waitForUsablePage(page, log) {
     log('Menunggu editor Grok siap...');
-    await dismissIntroDialog(page, log);
-    await assertAuthenticated(page);
     const editor = page.locator('[data-testid="chat-input"] [contenteditable="true"]')
         .or(page.locator('[contenteditable="true"]'))
         .first();
+    const deadline = Date.now() + 180000;
 
-    await editor.waitFor({ state: 'visible', timeout: 180000 }).catch(async () => {
+    // Interstitial Grok dapat muncul beberapa detik setelah DOM siap. Periksa
+    // kembali selama menunggu agar popup baru tidak menutupi editor sampai timeout.
+    while (Date.now() < deadline) {
+        await dismissIntroDialog(page, log);
         await assertAuthenticated(page);
-        const blocker = await detectExternalBlocker(page);
-        if (blocker) throw new Error(`Blocker eksternal Grok: ${blocker}`);
-        throw new Error('Editor Grok tidak muncul dalam 180 detik');
-    });
+        if (await editor.isVisible().catch(() => false)) return;
+
+        const remaining = deadline - Date.now();
+        await editor.waitFor({ state: 'visible', timeout: Math.min(5000, remaining) }).catch(() => {});
+        if (await editor.isVisible().catch(() => false)) return;
+    }
+
+    await assertAuthenticated(page);
+    const blocker = await detectExternalBlocker(page);
+    if (blocker) throw new Error(`Blocker eksternal Grok: ${blocker}`);
+    throw new Error('Editor Grok tidak muncul dalam 180 detik');
 }
 
 async function selectRadio(page, name, log) {
@@ -357,6 +387,8 @@ async function downloadVideo(page, context, videoUrl, savePath, log) {
 }
 
 export const grokBrowserTestHooks = {
+    dismissIntroDialog,
+    waitForUsablePage,
     selectRadio,
     selectRadioOrMenu,
     ensureAudioDisabled,
@@ -386,8 +418,10 @@ export async function generateGrokVideoBrowser(options, onProgress) {
     let context;
     let page;
     let tracingStopped = false;
+    const isHeadless = options.headless === true;
+    log(`Mode browser Grok: ${isHeadless ? 'headless' : 'headed'}`);
     const browser = await chromium.launch({
-        headless: options.headless ?? false,
+        headless: isHeadless,
         channel: 'chrome',
         args: ['--disable-blink-features=AutomationControlled', '--no-sandbox'],
         ignoreDefaultArgs: ['--enable-automation']

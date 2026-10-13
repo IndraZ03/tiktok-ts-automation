@@ -21,6 +21,7 @@ export interface VidabotGenConfig {
   downloadDir: string;
   totalVideos: number;      // total raw videos yang dibagi ke workers
   merge?: boolean;
+  permutation4Videos?: boolean;
   audioFolder?: string;
   customDownloadDir?: string;
   parallelBrowsers?: number; // dipakai sebagai jumlah worker paralel (API)
@@ -117,7 +118,7 @@ function mapAspectRatio(ratio: string): 'portrait' | 'landscape' | 'square' {
 }
 
 
-async function checkAndMergeVideos(downloadDir: string, audioFolder: string | undefined, log: LogFn): Promise<void> {
+async function checkAndMergeVideos(downloadDir: string, audioFolder: string | undefined, log: LogFn, permutation4Videos = false): Promise<void> {
   const release = await acquireMergeLock();
   try {
     const rawDir = path.join(downloadDir, 'raw');
@@ -134,46 +135,67 @@ async function checkAndMergeVideos(downloadDir: string, audioFolder: string | un
       })
       .sort((a, b) => a.mtime - b.mtime);
 
-    // 2. Loop and merge pairs
-    while (files.length >= 2 && isRunning) {
-      const pair = files.splice(0, 2);
-      const [v1, v2] = pair;
+    // 2. Loop and merge either normal pairs or all ordered 4P2 permutations.
+    const groupSize = permutation4Videos ? 4 : 2;
+    const pairIndexes = permutation4Videos
+      ? Array.from({ length: 4 }, (_, first) => Array.from({ length: 4 }, (_, second) => [first, second] as [number, number]).filter(([a, b]) => a !== b)).flat()
+      : [[0, 1] as [number, number]];
 
-      log(`[MERGER] Menggabungkan raw video: ${v1.name} dan ${v2.name}`);
+    while (files.length >= groupSize && isRunning) {
+      const group = files.splice(0, groupSize);
+      const mergedPaths: string[] = [];
+      let successfulMerges = 0;
+      let mergeFailed = false;
 
-      // 3. Pick random audio file from audio/audioFolder
-      let pickedAudioPath: string | undefined = undefined;
-      if (audioFolder) {
-        const audioDir = path.join(__dirname, 'audio', audioFolder);
-        if (fs.existsSync(audioDir)) {
-          const audioExts = ['.mp3', '.wav'];
-          const audioFiles = fs.readdirSync(audioDir)
-            .filter(f => audioExts.includes(path.extname(f).toLowerCase()));
-          if (audioFiles.length > 0) {
-            pickedAudioPath = path.join(audioDir, audioFiles[Math.floor(Math.random() * audioFiles.length)]);
+      log(permutation4Videos
+        ? `[MERGER] Menggabungkan 4 raw video menjadi 12 permutasi 4P2...`
+        : `[MERGER] Menggabungkan raw video: ${group[0].name} dan ${group[1].name}`);
+
+      for (const [first, second] of pairIndexes) {
+        let pickedAudioPath: string | undefined = undefined;
+        if (audioFolder) {
+          const audioDir = path.join(__dirname, 'audio', audioFolder);
+          if (fs.existsSync(audioDir)) {
+            const audioExts = ['.mp3', '.wav'];
+            const audioFiles = fs.readdirSync(audioDir)
+              .filter(f => audioExts.includes(path.extname(f).toLowerCase()));
+            if (audioFiles.length > 0) {
+              pickedAudioPath = path.join(audioDir, audioFiles[Math.floor(Math.random() * audioFiles.length)]);
+            }
           }
+        }
+
+        const mergedFname = `vida_merged_${Date.now()}_${first + 1}${second + 1}_${Math.floor(Math.random() * 1000)}.mp4`;
+        const finalOutputPath = path.join(downloadDir, mergedFname);
+
+        try {
+          log(`[MERGER] Memulai merge ke ${mergedFname}...`);
+          await mergeVideosCopyWithOptionalAudio(
+            [group[first].path, group[second].path],
+            finalOutputPath,
+            pickedAudioPath,
+            { tempDir: path.join(__dirname, '_tmp_uploads') }
+          );
+
+          mergedPaths.push(finalOutputPath);
+          successfulMerges++;
+          stats.saved++;
+          log(`[MERGER] Berhasil menggabungkan video! Tersimpan ke ${mergedFname}`);
+        } catch (err: any) {
+          log(`[MERGER] Gagal menggabungkan video: ${err.message}`);
+          mergeFailed = true;
+          break;
         }
       }
 
-      const mergedFname = `vida_merged_${Date.now()}_${Math.floor(Math.random() * 1000)}.mp4`;
-      const finalOutputPath = path.join(downloadDir, mergedFname);
-
-      try {
-        log(`[MERGER] Memulai merge ke ${mergedFname}...`);
-        await mergeVideosCopyWithOptionalAudio(
-          [v1.path, v2.path],
-          finalOutputPath,
-          pickedAudioPath,
-          { tempDir: path.join(__dirname, '_tmp_uploads') }
-        );
-
-        stats.saved++;
-        log(`[MERGER] Berhasil menggabungkan video! Tersimpan ke ${mergedFname}`);
-
-        try { fs.unlinkSync(v1.path); } catch {}
-        try { fs.unlinkSync(v2.path); } catch {}
-      } catch (err: any) {
-        log(`[MERGER] Gagal menggabungkan video: ${err.message}`);
+      if (!mergeFailed && successfulMerges === pairIndexes.length) {
+        for (const rawVideo of group) {
+          try { fs.unlinkSync(rawVideo.path); } catch {}
+        }
+      } else {
+        for (const mergedPath of mergedPaths) {
+          try { fs.unlinkSync(mergedPath); } catch {}
+        }
         break;
       }
     }
@@ -274,7 +296,7 @@ async function runVidabotWorker(
 
       if (useMerge) {
         bp.message = `Saved raw #${i + 1}`;
-        await checkAndMergeVideos(downloadDir, config.audioFolder, log);
+        await checkAndMergeVideos(downloadDir, config.audioFolder, log, config.permutation4Videos === true);
       } else {
         stats.saved++;
         bp.message = `Saved #${i + 1}`;

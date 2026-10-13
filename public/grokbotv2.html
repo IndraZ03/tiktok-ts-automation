@@ -352,11 +352,15 @@
             </button>
             <button id="btn-infinite-generate" onclick="startInfiniteGenerate()"
                     class="w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
-              ♾️ Infinite Generate (Stok Utama & Cadangan)
+              ♾️ Infinite Generate (Utama 30, Cadangan ∞)
             </button>
             <button id="btn-infinite-schedule" onclick="openInfiniteScheduleModal()"
                     class="w-full bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-orange-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
               ♾️ Infinite Schedule
+            </button>
+            <button id="btn-infinite-brutal" onclick="openInfiniteBrutalModal()" hidden
+                    class="w-full bg-gradient-to-r from-red-700 via-rose-600 to-orange-600 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-red-500/30 active:scale-[0.99] transition-all flex items-center justify-center gap-2">
+              🔥 Infinite Brutal
             </button>
             <button id="btn-stop" onclick="stopBot()" disabled
                     class="w-full bg-gray-900 border border-red-900/30 hover:bg-red-655/20 hover:border-red-500 disabled:opacity-20 text-red-400 disabled:text-gray-500 disabled:pointer-events-none py-3.5 rounded-2xl text-sm font-bold transition-all flex items-center justify-center gap-2">
@@ -800,6 +804,34 @@
     </div>
   </div>
 
+  <div id="infinite-brutal-modal" class="fixed inset-0 z-[102] hidden items-center justify-center bg-black/80 p-4">
+    <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-red-800/70 bg-gray-950 p-6 shadow-2xl">
+      <div class="flex items-center justify-between mb-5">
+        <div>
+          <h3 class="text-xl font-extrabold text-red-300">🔥 Infinite Brutal Grokbot V3</h3>
+          <p class="text-xs text-gray-400 mt-1">Otomatis memilih state dengan stok terbesar dan menyiapkan batch brutal harian.</p>
+        </div>
+        <button onclick="closeInfiniteBrutalModal()" class="text-gray-400 hover:text-white text-2xl">×</button>
+      </div>
+      <div class="rounded-2xl border border-red-900/50 bg-red-950/20 p-4 text-sm text-gray-300 space-y-2">
+        <p>• Audit rutin pukul <strong class="text-white">23:55 WITA</strong>, eksekusi mulai pukul <strong class="text-white">00:00 WITA</strong>.</p>
+        <p>• Target stok utama minimum <strong class="text-white">53 video</strong>; seluruh cadangan diimpor lebih dulu.</p>
+        <p>• Kekurangan dibuat tiap <strong class="text-white">1 menit</strong> dengan Auto Switch dan quota tersisa paling sedikit dihabiskan lebih dulu.</p>
+        <p>• Setelah siap, sistem menjadwalkan acak <strong class="text-white">40–53 video</strong> pada pukul 06:00–23:59 WITA.</p>
+        <p>• Jika belum siap sebelum 05:30 WITA, target dikunci untuk hari berikutnya. Semua milestone dikirim ke grup WhatsApp bila notifikasi aktif.</p>
+      </div>
+      <div class="mt-5">
+        <p class="text-xs font-bold uppercase tracking-wide text-gray-400 mb-2">State yang diikutkan</p>
+        <div id="infinite-brutal-state-list" class="space-y-2"></div>
+      </div>
+      <div id="infinite-brutal-next-run" class="mt-4 rounded-xl border border-gray-800 bg-gray-900/70 px-4 py-3 text-xs text-gray-400"></div>
+      <div class="flex justify-end gap-3 mt-6">
+        <button onclick="closeInfiniteBrutalModal()" class="px-5 py-3 rounded-xl bg-gray-800 text-gray-300 font-bold">Batal</button>
+        <button id="btn-confirm-infinite-brutal" onclick="confirmInfiniteBrutal()" class="px-6 py-3 rounded-xl bg-red-600 hover:bg-red-500 text-white font-extrabold">🔥 Aktifkan Infinite Brutal</button>
+      </div>
+    </div>
+  </div>
+
   <div id="infinite-generate-modal" class="fixed inset-0 z-[101] hidden items-center justify-center bg-black/75 p-4">
     <div class="w-full max-w-3xl max-h-[90vh] overflow-y-auto rounded-3xl border border-purple-800/60 bg-gray-950 p-6 shadow-2xl">
       <div class="flex items-center justify-between mb-5">
@@ -839,6 +871,7 @@
     let stockPollInterval = null;
     let currentWaitInfo = null;
     let globalConfig = {};
+    const isGrokbotV3Dashboard = window.location.pathname.replace(/\/+$/, '') === '/grokbotv3';
     let lastProgressReceivedAt = 0;
     let progressStartedAt = 0;
     let lastStatusError = '';
@@ -865,6 +898,8 @@
     // ═══════════════════════════════════════
     window.onload = async () => {
       addLog('🔄 Mempersiapkan Grokbot Dashboard...');
+      const infiniteBrutalButton = document.getElementById('btn-infinite-brutal');
+      if (infiniteBrutalButton) infiniteBrutalButton.hidden = !isGrokbotV3Dashboard;
       const quotaPanel = document.getElementById('grok-quota-panel');
       const stateSelectorPanel = document.getElementById('state-dropdown')?.parentElement;
       if (quotaPanel && stateSelectorPanel?.parentElement) stateSelectorPanel.parentElement.insertBefore(quotaPanel, stateSelectorPanel);
@@ -1092,12 +1127,12 @@
         // Default configs mapping
         const cfg = stateConfigs[fn] || {
           grokState: '', autoSwitchGrokState: false, promptFile: '', bahanFolder: '', mode: 'Video',
-          resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true,
+          resolution: '720p', duration: '10s', aspectRatio: '9:16', merge: true, permutation4Videos: false,
           audioFolder: '', description: '', hashtags: '', scheduleDate: '',
           scheduleTime: '', intervalMinutes: 60,
           addProduct: false, productNameRadio: '', productTitle: '', productDescription: '',
-          headless: true, threeUploadsPerHour: false,
-          grokGenerateIntervalMinutes: 15,
+          headless: true, threeUploadsPerHour: false, brutalContent: false,
+          grokGenerateIntervalMinutes: 15, grokGenerateUtamaIntervalMinutes: 15, grokGenerateCadanganIntervalMinutes: 15,
           lastUploadDate: '', lastUploadTime: ''
         };
 
@@ -1221,6 +1256,28 @@
                     </select>
                   </div>
                 </div>
+                <label class="mt-2 flex items-start gap-2 rounded-xl border border-purple-900/50 bg-purple-950/20 p-2.5 cursor-pointer">
+                  <input id="permutation4Videos-${fn}" type="checkbox" class="mt-0.5 w-4 h-4 accent-purple-500" ${cfg.permutation4Videos === true ? 'checked' : ''}>
+                  <span class="text-xs text-gray-200 font-semibold">Permutasi 4 Video <span class="text-gray-400 font-normal">(4P2 = 12 output)</span></span>
+                </label>
+
+                <div class="mt-3 rounded-2xl bg-indigo-950/20 border border-indigo-900/50 p-3">
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label class="text-[10px] text-blue-300 font-bold block mb-1">Interval Generate Utama (menit)</label>
+                      <input id="grokGenerateUtamaIntervalMinutes-${fn}" type="number" min="1" max="1440" step="1"
+                             value="${cfg.grokGenerateUtamaIntervalMinutes || cfg.grokGenerateIntervalMinutes || 15}"
+                             class="w-full bg-gray-900 border border-blue-800/60 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-blue-500 transition font-semibold">
+                    </div>
+                    <div>
+                      <label class="text-[10px] text-emerald-300 font-bold block mb-1">Interval Generate Cadangan (menit)</label>
+                      <input id="grokGenerateCadanganIntervalMinutes-${fn}" type="number" min="1" max="1440" step="1"
+                             value="${cfg.grokGenerateCadanganIntervalMinutes || cfg.grokGenerateIntervalMinutes || 15}"
+                             class="w-full bg-gray-900 border border-emerald-800/60 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-emerald-500 transition font-semibold">
+                    </div>
+                  </div>
+                  <p class="text-[10px] text-gray-500 mt-2">Setiap tombol Generate memakai intervalnya sendiri. Rentang 1–1440 menit.</p>
+                </div>
               </div>
             </div>
 
@@ -1260,8 +1317,17 @@
                                 class="w-full bg-gray-950 border border-gray-855/80 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-pink-500 resize-none font-semibold text-gray-200">${escHtml(cfg.productDescription || '')}</textarea>
                     </div>
                   </div>
-
-
+                  <!-- Brutal Content Option -->
+                  <div class="mt-2 rounded-xl border border-orange-900/60 bg-orange-950/20 p-3">
+                    <label class="flex items-start gap-2 cursor-pointer">
+                      <input id="chk-brutalContent-${fn}" type="checkbox" class="mt-0.5 w-4 h-4 accent-orange-500"
+                             ${cfg.brutalContent ? 'checked' : ''} onchange="toggleBrutalContentGrokbot('${fn}')">
+                      <span>
+                        <span class="block text-xs text-orange-200 font-bold">🔥 Brutal Konten</span>
+                        <span class="block text-[10px] leading-4 text-gray-400">40–53 video/hari, waktu natural acak, 1–3 video per jam tanpa jadwal bersamaan.</span>
+                      </span>
+                    </label>
+                  </div>
 
                   <!-- Three Uploads Per Hour Option -->
                   <div class="mt-2">
@@ -1270,13 +1336,6 @@
                              ${cfg.threeUploadsPerHour ? 'checked' : ''} onchange="toggleThreeUploadsGrokbot('${fn}')">
                       <span class="text-xs text-gray-300 font-semibold">⏰ Interval Tetap (3x upload/jam, jeda 5 jam)</span>
                     </label>
-                  </div>
-
-                  <div class="mt-3 rounded-2xl bg-indigo-950/20 border border-indigo-900/50 p-3">
-                    <label class="text-[10px] text-indigo-300 font-bold block mb-1">Interval Generate Utama/Cadangan (menit)</label>
-                    <input id="grokGenerateIntervalMinutes-${fn}" type="number" min="1" max="1440" value="${cfg.grokGenerateIntervalMinutes || 15}"
-                           class="w-full bg-gray-900 border border-indigo-800/60 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-indigo-500 transition font-semibold">
-                    <p class="text-[10px] text-gray-500 mt-1">Default 15 menit; satu video diproses per interval.</p>
                   </div>
 
                   <div class="grid grid-cols-2 gap-2 mb-2">
@@ -1303,7 +1362,7 @@
                       <input id="scheduleTime-${fn}" type="time" value="${cfg.scheduleTime || nowTime}"
                              class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
                     </div>
-                    <div id="interval-group-${fn}" class="col-span-1" style="display: ${cfg.threeUploadsPerHour ? 'none' : 'block'}">
+                    <div id="interval-group-${fn}" class="col-span-1" style="display: ${cfg.threeUploadsPerHour || cfg.brutalContent ? 'none' : 'block'}">
                       <label class="text-[10px] text-gray-400 font-bold block mb-1">⏱ Interval (Min)</label>
                       <input id="intervalMinutes-${fn}" type="number" min="1" value="${cfg.intervalMinutes || 60}"
                              class="w-full bg-gray-900 border border-gray-800/80 rounded-xl px-2.5 py-2.5 text-xs focus:outline-none focus:border-pink-500 transition font-semibold">
@@ -1375,10 +1434,20 @@
     // ═══════════════════════════════════════
     function toggleThreeUploadsGrokbot(fn) {
       const chk = document.getElementById(`chk-threeUploads-${fn}`);
+      const brutalChk = document.getElementById(`chk-brutalContent-${fn}`);
       const fields = document.getElementById(`interval-group-${fn}`);
       if (chk && fields) {
+        if (chk.checked && brutalChk) brutalChk.checked = false;
         fields.style.display = chk.checked ? 'none' : 'block';
       }
+    }
+
+    function toggleBrutalContentGrokbot(fn) {
+      const chk = document.getElementById(`chk-brutalContent-${fn}`);
+      const fixedChk = document.getElementById(`chk-threeUploads-${fn}`);
+      const fields = document.getElementById(`interval-group-${fn}`);
+      if (chk?.checked && fixedChk) fixedChk.checked = false;
+      if (fields) fields.style.display = (chk?.checked || fixedChk?.checked) ? 'none' : 'block';
     }
 
     function pollActiveStocks() {
@@ -1421,18 +1490,23 @@
         duration: document.getElementById(`duration-${fn}`)?.value || '10s',
         aspectRatio: document.getElementById(`aspectRatio-${fn}`)?.value || '9:16',
         merge: document.getElementById(`merge-${fn}`)?.value === 'true',
+        permutation4Videos: document.getElementById(`permutation4Videos-${fn}`)?.checked || false,
         audioFolder: document.getElementById(`audioFolder-${fn}`)?.value || '',
         description: document.getElementById(`description-${fn}`)?.value || '',
         hashtags: document.getElementById(`hashtags-${fn}`)?.value || '',
         scheduleDate: document.getElementById(`scheduleDate-${fn}`)?.value || '',
         scheduleTime: document.getElementById(`scheduleTime-${fn}`)?.value || '',
         intervalMinutes: (document.getElementById(`chk-threeUploads-${fn}`)?.checked || false) ? 300 : (parseInt(document.getElementById(`intervalMinutes-${fn}`)?.value) || 60),
-        grokGenerateIntervalMinutes: Number(document.getElementById(`grokGenerateIntervalMinutes-${fn}`)?.value) || 15,
+        grokGenerateUtamaIntervalMinutes: Number(document.getElementById(`grokGenerateUtamaIntervalMinutes-${fn}`)?.value) || 15,
+        grokGenerateCadanganIntervalMinutes: Number(document.getElementById(`grokGenerateCadanganIntervalMinutes-${fn}`)?.value) || 15,
         addProduct: document.getElementById(`chk-product-${fn}`)?.checked || false,
         productNameRadio: document.getElementById(`productNameRadio-${fn}`)?.value || '',
         productTitle: document.getElementById(`productTitle-${fn}`)?.value || '',
         productDescription: document.getElementById(`productDescription-${fn}`)?.value || '',
-        threeUploadsPerHour: document.getElementById(`chk-threeUploads-${fn}`)?.checked || false,
+        brutalContent: document.getElementById(`chk-brutalContent-${fn}`)?.checked || false,
+        threeUploadsPerHour: (document.getElementById(`chk-brutalContent-${fn}`)?.checked || false)
+          ? false
+          : (document.getElementById(`chk-threeUploads-${fn}`)?.checked || false),
         lastUploadDate: document.getElementById(`lastUploadDate-${fn}`)?.value || '',
         lastUploadTime: document.getElementById(`lastUploadTime-${fn}`)?.value || '',
       };
@@ -1471,7 +1545,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             stateFile: fn,
-            intervalMinutes: Number(document.getElementById(`grokGenerateIntervalMinutes-${fn}`)?.value) || 15
+            intervalMinutes: Number(document.getElementById(`grokGenerateUtamaIntervalMinutes-${fn}`)?.value) || 15
           })
         });
         const data = await readJsonResponse(res);
@@ -1502,7 +1576,7 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             stateFile: fn,
-            intervalMinutes: Number(document.getElementById(`grokGenerateIntervalMinutes-${fn}`)?.value) || 15
+            intervalMinutes: Number(document.getElementById(`grokGenerateCadanganIntervalMinutes-${fn}`)?.value) || 15
           })
         });
         const data = await readJsonResponse(res);
@@ -1527,7 +1601,10 @@
         const res = await fetch('/api/grokbotv2/import-cadangan', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stateFile: fn })
+          body: JSON.stringify({
+            stateFile: fn,
+            headless: document.getElementById('chk-globalHeadless')?.checked ?? (globalConfig.headless !== false)
+          })
         });
         const data = await readJsonResponse(res);
         if (data.success) {
@@ -1551,7 +1628,10 @@
         const res = await fetch('/api/grokbotv2/schedule', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stateFile: fn })
+          body: JSON.stringify({
+            stateFile: fn,
+            headless: document.getElementById('chk-globalHeadless')?.checked ?? (globalConfig.headless !== false)
+          })
         });
         const data = await readJsonResponse(res);
         if (!data.success) {
@@ -1707,6 +1787,91 @@
       pollStatus();
     }
 
+    function closeInfiniteBrutalModal() {
+      const modal = document.getElementById('infinite-brutal-modal');
+      modal.classList.add('hidden');
+      modal.classList.remove('flex');
+    }
+
+    function formatInfiniteBrutalWita(date) {
+      return new Intl.DateTimeFormat('id-ID', {
+        timeZone: 'Asia/Makassar',
+        dateStyle: 'full',
+        timeStyle: 'short'
+      }).format(date) + ' WITA';
+    }
+
+    async function openInfiniteBrutalModal() {
+      if (!isGrokbotV3Dashboard) return alert('Infinite Brutal hanya tersedia di /grokbotv3.');
+      if (selectedStates.length === 0) return alert('Pilih minimal satu state TikTok terlebih dahulu!');
+
+      try {
+        for (const fn of selectedStates) await saveConfig(fn);
+      } catch (error) {
+        return alert('Gagal menyimpan konfigurasi state: ' + (error?.message || error));
+      }
+
+      const stateList = document.getElementById('infinite-brutal-state-list');
+      stateList.replaceChildren(...selectedStates.map((stateFile, index) => {
+        const row = document.createElement('div');
+        row.className = 'rounded-xl border border-gray-800 bg-gray-900/70 px-4 py-3 flex items-center gap-3';
+        const number = document.createElement('span');
+        number.className = 'w-7 h-7 shrink-0 rounded-full bg-red-950 text-red-300 flex items-center justify-center text-xs font-black';
+        number.textContent = String(index + 1);
+        const label = document.createElement('span');
+        label.className = 'font-bold text-gray-200 truncate';
+        label.textContent = getStateName(stateFile);
+        row.append(number, label);
+        return row;
+      }));
+
+      const now = Date.now();
+      const witaNow = new Date(now + (8 * 60 * 60 * 1000));
+      let auditAt = Date.UTC(
+        witaNow.getUTCFullYear(), witaNow.getUTCMonth(), witaNow.getUTCDate(), 23, 55
+      ) - (8 * 60 * 60 * 1000);
+      if (auditAt <= now) auditAt += 24 * 60 * 60 * 1000;
+      const actionAt = auditAt + 5 * 60 * 1000;
+      document.getElementById('infinite-brutal-next-run').textContent =
+        `Audit berikutnya: ${formatInfiniteBrutalWita(new Date(auditAt))} · Eksekusi: ${formatInfiniteBrutalWita(new Date(actionAt))}`;
+
+      const modal = document.getElementById('infinite-brutal-modal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+    }
+
+    async function confirmInfiniteBrutal() {
+      const button = document.getElementById('btn-confirm-infinite-brutal');
+      button.disabled = true;
+      try {
+        const response = await fetch('/api/grokbotv2/infinite-brutal', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ stateFiles: selectedStates })
+        });
+        const data = await readJsonResponse(response);
+        closeInfiniteBrutalModal();
+        addLog(`🔥 Infinite Brutal aktif untuk ${selectedStates.length} state. Audit awal sedang dijalankan.`);
+        connectSSE();
+        pollStatus();
+      } catch (error) {
+        alert(error?.message || 'Gagal mengaktifkan Infinite Brutal.');
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    async function stopInfiniteBrutal() {
+      try {
+        const response = await fetch('/api/grokbotv2/stop-infinite-brutal', { method: 'POST' });
+        await readJsonResponse(response);
+        addLog('✓ Infinite Brutal Grokbot V3 dihentikan.');
+        pollStatus();
+      } catch (error) {
+        addLog('❌ Gagal menghentikan Infinite Brutal: ' + (error?.message || error));
+      }
+    }
+
     let infiniteGenerateDraft = [];
 
     function startInfiniteGenerate() {
@@ -1836,9 +2001,12 @@
       const btnFullAuto = document.getElementById('btn-full-auto');
       const btnInfGen = document.getElementById('btn-infinite-generate');
       const btnInfSchedule = document.getElementById('btn-infinite-schedule');
+      const btnInfBrutal = document.getElementById('btn-infinite-brutal');
       const btnStopAll = document.getElementById('btn-stop');
 
       if (!btnFullAuto || !btnInfGen || !btnInfSchedule || !btnStopAll) return;
+      const brutalActive = isGrokbotV3Dashboard && !!data.infiniteBrutalRunning;
+      const anyActive = !!(data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning || data.infiniteScheduleRunning || brutalActive);
 
       // 1. Full Auto Toggle Control
       if (data.grokbotFullAutoRunning) {
@@ -1850,7 +2018,7 @@
         btnFullAuto.textContent = '🚀 Mulai Full Auto (Semua State)';
         btnFullAuto.className = 'w-full gradient-btn text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-pink-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnFullAuto.setAttribute('onclick', 'startFullAuto()');
-        btnFullAuto.disabled = !data.grokbotFullAutoRunning && data.running;
+        btnFullAuto.disabled = anyActive;
       }
 
       // 2. Infinite Generate Toggle Control
@@ -1858,9 +2026,9 @@
         btnInfGen.textContent = '⛔ Hentikan Infinite Gen';
         btnInfGen.className = 'w-full bg-red-600 hover:bg-red-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'stopInfiniteGenerate()');
-        btnInfGen.disabled = false;
+        btnInfGen.disabled = anyActive;
       } else {
-        btnInfGen.textContent = '♾️ Infinite Generate (Stok Utama & Cadangan)';
+        btnInfGen.textContent = '♾️ Infinite Generate (Utama 30, Cadangan ∞)';
         btnInfGen.className = 'w-full bg-gradient-to-r from-purple-600 via-indigo-600 to-indigo-700 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-indigo-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfGen.setAttribute('onclick', 'startInfiniteGenerate()');
         btnInfGen.disabled = false;
@@ -1875,18 +2043,36 @@
         btnInfSchedule.className = 'w-full bg-gradient-to-r from-amber-600 via-orange-600 to-rose-600 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-orange-500/20 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
         btnInfSchedule.setAttribute('onclick', 'openInfiniteScheduleModal()');
       }
-      btnInfSchedule.disabled = !!data.grokbotFullAutoRunning;
+      btnInfSchedule.disabled = anyActive && !data.infiniteScheduleRunning;
+
+      if (btnInfBrutal) {
+        btnInfBrutal.hidden = !isGrokbotV3Dashboard;
+        if (brutalActive) {
+          btnInfBrutal.textContent = '⛔ Hentikan Infinite Brutal';
+          btnInfBrutal.className = 'w-full bg-red-700 hover:bg-red-600 text-white py-4 rounded-2xl text-base font-extrabold shadow-lg active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+          btnInfBrutal.setAttribute('onclick', 'stopInfiniteBrutal()');
+          btnInfBrutal.disabled = false;
+        } else {
+          btnInfBrutal.textContent = '🔥 Infinite Brutal';
+          btnInfBrutal.className = 'w-full bg-gradient-to-r from-red-700 via-rose-600 to-orange-600 disabled:opacity-20 disabled:pointer-events-none text-white py-4 rounded-2xl text-base font-extrabold shadow-lg hover:shadow-red-500/30 active:scale-[0.99] transition-all flex items-center justify-center gap-2';
+          btnInfBrutal.setAttribute('onclick', 'openInfiniteBrutalModal()');
+          btnInfBrutal.disabled = anyActive;
+        }
+      }
 
       // 3. Force Stop All Control
-      const anyActive = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning || data.infiniteScheduleRunning;
       btnStopAll.disabled = !anyActive;
       btnStopAll.textContent = '⛔ Force Stop Semua';
     }
 
-    function updateStatusBadge(running, infiniteGenRunning, waitInfo, fullAutoRunning, infiniteScheduleRunning = false) {
+    function updateStatusBadge(running, infiniteGenRunning, waitInfo, fullAutoRunning, infiniteScheduleRunning = false, infiniteBrutalRunning = false, infiniteBrutal = null) {
       const badge = document.getElementById('status-badge');
-      if (running || infiniteGenRunning || fullAutoRunning || infiniteScheduleRunning) {
-        if (waitInfo) {
+      if (running || infiniteGenRunning || fullAutoRunning || infiniteScheduleRunning || infiniteBrutalRunning) {
+        if (infiniteBrutalRunning) {
+          const phase = String(infiniteBrutal?.phase || 'aktif').replaceAll('_', ' ');
+          badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-red-500 running-pulse"></span> 🔥 Infinite Brutal · ${phase}`;
+          badge.className = 'text-xs px-3.5 py-2 rounded-full bg-red-950/40 border border-red-800 text-red-300 font-semibold flex items-center gap-2';
+        } else if (waitInfo) {
           badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full bg-yellow-500 running-pulse"></span> ⏳ Wait Limit`;
           badge.className = 'text-xs px-3.5 py-2 rounded-full bg-yellow-950/40 border border-yellow-800 text-yellow-400 font-semibold flex items-center gap-2';
         } else if (running) {
@@ -1985,7 +2171,7 @@
             const waitStr = e.data.substring('[INFINITE_WAIT]:'.length);
             currentWaitInfo = waitStr === 'null' ? null : JSON.parse(waitStr);
             fetch('/api/grokbotv2/status').then(readJsonResponse).then(data => {
-              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning, data.infiniteScheduleRunning);
+              updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning, data.infiniteScheduleRunning, data.infiniteBrutalRunning, data.infiniteBrutal);
               if (data.queue) renderQueue(data.queue);
             });
           } catch {}
@@ -2021,12 +2207,12 @@
         if (data.globalConfig) {
           globalConfig = data.globalConfig;
         }
-        const active = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning || data.infiniteScheduleRunning;
+        const active = data.running || data.infiniteGenRunning || data.grokbotFullAutoRunning || data.infiniteScheduleRunning || data.infiniteBrutalRunning;
         setBusy(active);
         updateControlsUI(data);
         if (active) {
           connectSSE();
-          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning, data.infiniteScheduleRunning);
+          updateStatusBadge(data.running, data.infiniteGenRunning, currentWaitInfo, data.grokbotFullAutoRunning, data.infiniteScheduleRunning, data.infiniteBrutalRunning, data.infiniteBrutal);
         }
         if (data.queue) renderQueue(data.queue);
         if (data.progress) updateProgressUI(data.progress);

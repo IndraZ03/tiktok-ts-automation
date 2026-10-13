@@ -3,7 +3,8 @@ import { chromium, Browser, BrowserContext, Page } from 'playwright';
 import fs from 'fs';
 import path from 'path';
 import { execa } from 'execa';
-import { exec, execSync } from 'child_process';
+import { spawn } from 'child_process';
+import net from 'net';
 import ffmpegPath from 'ffmpeg-static';
 
 export interface UploadConfig {
@@ -23,6 +24,8 @@ export interface UploadConfig {
   stateFile: string;      // filename in tiktok-states/
   statesDir: string;
   threeUploadsPerHour?: boolean;
+  brutalContent?: boolean;
+  maxVideos?: number;
   enableCustomScheduler?: boolean;
   customIntervalHours?: number;
   customUploadCount?: number;
@@ -54,6 +57,202 @@ function getRandomIntervalOffsetMinutes(): number {
   return (Math.floor(Math.random() * (steps * 2 + 1)) - steps) * RANDOM_INTERVAL_OFFSET_STEP_MINUTES;
 }
 
+const BRUTAL_ACTIVE_HOURS = 18;
+
+function randomIntegerInclusive(min: number, max: number): number {
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+function pickNaturalMinutes(count: number): number[] {
+  const validMinutes = Array.from({ length: 12 }, (_, index) => index * 5);
+
+  // TikTok hanya menyediakan menit kelipatan 5. Pilih ulang seluruh kombinasi
+  // jika pilihan acak buntu agar 2â€“3 video dalam satu jam tetap berjeda.
+  for (let attempt = 0; attempt < 100; attempt++) {
+    const selected: number[] = [];
+    while (selected.length < count) {
+      const candidates = validMinutes.filter(minute =>
+        !selected.includes(minute)
+        && selected.every(existing => Math.abs(existing - minute) >= 10)
+      );
+      if (candidates.length === 0) break;
+      selected.push(candidates[randomIntegerInclusive(0, candidates.length - 1)]);
+    }
+    if (selected.length === count) return selected.sort((a, b) => a - b);
+  }
+
+  // Fallback aman; seluruh menit tetap valid di time picker TikTok.
+  return count === 3 ? [5, 25, 45] : count === 2 ? [15, 45] : [validMinutes[randomIntegerInclusive(0, validMinutes.length - 1)]];
+}
+
+/**
+ * Membuat jadwal brutal yang tetap terlihat natural: 18 jam aktif (06–23),
+ * 1–3 posting unik per jam, tanpa timestamp yang sama dan tidak lebih awal
+ * dari baseline. Jumlah normal mode ini adalah 40–53 video.
+ */
+export function buildBrutalContentSchedule(baseSchedule: Date, requestedCount: number): Date[] {
+  const count = Math.max(0, Math.min(BRUTAL_ACTIVE_HOURS * 3, Math.floor(requestedCount)));
+  if (count === 0) return [];
+
+  const firstHour = new Date(baseSchedule.getTime());
+  firstHour.setSeconds(0, 0);
+  if (firstHour.getMinutes() > 0) firstHour.setHours(firstHour.getHours() + 1, 0, 0, 0);
+  else firstHour.setMinutes(0, 0, 0);
+
+  const hourlySlots: Date[] = [];
+  const cursor = new Date(firstHour.getTime());
+  while (hourlySlots.length < BRUTAL_ACTIVE_HOURS) {
+    const hour = cursor.getHours();
+    if (hour >= 6 && hour <= 23) hourlySlots.push(new Date(cursor.getTime()));
+    cursor.setHours(cursor.getHours() + 1);
+  }
+
+  const perHour = new Array(BRUTAL_ACTIVE_HOURS).fill(0);
+  if (count >= BRUTAL_ACTIVE_HOURS) {
+    perHour.fill(1);
+  } else {
+    // Kasus stok kurang dari target brutal: sebarkan pada jam aktif terdekat.
+    for (let i = 0; i < count; i++) perHour[i] = 1;
+  }
+
+  let remaining = count - perHour.reduce((sum, value) => sum + value, 0);
+  while (remaining > 0) {
+    const candidates = perHour
+      .map((value, index) => ({ value, index, hour: hourlySlots[index].getHours() }))
+      .filter(item => item.value < 3);
+    if (candidates.length === 0) break;
+
+    // Sedikit lebih sering pada jam aktivitas manusia: pagi, siang, dan malam.
+    const weighted = candidates.flatMap(item => {
+      const peak = (item.hour >= 8 && item.hour <= 12) || (item.hour >= 18 && item.hour <= 22);
+      return new Array(peak ? 3 : 2).fill(item.index);
+    });
+    const chosenIndex = weighted[randomIntegerInclusive(0, weighted.length - 1)];
+    perHour[chosenIndex]++;
+    remaining--;
+  }
+
+  const result: Date[] = [];
+  for (let hourIndex = 0; hourIndex < hourlySlots.length; hourIndex++) {
+    for (const minute of pickNaturalMinutes(perHour[hourIndex])) {
+      const scheduled = new Date(hourlySlots[hourIndex].getTime());
+      scheduled.setMinutes(minute, 0, 0);
+      result.push(scheduled);
+    }
+  }
+  return result.sort((a, b) => a.getTime() - b.getTime());
+}
+
+async function detectConnectedBrowserHeadless(browser: Browser): Promise<boolean | null> {
+  const context = browser.contexts()[0];
+  if (!context) return null;
+
+  let page = context.pages()[0];
+  let createdProbePage = false;
+  if (!page) {
+    page = await context.newPage();
+    createdProbePage = true;
+  }
+
+  try {
+    const userAgent = await page.evaluate(() => navigator.userAgent);
+    return /\bHeadlessChrome\//i.test(userAgent);
+  } catch {
+    return null;
+  } finally {
+    if (createdProbePage) await page.close().catch(() => {});
+  }
+}
+
+function isTcpPortOpen(port: number): Promise<boolean> {
+  return new Promise(resolve => {
+    const socket = net.createConnection({ host: '127.0.0.1', port });
+    let settled = false;
+    const finish = (open: boolean) => {
+      if (settled) return;
+      settled = true;
+      socket.destroy();
+      resolve(open);
+    };
+
+    socket.setTimeout(500);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+  });
+}
+
+async function waitForTcpPortClosed(port: number, timeoutMs: number): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (!(await isTcpPortOpen(port))) return true;
+    await new Promise(resolve => setTimeout(resolve, 250));
+  }
+  return !(await isTcpPortOpen(port));
+}
+
+async function findWindowsListeningPid(port: number): Promise<number | null> {
+  const { stdout } = await execa('netstat.exe', ['-ano', '-p', 'TCP'], { windowsHide: true });
+  for (const line of stdout.split(/\r?\n/)) {
+    const columns = line.trim().split(/\s+/);
+    if (columns.length < 5 || columns[0].toUpperCase() !== 'TCP') continue;
+    if (!columns[1].endsWith(`:${port}`) || columns[3].toUpperCase() !== 'LISTENING') continue;
+    const pid = Number(columns[4]);
+    if (Number.isInteger(pid) && pid > 0) return pid;
+  }
+  return null;
+}
+
+async function terminateChromeListeningOnPort(port: number, log: LogFn): Promise<void> {
+  if (process.platform !== 'win32') {
+    throw new Error(`Chrome lama masih memakai port ${port} dan tidak dapat dihentikan otomatis pada platform ini`);
+  }
+
+  const pid = await findWindowsListeningPid(port);
+  if (!pid) {
+    throw new Error(`Port ${port} masih aktif, tetapi PID pemiliknya tidak ditemukan`);
+  }
+
+  const { stdout } = await execa('tasklist.exe', ['/FI', `PID eq ${pid}`, '/FO', 'CSV', '/NH'], { windowsHide: true });
+  const imageName = stdout.match(/^"([^"]+)"/)?.[1] || '';
+  if (imageName.toLowerCase() !== 'chrome.exe') {
+    throw new Error(`Port ${port} dipakai ${imageName || 'proses yang tidak dikenal'} (PID ${pid}), bukan Chrome; proses tidak dihentikan`);
+  }
+
+  log(`⚠ Chrome lama belum berhenti. Menghentikan proses Chrome PID ${pid}...`);
+  await execa('taskkill.exe', ['/F', '/T', '/PID', String(pid)], { windowsHide: true });
+}
+
+async function closeMismatchedChrome(browser: Browser, port: number, log: LogFn): Promise<void> {
+  const context = browser.contexts()[0];
+  const page = context?.pages()[0];
+
+  if (context && page) {
+    let session: Awaited<ReturnType<BrowserContext['newCDPSession']>> | null = null;
+    try {
+      session = await context.newCDPSession(page);
+      await session.send('Browser.close');
+    } catch {
+      // Browser.close biasanya memutus sesi ketika berhasil, sehingga error
+      // Target closed di sini tidak berarti proses penutupan gagal.
+    } finally {
+      if (session) await session.detach().catch(() => {});
+    }
+  }
+
+  await browser.close().catch(() => {});
+  if (await waitForTcpPortClosed(port, 5000)) {
+    log(`✓ Chrome lama sudah berhenti dan port ${port} sudah kosong`);
+    return;
+  }
+
+  await terminateChromeListeningOnPort(port, log);
+  if (!(await waitForTcpPortClosed(port, 10000))) {
+    throw new Error(`Chrome lama tidak berhenti; port ${port} masih aktif setelah dihentikan`);
+  }
+  log(`✓ Chrome lama dihentikan dan port ${port} sudah kosong`);
+}
+
 export async function stopUploader() {
   isRunning = false;
   if (activeContext) { try { await activeContext.close(); } catch {} activeContext = null; }
@@ -74,6 +273,58 @@ async function safeClick(page: Page, locator: any, log: LogFn, label: string, ti
 async function waitAndLog(page: Page, log: LogFn, ms: number, reason: string) {
   log(`⏳ Menunggu ${ms / 1000}s (${reason})...`);
   await page.waitForTimeout(ms);
+}
+
+async function bringChromeWindowToFront(page: Page, log: LogFn): Promise<void> {
+  let session: Awaited<ReturnType<BrowserContext['newCDPSession']>> | null = null;
+  try {
+    await page.bringToFront();
+    session = await page.context().newCDPSession(page);
+    const windowInfo = await session.send('Browser.getWindowForTarget');
+    if (windowInfo?.windowId !== undefined) {
+      // Browser lama dapat masih hidup dalam kondisi minimized. Pulihkan dan
+      // maksimalkan supaya konfigurasi non-headless benar-benar terlihat.
+      await session.send('Browser.setWindowBounds', {
+        windowId: windowInfo.windowId,
+        bounds: { windowState: 'normal' }
+      }).catch(() => {});
+      await session.send('Browser.setWindowBounds', {
+        windowId: windowInfo.windowId,
+        bounds: { windowState: 'maximized' }
+      }).catch(() => {});
+    }
+    await page.bringToFront();
+    log('✓ Jendela Chrome non-headless dipulihkan dan ditampilkan di depan');
+  } catch (error: any) {
+    log(`⚠ Chrome berjalan non-headless, tetapi jendelanya gagal dibawa ke depan: ${error.message}`);
+  } finally {
+    if (session) await session.detach().catch(() => {});
+  }
+}
+
+async function dismissProductDialog(page: Page, log: LogFn): Promise<void> {
+  const visibleDialog = page.locator('[role="dialog"]:visible, .TUXModal:visible, [class*="modal"]:visible').last();
+  if (await visibleDialog.count() === 0) return;
+
+  const closeButton = visibleDialog.locator([
+    'button[aria-label*="Close" i]',
+    'button[aria-label*="Tutup" i]',
+    'button:has-text("Cancel")',
+    'button:has-text("Batal")'
+  ].join(', ')).first();
+
+  if (await closeButton.isVisible({ timeout: 1000 }).catch(() => false)) {
+    await closeButton.click({ force: true, timeout: 3000 }).catch(() => {});
+  } else {
+    await page.keyboard.press('Escape').catch(() => {});
+  }
+  await page.waitForTimeout(500);
+
+  if (await visibleDialog.isVisible().catch(() => false)) {
+    await page.keyboard.press('Escape').catch(() => {});
+    await page.waitForTimeout(500);
+  }
+  log('ℹ Dialog produk ditutup agar halaman penjadwalan tidak terkunci');
 }
 
 async function isVideoValid(videoPath: string, log: LogFn): Promise<boolean> {
@@ -186,6 +437,181 @@ async function detectUploadError(page: Page, log: LogFn): Promise<string | null>
   return null;
 }
 
+async function dismissUnsavedDraftDialog(page: Page, log: LogFn): Promise<boolean> {
+  const draftPrompts = page.getByText(
+    /A video you were editing wasn['’]t saved|Continue editing\?|video.*(?:tidak|belum).*tersimpan|Lanjutkan mengedit/i
+  );
+  let draftPrompt = draftPrompts.first();
+  let visible = false;
+  const promptCount = Math.min(await draftPrompts.count().catch(() => 0), 20);
+  for (let index = 0; index < promptCount; index++) {
+    const candidate = draftPrompts.nth(index);
+    if (await candidate.isVisible({ timeout: index === 0 ? 2500 : 250 }).catch(() => false)) {
+      draftPrompt = candidate;
+      visible = true;
+      break;
+    }
+  }
+  if (!visible) return false;
+
+  log('⚠ Dialog draft TikTok terdeteksi. Membuang draft lama sebelum upload berikutnya...');
+  const discardButtons = page.getByRole('button', {
+    name: /^(Discard|Buang|Hapus|Abaikan|Buang draf|Hapus draf)$/i
+  });
+  let discardButton = discardButtons.first();
+  let discardVisible = false;
+  const discardCount = Math.min(await discardButtons.count().catch(() => 0), 10);
+  for (let index = 0; index < discardCount; index++) {
+    const candidate = discardButtons.nth(index);
+    if (await candidate.isVisible({ timeout: index === 0 ? 3000 : 250 }).catch(() => false)) {
+      discardButton = candidate;
+      discardVisible = true;
+      break;
+    }
+  }
+  if (!discardVisible) {
+    throw new Error('Dialog draft TikTok menghalangi upload dan tombol Discard tidak ditemukan');
+  }
+
+  await discardButton.click({ timeout: 5000 });
+  await draftPrompt.waitFor({ state: 'hidden', timeout: 10000 }).catch(() => {});
+  log('✓ Draft lama dibuang; halaman siap untuk video baru.');
+  return true;
+}
+
+type TikTokSubmitResult = { success: true; evidence: string } | { success: false; error: string };
+
+async function waitForTikTokSubmitResult(page: Page, log: LogFn, timeoutMs = 60000): Promise<TikTokSubmitResult> {
+  const startedAt = Date.now();
+  const uploadPathPattern = /\/tiktokstudio\/upload\/?(?:[?#].*)?$/i;
+  const confirmedDestinationPattern = /\/tiktokstudio\/(?:content|posts?|manage|home|analytics)(?:[/?#]|$)/i;
+  const successPattern = /successfully\s+(?:scheduled|posted|uploaded)|(?:has been|was)\s+(?:scheduled|posted|uploaded)|(?:scheduled|posted|uploaded)\s+successfully|berhasil\s+(?:dijadwalkan|diposting|diunggah)|upload\s+(?:is\s+)?complete|your video is being uploaded/i;
+  const errorPattern = /failed|gagal|error|try again|coba lagi|invalid|tidak valid|must be|harus|at least|setidaknya|future|masa depan|past time|waktu.*lewat|couldn['’]t|unable|tidak dapat/i;
+  const draftPattern = /A video you were editing wasn['’]t saved|Continue editing\?|video.*(?:tidak|belum).*tersimpan|Lanjutkan mengedit/i;
+  const pendingCheckDialogPattern = /Continue to post\?|still checking your video|Lanjutkan.*(?:posting|memposting)|masih memeriksa video/i;
+  const pendingCheckConfirmPattern = /^(Post now|Continue|Continue posting|Posting sekarang(?: juga)?|Tetap posting|Lanjutkan)$/i;
+  let pendingCheckConfirmAttempts = 0;
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (page.isClosed()) return { success: false, error: 'Halaman TikTok tertutup sebelum ada konfirmasi' };
+
+    // TikTok kadang menampilkan konfirmasi kedua ketika pemeriksaan konten
+    // masih berlangsung. Klik tombol utama saja belum mengirim jadwal sampai
+    // tombol "Post now" di dialog ini dikonfirmasi.
+    const pendingCheckDialog = page.locator('[role="dialog"]')
+      .filter({ hasText: pendingCheckDialogPattern })
+      .last();
+    if (await pendingCheckDialog.isVisible({ timeout: 250 }).catch(() => false)) {
+      if (pendingCheckConfirmAttempts >= 3) {
+        return { success: false, error: 'Dialog pemeriksaan TikTok tetap terbuka setelah 3 kali konfirmasi' };
+      }
+
+      const confirmButton = pendingCheckDialog.getByRole('button', { name: pendingCheckConfirmPattern }).last();
+      if (!(await confirmButton.isVisible({ timeout: 1000 }).catch(() => false))) {
+        const dialogText = (await pendingCheckDialog.textContent().catch(() => ''))?.replace(/\s+/g, ' ').trim().slice(0, 300);
+        return { success: false, error: `Dialog pemeriksaan TikTok ditemukan, tetapi tombol konfirmasi tidak tersedia${dialogText ? `: ${dialogText}` : ''}` };
+      }
+
+      pendingCheckConfirmAttempts++;
+      await confirmButton.click({ timeout: 5000 });
+      log('✓ Dialog “Continue to post?” dikonfirmasi melalui tombol “Post now”');
+      await page.waitForTimeout(750).catch(() => {});
+      continue;
+    }
+
+    const snapshot = await page.evaluate(() => {
+      const noticeSelectors = [
+        '[role="alert"]', '[role="status"]', '[role="dialog"]',
+        '[class*="toast" i]', '[class*="notification" i]', '[class*="message" i]'
+      ].join(',');
+      const notices = Array.from(document.querySelectorAll(noticeSelectors))
+        .filter(element => {
+          const style = window.getComputedStyle(element as HTMLElement);
+          const rect = (element as HTMLElement).getBoundingClientRect();
+          return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+        })
+        .map(element => (element.textContent || '').trim())
+        .filter(Boolean)
+        .join('\n');
+      const visibleButtons = Array.from(document.querySelectorAll('button')).filter(element => {
+        const style = window.getComputedStyle(element as HTMLElement);
+        const rect = (element as HTMLElement).getBoundingClientRect();
+        return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+      });
+      const postButtonVisible = visibleButtons.some(button => {
+        const text = (button.textContent || '').trim();
+        return /^(Posting|Jadwalkan|Schedule|Post|Tayangkan)$/i.test(text)
+          || button.getAttribute('data-e2e') === 'post_video_button';
+      });
+      const selectVideoVisible = visibleButtons.some(button => /Select video|Select file|Pilih video/i.test(button.textContent || ''));
+      const editorVisible = Array.from(document.querySelectorAll('.public-DraftEditor-content, div[role="textbox"][contenteditable="true"]')).some(element => {
+        const style = window.getComputedStyle(element as HTMLElement);
+        const rect = (element as HTMLElement).getBoundingClientRect();
+        return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+      });
+      const fileInputs = Array.from(document.querySelectorAll('input[type="file"]')) as HTMLInputElement[];
+      const fileCount = fileInputs.reduce((total, input) => total + (input.files?.length || 0), 0);
+      const shortVisibleTexts = Array.from(document.querySelectorAll('[role="dialog"], [role="alert"], button'))
+        .filter(element => {
+          const style = window.getComputedStyle(element as HTMLElement);
+          const rect = (element as HTMLElement).getBoundingClientRect();
+          return style.visibility !== 'hidden' && style.display !== 'none' && rect.width > 0 && rect.height > 0;
+        })
+        .map(element => (element.textContent || '').trim())
+        .filter(text => text.length > 0 && text.length < 500)
+        .join('\n');
+      return {
+        url: location.href,
+        notices,
+        shortVisibleTexts,
+        postButtonVisible,
+        selectVideoVisible,
+        editorVisible,
+        fileCount
+      };
+    }).catch((error: any) => ({ evaluationError: error?.message || String(error) }));
+
+    if ('evaluationError' in snapshot) {
+      return { success: false, error: `Gagal membaca hasil TikTok: ${snapshot.evaluationError}` };
+    }
+
+    const feedbackText = `${snapshot.notices}\n${snapshot.shortVisibleTexts}`;
+    if (draftPattern.test(feedbackText)) {
+      return { success: false, error: 'TikTok menampilkan dialog draft belum tersimpan' };
+    }
+    if (errorPattern.test(snapshot.notices)) {
+      const conciseError = snapshot.notices.replace(/\s+/g, ' ').slice(0, 300);
+      return { success: false, error: `TikTok menampilkan error: ${conciseError}` };
+    }
+    if (successPattern.test(snapshot.notices)) {
+      const evidence = snapshot.notices.replace(/\s+/g, ' ').slice(0, 300);
+      return { success: true, evidence: evidence || 'notifikasi sukses TikTok' };
+    }
+    if (confirmedDestinationPattern.test(snapshot.url)) {
+      return { success: true, evidence: `TikTok berpindah ke ${snapshot.url}` };
+    }
+    if (!uploadPathPattern.test(snapshot.url)) {
+      return { success: false, error: `TikTok berpindah ke halaman tak terduga: ${snapshot.url}` };
+    }
+
+    // Setelah submit berhasil TikTok dapat tetap berada di /upload tetapi
+    // mengosongkan editor dan kembali ke form pemilihan video.
+    if (
+      Date.now() - startedAt >= 3000
+      && snapshot.selectVideoVisible
+      && snapshot.fileCount === 0
+      && !snapshot.editorVisible
+      && !snapshot.postButtonVisible
+    ) {
+      return { success: true, evidence: 'form upload TikTok kembali kosong setelah submit' };
+    }
+
+    await page.waitForTimeout(500).catch(() => {});
+  }
+
+  return { success: false, error: `Tidak ada konfirmasi sukses dari TikTok dalam ${Math.round(timeoutMs / 1000)} detik` };
+}
+
 // ═══════════════════════════════════════════════════════════
 //  UPLOAD SINGLE VIDEO
 //  Returns true if the video was successfully posted/scheduled
@@ -203,6 +629,8 @@ async function uploadSingleVideo(
   log('📄 Navigasi ke TikTok Studio Upload...');
   await page.goto('https://www.tiktok.com/tiktokstudio/upload', { waitUntil: 'domcontentloaded', timeout: 60000 });
   log('✓ DOM loaded, menunggu halaman upload siap...');
+
+  await dismissUnsavedDraftDialog(page, log);
 
   // Wait for the actual upload UI to appear
   try {
@@ -615,7 +1043,9 @@ async function uploadSingleVideo(
       log('⏳ Menunggu hasil pencarian di tbody...');
       await waitAndLog(page, log, 3000, 'memuat hasil tabel produk');
 
-      // Select radio button inside tbody table rows
+      // Select radio button inside tbody table rows. Jangan lanjut ke step
+      // berikutnya sebelum TikTok benar-benar menerima pilihan produk.
+      let productSelected = false;
       try {
         log('🔍 Mencari hasil produk di tbody...');
         
@@ -718,33 +1148,131 @@ async function uploadSingleVideo(
           }
 
           if (checked) {
+            productSelected = true;
             log('✓ Radio produk BERHASIL dipilih & tercentang!');
           } else {
-            log('ℹ Radio diklik, melanjutkan ke tombol Next');
+            log('⚠ Radio produk belum terverifikasi tercentang');
           }
         } else {
-          log('❌ Tidak ada baris produk ditemukan di tbody');
+          log('⚠ Tidak ada baris produk ditemukan di tbody, mencoba radio langsung');
         }
       } catch (e: any) {
         log('⚠ Gagal memilih radio produk: ' + e.message);
       }
 
-      const nextBtnStep2 = page.getByRole('button', { name: /Next|Berikutnya/i });
-      await nextBtnStep2.click({ force: true, timeout: 10000 });
+      // Layout baru kadang tidak memakai <tbody>. Cari radio berdasarkan nama
+      // atau teks produk pada semua elemen radio yang ada di modal.
+      if (!productSelected) {
+        const radios = page.locator('input[type="radio"], [role="radio"]');
+        const radioCount = await radios.count();
+        const searchTerm = config.productNameRadio.toLowerCase().trim();
+        const searchKeywords = searchTerm.split(/\s+/).filter(k => k.length > 2);
+        let fallbackRadio = null;
+
+        for (let i = 0; i < radioCount; i++) {
+          const radio = radios.nth(i);
+          const radioName = `${await radio.getAttribute('name').catch(() => '') || ''} ${await radio.getAttribute('aria-label').catch(() => '') || ''}`.toLowerCase();
+          const containerText = ((await radio.locator('xpath=ancestor::*[self::tr or @role="row" or contains(@class,"product")][1]').textContent().catch(() => '')) || '').toLowerCase();
+          const haystack = `${radioName} ${containerText}`;
+          if (haystack.includes(searchTerm) || searchKeywords.some(keyword => haystack.includes(keyword))) {
+            fallbackRadio = radio;
+            break;
+          }
+        }
+
+        if (!fallbackRadio && radioCount > 0) fallbackRadio = radios.first();
+        if (fallbackRadio) {
+          await fallbackRadio.evaluate((element: HTMLElement) => {
+            element.click();
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          }).catch(() => {});
+          await page.waitForTimeout(500);
+          productSelected = await fallbackRadio.isChecked().catch(async () =>
+            (await fallbackRadio!.getAttribute('aria-checked').catch(() => null)) === 'true'
+          );
+          if (productSelected) log('✓ Radio produk dipilih melalui fallback semua layout');
+        }
+      }
+
+      const productDialogStep2 = page.locator('[role="dialog"]:visible, .TUXModal:visible, [class*="modal"]:visible').last();
+      let nextBtnStep2 = productDialogStep2.locator('button:visible').filter({ hasText: /^(Next|Berikutnya)$/i }).last();
+      if (await nextBtnStep2.count() === 0) {
+        nextBtnStep2 = page.locator('button:visible').filter({ hasText: /^(Next|Berikutnya)$/i }).last();
+      }
+      await nextBtnStep2.waitFor({ state: 'visible', timeout: 8000 });
+
+      const nextAriaDisabled = await nextBtnStep2.getAttribute('aria-disabled');
+      const nextDisabled = await nextBtnStep2.isDisabled().catch(() => false);
+      if (!productSelected && nextAriaDisabled !== 'true' && !nextDisabled) {
+        // Beberapa versi TikTok memakai custom radio yang tidak mengekspos
+        // checked, tetapi mengaktifkan Next setelah pilihan berhasil.
+        productSelected = true;
+        log('✓ Pilihan produk terverifikasi dari tombol Next yang sudah aktif');
+      }
+      if (!productSelected || nextAriaDisabled === 'true' || nextDisabled) {
+        throw new Error('Produk belum terpilih; tombol Next masih nonaktif');
+      }
+
+      await nextBtnStep2.click({ timeout: 10000 });
       log('✓ Klik Next (step 2)');
-      await waitAndLog(page, log, 2000, 'form produk');
+      await waitAndLog(page, log, 1200, 'form produk');
 
       if (config.productTitle) {
-        const titleInput = page.getByRole('textbox', { name: /Product name|Nama produk/i });
-        await titleInput.fill(config.productTitle);
+        const productDialogStep3 = page.locator('[role="dialog"]:visible, .TUXModal:visible, [class*="modal"]:visible').last();
+        const titleInputCandidates = [
+          productDialogStep3.getByRole('textbox', { name: /Product name|Nama produk|Product title|Judul produk/i }).first(),
+          productDialogStep3.locator('input.TUXTextInputCore-input:visible').first(),
+          productDialogStep3.locator('input[placeholder*="product" i]:visible, input[placeholder*="produk" i]:visible').first(),
+          page.getByRole('textbox', { name: /Product name|Nama produk|Product title|Judul produk/i }).last(),
+          page.locator('input.TUXTextInputCore-input:visible').last()
+        ];
+
+        let titleInput = titleInputCandidates[0];
+        let titleInputFound = false;
+        for (const candidate of titleInputCandidates) {
+          if (await candidate.isVisible({ timeout: 1500 }).catch(() => false)
+            && await candidate.isEditable().catch(() => false)) {
+            titleInput = candidate;
+            titleInputFound = true;
+            break;
+          }
+        }
+        if (!titleInputFound) {
+          throw new Error('Input judul produk tidak ditemukan setelah memilih produk');
+        }
+
+        try {
+          await titleInput.fill(config.productTitle, { timeout: 8000 });
+        } catch {
+          await titleInput.evaluate((element: HTMLInputElement, value: string) => {
+            element.focus();
+            const nativeSetter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (nativeSetter) nativeSetter.call(element, value);
+            else element.value = value;
+            element.dispatchEvent(new Event('input', { bubbles: true }));
+            element.dispatchEvent(new Event('change', { bubbles: true }));
+          }, config.productTitle);
+        }
+
+        const actualTitle = await titleInput.inputValue().catch(() => '');
+        if (!actualTitle.trim()) throw new Error('Judul produk gagal terisi');
         log(`✓ Judul produk: ${config.productTitle}`);
       }
 
-      await page.getByRole('button', { name: /^Add$|^Tambah$/i }).click({ force: true });
+      const productDialogFinal = page.locator('[role="dialog"]:visible, .TUXModal:visible, [class*="modal"]:visible').last();
+      let finalAddButton = productDialogFinal.locator('button:visible').filter({ hasText: /^(Add|Tambah)$/i }).last();
+      if (await finalAddButton.count() === 0) {
+        finalAddButton = page.getByRole('button', { name: /^(Add|Tambah)$/i }).last();
+      }
+      await finalAddButton.click({ timeout: 10000 });
       log('✓ Produk ditambahkan');
       await waitAndLog(page, log, 2000, 'produk disimpan');
     } catch (e: any) {
       log('❌ Gagal menambahkan produk: ' + e.message);
+      await dismissProductDialog(page, log);
+      log('⛔ Video tidak dijadwalkan tanpa produk. File dipertahankan agar bisa dicoba lagi.');
+      return false;
     }
   }
 
@@ -1159,8 +1687,18 @@ async function uploadSingleVideo(
       if (clicked) log('✓ Tombol Post/Schedule diklik (JS fallback)');
     }
 
-    await page.waitForTimeout(5000);
-    log('🎉 Upload selesai!');
+    if (!clicked) {
+      log('❌ Tombol Post/Schedule tidak ditemukan; video tidak ditandai berhasil.');
+      return false;
+    }
+
+    const submitResult = await waitForTikTokSubmitResult(page, log);
+    if (!submitResult.success) {
+      log(`❌ TikTok belum mengonfirmasi upload/schedule: ${submitResult.error}`);
+      return false;
+    }
+
+    log(`✅ TikTok mengonfirmasi upload/schedule berhasil: ${submitResult.evidence}`);
     return true;
   } catch (e: any) {
     log('❌ Gagal klik tombol publish: ' + e.message);
@@ -1175,7 +1713,7 @@ async function runUploadUnlocked(
   config: UploadConfig,
   log: LogFn,
   onVideoUploaded?: (filename: string) => void,
-  onSchedulePlanned?: (items: SchedulePlanItem[]) => void
+  onSchedulePlanned?: (items: SchedulePlanItem[]) => void | Promise<void>
 ): Promise<void> {
   isRunning = true;
 
@@ -1217,7 +1755,11 @@ async function runUploadUnlocked(
   try { uploadedMarks = JSON.parse(fs.readFileSync(marksFile, 'utf-8')); } catch {}
 
   // ── Filter out already uploaded ──
-  const videosToUpload = videosFromStart.filter(v => !uploadedMarks[v]);
+  const pendingVideos = videosFromStart.filter(v => !uploadedMarks[v]);
+  const maxVideos = Number.isFinite(config.maxVideos)
+    ? Math.max(1, Math.floor(Number(config.maxVideos)))
+    : pendingVideos.length;
+  const videosToUpload = pendingVideos.slice(0, maxVideos);
 
   if (videosToUpload.length === 0) {
     log('ℹ Semua video mulai dari yang dipilih sudah terupload!');
@@ -1237,7 +1779,15 @@ async function runUploadUnlocked(
     baseSchedule = new Date(Date.now() + 3600000);
   }
 
-  if (config.threeUploadsPerHour) {
+  const minimumScheduleTime = new Date(Date.now() + 30 * 60 * 1000);
+  if (baseSchedule.getTime() < minimumScheduleTime.getTime()) {
+    minimumScheduleTime.setSeconds(0, 0);
+    minimumScheduleTime.setMinutes(Math.ceil(minimumScheduleTime.getMinutes() / 5) * 5);
+    baseSchedule = minimumScheduleTime;
+    log(`⚠ Jadwal awal sudah lewat/terlalu dekat. Diganti otomatis ke ${baseSchedule.toLocaleString('id-ID')} agar diterima TikTok.`);
+  }
+
+  if (config.threeUploadsPerHour && !config.brutalContent) {
     baseSchedule.setMinutes(0);
     baseSchedule.setSeconds(0);
     baseSchedule.setMilliseconds(0);
@@ -1252,7 +1802,12 @@ async function runUploadUnlocked(
   });
 
   const schedulePlan: SchedulePlanItem[] = [];
-  if (config.enableCustomScheduler) {
+  if (config.brutalContent) {
+    const brutalSchedule = buildBrutalContentSchedule(baseSchedule, videosToUpload.length);
+    for (let i = 0; i < brutalSchedule.length; i++) {
+      schedulePlan.push(formatSchedulePlanItem(brutalSchedule[i], i, videosToUpload[i]));
+    }
+  } else if (config.enableCustomScheduler) {
     const validMins = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
     const temp = [...validMins];
     const chosenMins: number[] = [];
@@ -1319,15 +1874,19 @@ async function runUploadUnlocked(
   }
 
   if (onSchedulePlanned) {
-    onSchedulePlanned(schedulePlan);
+    log('📲 Mengirim daftar schedule ke WhatsApp sebelum browser upload dibuka...');
+    await onSchedulePlanned(schedulePlan);
   }
 
   log('🚀 ═══════════════════════════════════════════');
   log(`🚀 Memulai upload ${videosToUpload.length} video TikTok`);
   log(`📁 Folder: ${config.videoFolder}`);
   log(`🔑 State: ${config.stateFile}`);
-  log(`⏰ Schedule pertama: ${config.scheduleDate} ${config.scheduleTime}`);
-  if (config.threeUploadsPerHour) {
+  const firstPlannedSchedule = schedulePlan[0];
+  log(`⏰ Schedule pertama: ${firstPlannedSchedule.scheduleDate} ${firstPlannedSchedule.scheduleTime}`);
+  if (config.brutalContent) {
+    log(`🔥 Mode Brutal Konten: ${videosToUpload.length} video, tersebar natural 1–3 video/jam tanpa waktu bersamaan`);
+  } else if (config.threeUploadsPerHour) {
     log(`⏰ Mode Interval Tetap: 3 upload per jam, jeda antar-jam ${intervalMinutes} menit`);
   } else {
     log(`⏱ Interval: ${intervalMinutes} menit (${Math.floor(intervalMinutes / 60)}j ${intervalMinutes % 60}m)`);
@@ -1352,19 +1911,40 @@ async function runUploadUnlocked(
     const cdpPort = 9222;
     const targetUrl = 'https://www.tiktok.com/tiktokstudio/upload';
     const isHeadless = config.headless ?? false;
-    const headlessFlag = isHeadless ? '--headless=new ' : '';
 
     log(`🌐 Membuka Chrome Native via CMD (Port CDP: ${cdpPort}, Headless: ${isHeadless})...`);
 
     let connected = false;
+    let chromeLaunchError = '';
 
-    // 1. Coba hubungkan ke Chrome Native yang SUDAH berjalan terlebih dahulu
+    // 1. Coba hubungkan ke Chrome Native yang SUDAH berjalan terlebih dahulu.
+    // Jangan pakai ulang browser bila mode aktualnya berbeda dari konfigurasi:
+    // flag headless hanya ditentukan saat proses Chrome pertama kali diluncurkan.
+    let existingBrowserConnected = false;
     try {
       activeBrowser = await chromium.connectOverCDP(`http://localhost:${cdpPort}`, { timeout: 2000 });
-      connected = true;
-      log('✓ Terhubung ke Chrome Native yang sudah berjalan via CDP!');
-    } catch {
-      // 2. Jika belum ada Chrome berjalan di port CDP, bersihkan lock file profil & launch Chrome baru
+      existingBrowserConnected = true;
+      const activeHeadless = await detectConnectedBrowserHeadless(activeBrowser);
+      if (activeHeadless === null || activeHeadless !== isHeadless) {
+        const activeMode = activeHeadless === null ? 'tidak terdeteksi' : activeHeadless ? 'headless' : 'headed';
+        log(`⚠ Mode Chrome aktif (${activeMode}) tidak cocok dengan konfigurasi (${isHeadless ? 'headless' : 'headed'}). Meluncurkan ulang browser...`);
+        await closeMismatchedChrome(activeBrowser, cdpPort, log);
+        activeBrowser = null;
+        activeContext = null;
+      } else {
+        connected = true;
+        log(`✓ Terhubung ke Chrome Native yang sudah berjalan via CDP (mode: ${activeHeadless ? 'headless' : 'headed'})!`);
+      }
+    } catch (error) {
+      // Tidak adanya browser di port CDP adalah kondisi normal sebelum launch.
+      // Namun kegagalan setelah berhasil terhubung (misalnya proses lama tidak
+      // dapat dihentikan) wajib menghentikan upload agar tidak tersambung ulang
+      // ke browser dengan mode yang salah.
+      if (existingBrowserConnected) throw error;
+    }
+
+    if (!connected) {
+      // 2. Jika belum ada Chrome dengan mode yang sesuai, bersihkan lock file profil & launch Chrome baru
       const lockFile = path.join(profileDir, 'SingletonLock');
       if (fs.existsSync(lockFile)) {
         try { fs.unlinkSync(lockFile); } catch {}
@@ -1377,23 +1957,47 @@ async function runUploadUnlocked(
         path.join(process.env.LOCALAPPDATA || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
         path.join(process.env['ProgramFiles(x86)'] || '', 'Google', 'Chrome', 'Application', 'chrome.exe'),
       ];
-      let chromeExe = chromePaths.find(p => fs.existsSync(p));
-
-      if (chromeExe) {
-        const cmd = `"${chromeExe}" ${headlessFlag}--remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" "${targetUrl}"`;
-        exec(cmd, { shell: 'cmd.exe' });
-      } else {
-        const cmd = `start chrome ${headlessFlag}--remote-debugging-port=${cdpPort} --user-data-dir="${profileDir}" "${targetUrl}"`;
-        exec(cmd, { shell: 'cmd.exe' });
-      }
+      const chromeExe = chromePaths.find(p => fs.existsSync(p)) || 'chrome.exe';
+      const chromeArgs = [
+        ...(isHeadless ? ['--headless=new'] : []),
+        ...(!isHeadless ? ['--new-window', '--start-maximized'] : []),
+        `--remote-debugging-port=${cdpPort}`,
+        `--user-data-dir=${profileDir}`,
+        targetUrl,
+      ];
+      const chromeProcess = spawn(chromeExe, chromeArgs, {
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: isHeadless,
+      });
+      chromeProcess.once('error', error => {
+        chromeLaunchError = error.message;
+        log(`❌ Chrome gagal diluncurkan: ${error.message}`);
+      });
+      chromeProcess.once('exit', (code, signal) => {
+        if (!connected && code !== null) {
+          chromeLaunchError = `proses Chrome berhenti dengan code ${code}${signal ? `, signal ${signal}` : ''}`;
+          log(`⚠ ${chromeLaunchError}`);
+        }
+      });
+      chromeProcess.unref();
 
       // Connect Playwright over CDP to Native Chrome (retry max 30x / 15s)
       log('⏳ Menghubungkan Playwright ke Chrome Native via CDP...');
       for (let attempt = 1; attempt <= 30; attempt++) {
         try {
           activeBrowser = await chromium.connectOverCDP(`http://localhost:${cdpPort}`, { timeout: 2000 });
+          const launchedHeadless = await detectConnectedBrowserHeadless(activeBrowser);
+          if (launchedHeadless === null || launchedHeadless !== isHeadless) {
+            const launchedMode = launchedHeadless === null ? 'tidak terdeteksi' : launchedHeadless ? 'headless' : 'headed';
+            chromeLaunchError = `Chrome pada port ${cdpPort} berjalan dalam mode ${launchedMode}, bukan ${isHeadless ? 'headless' : 'headed'}`;
+            await activeBrowser.close().catch(() => {});
+            activeBrowser = null;
+            log(`❌ ${chromeLaunchError}`);
+            break;
+          }
           connected = true;
-          log('✓ Playwright terhubung ke Chrome Native via CDP!');
+          log(`✓ Playwright terhubung ke Chrome Native via CDP (mode terverifikasi: ${launchedHeadless ? 'headless' : 'headed'})!`);
           break;
         } catch {
           await new Promise(r => setTimeout(r, 500));
@@ -1402,7 +2006,7 @@ async function runUploadUnlocked(
     }
 
     if (!connected || !activeBrowser) {
-      throw new Error('Gagal menghubungkan Playwright ke Chrome Native via CDP port 9222');
+      throw new Error(`Gagal menghubungkan Playwright ke Chrome Native via CDP port 9222${chromeLaunchError ? `: ${chromeLaunchError}` : ''}`);
     }
 
     activeContext = activeBrowser.contexts()[0];
@@ -1428,6 +2032,7 @@ async function runUploadUnlocked(
     });
 
     const page = activeContext.pages().length > 0 ? activeContext.pages()[0] : await activeContext.newPage();
+    if (!isHeadless) await bringChromeWindowToFront(page, log);
 
     let uploadIndex = 0;
     let successCount = 0;
@@ -1520,11 +2125,13 @@ async function runUploadUnlocked(
           log(`✅ Video ${videoFile} berhasil diupload! (${successCount}/${videosToUpload.length})`);
         } else {
           failCount++;
-          log(`❌ Video ${videoFile} gagal diupload`);
+          log(`❌ Video ${videoFile} gagal diupload. Batch dihentikan agar file berikutnya tidak ditandai atau dihapus secara keliru.`);
+          break;
         }
       } catch (e: any) {
         failCount++;
-        log(`❌ Error upload ${videoFile}: ${e.message}`);
+        log(`❌ Error upload ${videoFile}: ${e.message}. Batch dihentikan dan file dipertahankan.`);
+        break;
       }
 
       uploadIndex++;
@@ -1541,8 +2148,12 @@ async function runUploadUnlocked(
     log(`📊 RINGKASAN: ${successCount} berhasil, ${failCount} gagal dari ${videosToUpload.length} video`);
     log('═══════════════════════════════════════════');
 
+    if (failCount > 0) {
+      throw new Error(`Batch upload dihentikan: ${successCount} berhasil, ${failCount} gagal, ${videosToUpload.length - successCount - failCount} belum diproses`);
+    }
   } catch (e: any) {
     log('❌ Error fatal: ' + e.message);
+    throw e;
   } finally {
     isRunning = false;
     // Don't close browser so user can inspect
@@ -1556,7 +2167,7 @@ export async function runUpload(
   config: UploadConfig,
   log: LogFn,
   onVideoUploaded?: (filename: string) => void,
-  onSchedulePlanned?: (items: SchedulePlanItem[]) => void
+  onSchedulePlanned?: (items: SchedulePlanItem[]) => void | Promise<void>
 ): Promise<void> {
   let release!: () => void;
   const previous = uploadLock;
