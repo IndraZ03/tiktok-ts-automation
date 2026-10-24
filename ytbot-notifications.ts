@@ -13,13 +13,18 @@ export class YtbotNotifier {
   private queue: Promise<void> = Promise.resolve();
   private pending = 0;
 
-  constructor(private sender: Sender, private log: (message: string) => void) {}
+  constructor(
+    private sender: Sender,
+    private log: (message: string) => void,
+    private isEnabled: () => boolean = () => true
+  ) {}
 
   private diagnostic(message: string): void {
     try { this.log(`[YTBot WhatsApp] ${message}`); } catch {}
   }
 
   private enqueue(message: string): void {
+    if (!this.isEnabled()) return;
     if (this.pending >= 256) {
       this.diagnostic('Antrean penuh; notifikasi dilewati.');
       return;
@@ -27,6 +32,7 @@ export class YtbotNotifier {
     this.pending++;
     this.queue = this.queue.then(async () => {
       try {
+        if (!this.isEnabled()) return;
         if (!await this.sender(message)) this.diagnostic('Pesan tidak terkirim; tanpa retry.');
       } catch (error) {
         this.diagnostic(`Gagal mengirim: ${error instanceof Error ? error.message : String(error)}`);
@@ -77,6 +83,10 @@ export class YtbotNotifier {
         notify('finished', `${status}\nBerhasil dijadwalkan: ${uploadedCount}/${total} video.${error !== undefined ? `\nError: ${error}` : ''}\nVideo terjadwal belum berarti sudah tayang.`);
       },
     };
+  }
+
+  broadcast(message: string): void {
+    this.enqueue(message);
   }
 
   drain(): Promise<void> {

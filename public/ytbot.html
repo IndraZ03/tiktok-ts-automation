@@ -109,6 +109,9 @@
         <button id="nav-states" type="button" class="sidebar-button" aria-controls="tab-states" onclick="switchTab('states')">
           <span class="text-xl" aria-hidden="true">🔑</span><span>Sesi</span>
         </button>
+        <button id="nav-config" type="button" class="sidebar-button" aria-controls="tab-config" onclick="switchTab('config')">
+          <span class="text-xl" aria-hidden="true">⚙️</span><span>Config</span>
+        </button>
       </nav>
     </div>
     <a href="/" class="sidebar-button" title="Kembali ke State Manager"><span class="text-xl" aria-hidden="true">🏠</span><span>Home</span></a>
@@ -294,6 +297,25 @@
     <p class="text-xs text-gray-500">Masa aktif berdasarkan expiry cookie lokal, bukan verifikasi login ke TikTok.</p>
     <div id="session-list" class="grid grid-cols-1 lg:grid-cols-2 gap-4" aria-live="polite"><p class="text-gray-500 text-sm">Memuat sesi...</p></div>
   </section>
+  <section id="tab-config" aria-labelledby="nav-config" class="hidden max-w-4xl mx-auto space-y-6">
+    <h1 class="text-2xl font-bold">Config YTBot</h1>
+    <div class="bg-gray-900/80 border border-gray-800 rounded-2xl p-5 space-y-5">
+      <h2 class="text-lg font-semibold">Setelan Notifikasi</h2>
+      <div class="flex items-center justify-between gap-4 bg-gray-950/60 border border-gray-800 rounded-xl p-4">
+        <div class="min-w-0">
+          <label for="chk-ytbotSendWhatsApp" class="font-semibold block mb-2">Kirim Notifikasi WhatsApp</label>
+          <p id="whatsapp-setting-help" class="text-sm text-gray-400">Kirim notifikasi download, split, upload, dan Full Auto via Baileys. Matikan jika belum setup nomor WhatsApp. Proses YTBot tetap berjalan.</p>
+        </div>
+        <input id="chk-ytbotSendWhatsApp" type="checkbox" role="switch" aria-describedby="whatsapp-setting-help" class="w-5 h-5 shrink-0 accent-pink-500 cursor-pointer disabled:opacity-50" disabled>
+      </div>
+      <p class="text-xs text-gray-500">Pengaturan ini hanya untuk notifikasi YTBot, bukan koneksi Baileys atau notifikasi bot lain.</p>
+      <div class="flex flex-wrap gap-3">
+        <button id="save-global-config" type="button" onclick="saveGlobalConfig()" class="bg-pink-600 hover:bg-pink-500 rounded-xl px-4 py-2 text-sm disabled:opacity-50" disabled>Simpan Setelan</button>
+        <button id="reload-global-config" type="button" onclick="loadConfigs()" class="bg-gray-800 hover:bg-gray-700 rounded-xl px-4 py-2 text-sm disabled:opacity-50">Muat Ulang Setelan</button>
+      </div>
+      <p id="config-feedback" role="status" aria-live="polite" class="text-sm text-gray-400">Memuat setelan...</p>
+    </div>
+  </section>
   </main>
 
   <script>
@@ -334,8 +356,8 @@
     }
 
     function switchTab(tabId) {
-      if (!['dashboard', 'states'].includes(tabId)) return;
-      for (const id of ['dashboard', 'states']) {
+      if (!['dashboard', 'states', 'config'].includes(tabId)) return;
+      for (const id of ['dashboard', 'states', 'config']) {
         document.getElementById('tab-' + id).classList.toggle('hidden', id !== tabId);
         const button = document.getElementById('nav-' + id);
         if (id === tabId) button.setAttribute('aria-current', 'page');
@@ -577,12 +599,62 @@
     // ═══════════════════════════════════════
     //  LOAD SAVED CONFIGS
     // ═══════════════════════════════════════
+    let globalConfigLoaded = false;
+    let globalConfigBusy = false;
+
+    function configFeedback(message, error = false) {
+      const el = document.getElementById('config-feedback');
+      el.textContent = message;
+      el.classList.toggle('text-red-300', error);
+      el.classList.toggle('text-emerald-300', !error);
+    }
+
+    function updateConfigControls() {
+      document.getElementById('chk-ytbotSendWhatsApp').disabled = globalConfigBusy || !globalConfigLoaded;
+      document.getElementById('save-global-config').disabled = globalConfigBusy || !globalConfigLoaded;
+      document.getElementById('reload-global-config').disabled = globalConfigBusy;
+    }
+
     async function loadConfigs() {
+      if (globalConfigBusy) return;
+      globalConfigBusy = true;
+      globalConfigLoaded = false;
+      updateConfigControls();
       try {
-        const res = await fetch('/api/ytbot/config');
-        const data = await res.json();
-        stateConfigs = data.states || {};
-      } catch (e) { addLog('❌ Gagal load config: ' + e.message); }
+        const data = await sessionRequest('/api/ytbot/config');
+        if (!data || !data.states || typeof data.states !== 'object' || Array.isArray(data.states) ||
+            (data.globalConfig != null && (typeof data.globalConfig !== 'object' || Array.isArray(data.globalConfig))) ||
+            (data.globalConfig?.sendWhatsApp !== undefined && typeof data.globalConfig.sendWhatsApp !== 'boolean')) {
+          throw new Error('Konfigurasi YTBot tidak valid.');
+        }
+        stateConfigs = data.states;
+        document.getElementById('chk-ytbotSendWhatsApp').checked = data.globalConfig?.sendWhatsApp !== false;
+        globalConfigLoaded = true;
+        configFeedback('Setelan dimuat.');
+      } catch (e) {
+        configFeedback('Gagal memuat setelan: ' + e.message + ' Tekan Muat Ulang Setelan untuk mencoba lagi.', true);
+        addLog('❌ Gagal load config: ' + e.message);
+      } finally {
+        globalConfigBusy = false;
+        updateConfigControls();
+      }
+    }
+
+    async function saveGlobalConfig() {
+      if (!globalConfigLoaded || globalConfigBusy) return;
+      globalConfigBusy = true;
+      updateConfigControls();
+      try {
+        const sendWhatsApp = document.getElementById('chk-ytbotSendWhatsApp').checked;
+        const result = await sessionRequest('/api/ytbot/global-config/save', { sendWhatsApp });
+        if (result?.success !== true) throw new Error('Respons penyimpanan tidak valid.');
+        configFeedback('Setelan tersimpan. Notifikasi WhatsApp ' + (sendWhatsApp ? 'aktif.' : 'nonaktif.'));
+      } catch (e) {
+        configFeedback('Gagal menyimpan setelan: ' + e.message + ' Perubahan belum tersimpan.', true);
+      } finally {
+        globalConfigBusy = false;
+        updateConfigControls();
+      }
     }
 
     // ═══════════════════════════════════════

@@ -3633,6 +3633,17 @@ app.get('/api/ytbot/config', (req, res) => {
   res.json(loadYtbotData());
 });
 
+app.post('/api/ytbot/global-config/save', (req, res) => {
+  const sendWhatsApp = req.body?.sendWhatsApp;
+  if (typeof sendWhatsApp !== 'boolean') {
+    return res.status(400).json({ success: false, error: 'sendWhatsApp harus boolean.' });
+  }
+  updateYtbotData(data => {
+    data.globalConfig = { ...data.globalConfig, sendWhatsApp };
+  });
+  res.json({ success: true });
+});
+
 // Save config for one state
 app.post('/api/ytbot/config/save', (req, res) => {
   const { stateFile, description, hashtags, scheduleDate, scheduleTime, intervalMinutes, lastUploadDate, lastUploadTime } = req.body;
@@ -3722,7 +3733,10 @@ app.post('/api/ytbot/stop', async (req, res) => {
 });
 
 // ── YTBOT ORCHESTRATION ──
-const ytbotNotifier = new YtbotNotifier(originalSendWAMessage, ytbotLog);
+const ytbotNotifier = new YtbotNotifier(
+  originalSendWAMessage, ytbotLog,
+  () => loadYtbotData().globalConfig?.sendWhatsApp !== false
+);
 
 async function ytbotRunState(stateFile: string): Promise<void> {
   if (!ytbotRunning) return;
@@ -4052,7 +4066,7 @@ function getYtbotStateNextTrigger(sf: string): { stateName: string; triggerTime:
 async function ytbotRunFullAuto(stateFiles: string[]): Promise<void> {
   ytbotLog(`♾️ Memulai YTBot Full Auto standby loop untuk ${stateFiles.length} state...`);
   
-  sendWAMessage(`📢 [YTBot Full Auto] Mulai dengan Standard Scheduler (Interval mengikuti masing-masing state).`);
+  ytbotNotifier.broadcast(`📢 [YTBot Full Auto] Mulai dengan Standard Scheduler (Interval mengikuti masing-masing state).`);
 
   ytbotQueue = stateFiles.map(sf => {
     const name = sf.replace('tiktok-state-', '').replace('.json', '');
@@ -4132,7 +4146,7 @@ async function ytbotRunFullAuto(stateFiles: string[]): Promise<void> {
       waMsg += `📅 Upload Terakhir: ${lastUploadTimeStr}\n`;
       waMsg += `⏰ Sched Target Start: ${startSchedStr}\n`;
       waMsg += `⏭️ Antrian Selanjutnya: State ${futureNextStateName} pada ${futureNextScheduleTimeStr}`;
-      sendWAMessage(waMsg);
+      ytbotNotifier.broadcast(waMsg);
 
       ytbotRunning = true;
       try {

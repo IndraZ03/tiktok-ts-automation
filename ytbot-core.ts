@@ -12,8 +12,13 @@ export interface YtbotStateConfig {
   lastUploadTime?: string;
 }
 
+export interface YtbotGlobalConfig {
+  sendWhatsApp?: boolean;
+}
+
 export interface YtbotData {
   states: Record<string, YtbotStateConfig>;
+  globalConfig?: YtbotGlobalConfig;
 }
 
 // Transaksi tetap sinkron agar endpoint tidak menyela load–mutate–save.
