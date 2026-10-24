@@ -3634,12 +3634,20 @@ app.get('/api/ytbot/config', (req, res) => {
 });
 
 app.post('/api/ytbot/global-config/save', (req, res) => {
-  const sendWhatsApp = req.body?.sendWhatsApp;
-  if (typeof sendWhatsApp !== 'boolean') {
-    return res.status(400).json({ success: false, error: 'sendWhatsApp harus boolean.' });
+  const body = req.body || {};
+  const updates: { sendWhatsApp?: boolean; headless?: boolean } = {};
+  for (const key of ['sendWhatsApp', 'headless'] as const) {
+    if (!Object.prototype.hasOwnProperty.call(body, key)) continue;
+    if (typeof body[key] !== 'boolean') {
+      return res.status(400).json({ success: false, error: `${key} harus boolean.` });
+    }
+    updates[key] = body[key];
+  }
+  if (Object.keys(updates).length === 0) {
+    return res.status(400).json({ success: false, error: 'sendWhatsApp atau headless diperlukan.' });
   }
   updateYtbotData(data => {
-    data.globalConfig = { ...data.globalConfig, sendWhatsApp };
+    data.globalConfig = { ...data.globalConfig, ...updates };
   });
   res.json({ success: true });
 });
@@ -3920,7 +3928,7 @@ async function ytbotRunState(stateFile: string): Promise<void> {
       productTitle: '',
       productDescription: '',
       skipSwitches: true,
-      headless: true,
+      headless: loadYtbotData().globalConfig?.headless !== false,
       scheduleDate: schedDate,
       scheduleTime: schedTime,
       intervalMinutes: intervalMin,

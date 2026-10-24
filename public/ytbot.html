@@ -300,7 +300,14 @@
   <section id="tab-config" aria-labelledby="nav-config" class="hidden max-w-4xl mx-auto space-y-6">
     <h1 class="text-2xl font-bold">Config YTBot</h1>
     <div class="bg-gray-900/80 border border-gray-800 rounded-2xl p-5 space-y-5">
-      <h2 class="text-lg font-semibold">Setelan Notifikasi</h2>
+      <h2 class="text-lg font-semibold">Setelan Browser &amp; Notifikasi</h2>
+      <div class="flex items-center justify-between gap-4 bg-gray-950/60 border border-gray-800 rounded-xl p-4">
+        <div class="min-w-0">
+          <label for="chk-ytbotHeadless" class="font-semibold block mb-2">Headless Mode</label>
+          <p id="headless-setting-help" class="text-sm text-gray-400">Aktif: upload tanpa jendela browser. Nonaktif: tampilkan Chrome saat upload. Berlaku pada peluncuran upload berikutnya, bukan browser login sesi.</p>
+        </div>
+        <input id="chk-ytbotHeadless" type="checkbox" role="switch" aria-describedby="headless-setting-help" class="w-5 h-5 shrink-0 accent-pink-500 cursor-pointer disabled:opacity-50" disabled>
+      </div>
       <div class="flex items-center justify-between gap-4 bg-gray-950/60 border border-gray-800 rounded-xl p-4">
         <div class="min-w-0">
           <label for="chk-ytbotSendWhatsApp" class="font-semibold block mb-2">Kirim Notifikasi WhatsApp</label>
@@ -610,6 +617,7 @@
     }
 
     function updateConfigControls() {
+      document.getElementById('chk-ytbotHeadless').disabled = globalConfigBusy || !globalConfigLoaded;
       document.getElementById('chk-ytbotSendWhatsApp').disabled = globalConfigBusy || !globalConfigLoaded;
       document.getElementById('save-global-config').disabled = globalConfigBusy || !globalConfigLoaded;
       document.getElementById('reload-global-config').disabled = globalConfigBusy;
@@ -624,10 +632,12 @@
         const data = await sessionRequest('/api/ytbot/config');
         if (!data || !data.states || typeof data.states !== 'object' || Array.isArray(data.states) ||
             (data.globalConfig != null && (typeof data.globalConfig !== 'object' || Array.isArray(data.globalConfig))) ||
-            (data.globalConfig?.sendWhatsApp !== undefined && typeof data.globalConfig.sendWhatsApp !== 'boolean')) {
+            (data.globalConfig?.sendWhatsApp !== undefined && typeof data.globalConfig.sendWhatsApp !== 'boolean') ||
+            (data.globalConfig?.headless !== undefined && typeof data.globalConfig.headless !== 'boolean')) {
           throw new Error('Konfigurasi YTBot tidak valid.');
         }
         stateConfigs = data.states;
+        document.getElementById('chk-ytbotHeadless').checked = data.globalConfig?.headless !== false;
         document.getElementById('chk-ytbotSendWhatsApp').checked = data.globalConfig?.sendWhatsApp !== false;
         globalConfigLoaded = true;
         configFeedback('Setelan dimuat.');
@@ -645,10 +655,11 @@
       globalConfigBusy = true;
       updateConfigControls();
       try {
+        const headless = document.getElementById('chk-ytbotHeadless').checked;
         const sendWhatsApp = document.getElementById('chk-ytbotSendWhatsApp').checked;
-        const result = await sessionRequest('/api/ytbot/global-config/save', { sendWhatsApp });
+        const result = await sessionRequest('/api/ytbot/global-config/save', { headless, sendWhatsApp });
         if (result?.success !== true) throw new Error('Respons penyimpanan tidak valid.');
-        configFeedback('Setelan tersimpan. Notifikasi WhatsApp ' + (sendWhatsApp ? 'aktif.' : 'nonaktif.'));
+        configFeedback('Setelan tersimpan. Headless ' + (headless ? 'aktif' : 'nonaktif') + ', WhatsApp ' + (sendWhatsApp ? 'aktif.' : 'nonaktif.'));
       } catch (e) {
         configFeedback('Gagal menyimpan setelan: ' + e.message + ' Perubahan belum tersimpan.', true);
       } finally {

@@ -6,6 +6,7 @@ import { execa } from 'execa';
 import { spawn } from 'child_process';
 import net from 'net';
 import ffmpegPath from 'ffmpeg-static';
+import { setTikTokSchedule, verifyTikTokSchedule } from './tiktok-schedule.js';
 
 export interface UploadConfig {
   videoFolder: string;
@@ -481,7 +482,7 @@ async function dismissUnsavedDraftDialog(page: Page, log: LogFn): Promise<boolea
 
 type TikTokSubmitResult = { success: true; evidence: string } | { success: false; error: string };
 
-async function waitForTikTokSubmitResult(page: Page, log: LogFn, timeoutMs = 60000): Promise<TikTokSubmitResult> {
+async function waitForTikTokSubmitResult(page: Page, log: LogFn, verifyBeforeSubmit: () => Promise<boolean>, timeoutMs = 60000): Promise<TikTokSubmitResult> {
   const startedAt = Date.now();
   const uploadPathPattern = /\/tiktokstudio\/upload\/?(?:[?#].*)?$/i;
   const confirmedDestinationPattern = /\/tiktokstudio\/(?:content|posts?|manage|home|analytics)(?:[/?#]|$)/i;
@@ -513,6 +514,7 @@ async function waitForTikTokSubmitResult(page: Page, log: LogFn, timeoutMs = 600
       }
 
       pendingCheckConfirmAttempts++;
+      if (!await verifyBeforeSubmit()) return { success: false, error: 'Schedule verification failed before confirmation' };
       await confirmButton.click({ timeout: 5000 });
       log('✓ Dialog “Continue to post?” dikonfirmasi melalui tombol “Post now”');
       await page.waitForTimeout(750).catch(() => {});
@@ -1343,204 +1345,7 @@ async function uploadSingleVideo(
   if (!isRunning) { log('⛔ Dibatalkan'); return false; }
 
   // ── STEP 8: Schedule ──
-  if (scheduleDate && scheduleTime) {
-    log(`📅 STEP 7: Mengatur schedule (${scheduleDate} ${scheduleTime})...`);
-    try {
-      // 1. Wait for schedule section or input
-      try {
-        await page.locator('//*[contains(text(),"When to post") or contains(text(),"Waktu posting")] | input[name="postSchedule"]').first().waitFor({ timeout: 15000 });
-      } catch {
-        log('⚠ Header Waktu posting/When to post tidak terdeteksi dalam 15s, mencoba mencari radio Jadwalkan...');
-      }
-
-      // 2. Click "Jadwalkan" / "Schedule" radio button
-      let scheduleRadioClicked = false;
-
-      // Method 1: JS direct click on input[value='schedule'] and its closest label
-      try {
-        const jsClicked = await page.evaluate(() => {
-          const radio = document.querySelector("input[name='postSchedule'][value='schedule']") as HTMLInputElement;
-          if (radio) {
-            const label = radio.closest('label') || radio.parentElement;
-            if (label) (label as HTMLElement).click();
-            radio.click();
-            radio.checked = true;
-            radio.setAttribute('aria-checked', 'true');
-            radio.dispatchEvent(new Event('change', { bubbles: true }));
-            radio.dispatchEvent(new Event('input', { bubbles: true }));
-            return true;
-          }
-          // Scan for label with text 'Jadwalkan'
-          const labels = Array.from(document.querySelectorAll('label'));
-          for (const l of labels) {
-            if (l.textContent?.trim().includes('Jadwalkan') || l.textContent?.trim().includes('Schedule')) {
-              l.click();
-              return true;
-            }
-          }
-          return false;
-        });
-        if (jsClicked) {
-          scheduleRadioClicked = true;
-          log('✓ Schedule radio ("Jadwalkan") dipilih via JS');
-        }
-      } catch {}
-
-      // Method 2: Playwright click on label containing 'Jadwalkan' or 'Schedule'
-      if (!scheduleRadioClicked) {
-        try {
-          const scheduleLabel = page.locator('label').filter({ hasText: /Jadwalkan|Schedule/i }).first();
-          if (await scheduleLabel.isVisible({ timeout: 3000 }).catch(() => false)) {
-            await scheduleLabel.click({ force: true });
-            scheduleRadioClicked = true;
-            log('✓ Schedule radio ("Jadwalkan") dipilih via label locator');
-          }
-        } catch {}
-      }
-
-      // Method 3: Playwright click on input[name='postSchedule'][value='schedule']
-      if (!scheduleRadioClicked) {
-        try {
-          const radioInput = page.locator("input[name='postSchedule'][value='schedule']").first();
-          if (await radioInput.count() > 0) {
-            await radioInput.click({ force: true });
-            scheduleRadioClicked = true;
-            log('✓ Schedule radio ("Jadwalkan") dipilih via input locator');
-          }
-        } catch {}
-      }
-
-      await page.waitForTimeout(2000);
-
-      // Parse time
-      const [targetHour, targetMin] = scheduleTime.split(':');
-      const roundedMin = String(Math.floor(parseInt(targetMin) / 5) * 5).padStart(2, '0');
-      log(`⏰ Setting time: ${targetHour}:${roundedMin}`);
-
-      // Click time input
-      const timeInputs = page.locator('.TUXTextInputCore input[readonly]');
-      const count = await timeInputs.count();
-      for (let i = 0; i < count; i++) {
-        const val = await timeInputs.nth(i).getAttribute('value') || '';
-        if (val.includes(':')) {
-          await timeInputs.nth(i).click({ force: true });
-          log('✓ Time picker dibuka');
-          break;
-        }
-      }
-      await page.waitForTimeout(2000);
-
-      // Select hour
-      try {
-        const hourSpan = page.locator(`.tiktok-timepicker-left:text("${targetHour}")`);
-        await hourSpan.click();
-        log(`✓ Jam ${targetHour} dipilih`);
-      } catch {
-        log(`⚠ Gagal memilih jam ${targetHour}`);
-      }
-      await page.waitForTimeout(1000);
-
-      // Select minute
-      try {
-        const minSpan = page.locator(`.tiktok-timepicker-right:text("${roundedMin}")`);
-        await minSpan.click();
-        log(`✓ Menit ${roundedMin} dipilih`);
-      } catch {
-        log(`⚠ Gagal memilih menit ${roundedMin}`);
-      }
-      await page.waitForTimeout(1000);
-
-      // Close timepicker
-      await page.evaluate(() => document.body.click());
-      await page.waitForTimeout(1000);
-
-      // Date picker
-      const targetDay = String(parseInt(scheduleDate.split('-')[2]));
-      log(`📅 Setting date: ${scheduleDate} (day ${targetDay})`);
-
-      for (let i = 0; i < count; i++) {
-        const val = await timeInputs.nth(i).getAttribute('value') || '';
-        if (val.includes('-') && val.length === 10) {
-          await timeInputs.nth(i).click({ force: true });
-          log('✓ Date picker dibuka');
-          break;
-        }
-      }
-      await page.waitForTimeout(2000);
-
-      // Navigate to correct month if needed (supports English and Indonesian months)
-      const monthIdx = new Date(scheduleDate).getMonth(); // 0 to 11
-      const englishMonths = [
-        'January', 'February', 'March', 'April', 'May', 'June', 
-        'July', 'August', 'September', 'October', 'November', 'December'
-      ];
-      const indonesianMonths = [
-        'Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 
-        'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'
-      ];
-      const targetEnglish = englishMonths[monthIdx];
-      const targetIndonesian = indonesianMonths[monthIdx];
-
-      try {
-        let attempts = 0;
-        while (attempts < 6) {
-          const monthTitle = await page.locator('.calendar-wrapper .month-title, [class*="calendar"] [class*="month-title"]').textContent().catch(() => '');
-          if (
-            monthTitle?.toLowerCase().includes(targetEnglish.toLowerCase()) ||
-            monthTitle?.toLowerCase().includes(targetIndonesian.toLowerCase())
-          ) {
-            break;
-          }
-          // Target the right-arrow (next month). Sibling after title-wrapper is the next month arrow.
-          const nextArrow = page.locator('.calendar-wrapper .title-wrapper ~ .arrow, [class*="calendar"] [class*="title-wrapper"] ~ [class*="arrow"]').first();
-          if (await nextArrow.isVisible().catch(() => false)) {
-            await nextArrow.click();
-            log('✓ Klik arrow bulan berikutnya (CSS sibling)');
-          } else {
-            // Fallback arrow logic
-            const arrows = page.locator('.calendar-wrapper .arrow, [class*="calendar"] [class*="arrow"]');
-            const arrowCount = await arrows.count();
-            if (arrowCount === 1) {
-              await arrows.nth(0).click();
-              log('✓ Klik arrow bulan berikutnya (single arrow)');
-            } else if (arrowCount >= 2) {
-              await arrows.nth(1).click();
-              log('✓ Klik arrow bulan berikutnya (arrow index 1)');
-            }
-          }
-          await page.waitForTimeout(1000);
-          attempts++;
-        }
-      } catch { /* ignore */ }
-
-      // Click target day exactly using Regex filter on valid/active days
-      try {
-        const daySpan = page.locator('.calendar-wrapper span.day.valid, [class*="calendar"] span[class*="day"][class*="valid"]')
-          .filter({ hasText: new RegExp('^' + targetDay + '$') })
-          .first();
-        await daySpan.click();
-        log(`✓ Tanggal ${targetDay} dipilih`);
-      } catch {
-        // Fallback to iterating elements
-        const days = page.locator('.calendar-wrapper span[class*="day"], [class*="calendar"] span[class*="day"]');
-        const dayCount = await days.count();
-        for (let i = 0; i < dayCount; i++) {
-          const text = await days.nth(i).textContent();
-          const className = await days.nth(i).getAttribute('class') || '';
-          if (text?.trim() === targetDay && className.includes('valid')) {
-            await days.nth(i).click();
-            log(`✓ Tanggal ${targetDay} dipilih (fallback)`);
-            break;
-          }
-        }
-      }
-
-      await page.waitForTimeout(2000);
-      log('✓ Schedule diatur!');
-    } catch (e: any) {
-      log('❌ Gagal mengatur schedule: ' + e.message);
-    }
-  }
+  if (!await setTikTokSchedule(page, scheduleDate, scheduleTime, log)) return false;
 
   if (!isRunning) { log('⛔ Dibatalkan'); return false; }
 
@@ -1653,12 +1458,14 @@ async function uploadSingleVideo(
   // ── STEP 11: Click Schedule/Post button ──
   log('🎬 STEP 10: Klik tombol Schedule/Post...');
   try {
+    if (!await verifyTikTokSchedule(page, scheduleDate, scheduleTime, log)) return false;
     let clicked = false;
 
     // Method 1: Target data-e2e="post_video_button" directly (matches "Posting", "Jadwalkan", "Schedule", etc.)
     const postVideoBtn = page.locator("button[data-e2e='post_video_button']").first();
     if (await postVideoBtn.isVisible({ timeout: 5000 }).catch(() => false)) {
       await postVideoBtn.scrollIntoViewIfNeeded();
+      if (!await verifyTikTokSchedule(page, scheduleDate, scheduleTime, log)) return false;
       await postVideoBtn.click({ force: true });
       clicked = true;
       log('✓ Tombol Post/Schedule diklik (data-e2e="post_video_button")');
@@ -1668,6 +1475,7 @@ async function uploadSingleVideo(
     if (!clicked) {
       const fallbackBtn = page.locator('button').filter({ hasText: /Posting|Jadwalkan|Schedule|Tayangkan|^Post$/i }).first();
       if (await fallbackBtn.isVisible({ timeout: 3000 }).catch(() => false)) {
+        if (!await verifyTikTokSchedule(page, scheduleDate, scheduleTime, log)) return false;
         await fallbackBtn.click({ force: true });
         clicked = true;
         log('✓ Tombol Post/Schedule diklik (fallback text match)');
@@ -1676,6 +1484,7 @@ async function uploadSingleVideo(
 
     // Method 3: JS Direct Click on button[data-e2e="post_video_button"]
     if (!clicked) {
+      if (!await verifyTikTokSchedule(page, scheduleDate, scheduleTime, log)) return false;
       clicked = await page.evaluate(() => {
         const btn = document.querySelector('button[data-e2e="post_video_button"]') as HTMLButtonElement;
         if (btn) {
@@ -1692,7 +1501,7 @@ async function uploadSingleVideo(
       return false;
     }
 
-    const submitResult = await waitForTikTokSubmitResult(page, log);
+    const submitResult = await waitForTikTokSubmitResult(page, log, () => verifyTikTokSchedule(page, scheduleDate, scheduleTime, log));
     if (!submitResult.success) {
       log(`❌ TikTok belum mengonfirmasi upload/schedule: ${submitResult.error}`);
       return false;

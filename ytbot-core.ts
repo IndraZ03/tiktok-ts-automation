@@ -29,6 +29,7 @@ export function isSupportedYtbotUrl(value: unknown): boolean {
 
 export interface YtbotGlobalConfig {
   sendWhatsApp?: boolean;
+  headless?: boolean;
 }
 
 export interface YtbotData {
