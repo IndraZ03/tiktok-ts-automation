@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WhatsApp Baileys Manager</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    @keyframes pulse-subtle {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.6; }
+    }
+    .pulse-loading {
+      animation: pulse-subtle 1.8s ease-in-out infinite;
+    }
+  </style>
+</head>
+<body class="bg-slate-100 min-h-screen p-6 md:p-10 font-sans text-slate-800">
+
+  <!-- Navigation Header -->
+  <div class="max-w-4xl mx-auto flex flex-wrap justify-between items-center bg-white shadow-sm rounded-2xl p-4 border border-slate-200 mb-8">
+    <a href="/" class="font-bold text-slate-800 hover:text-emerald-600 transition flex items-center gap-2">
+      <span>🏠</span> StorageState Manager
+    </a>
+    <div class="flex flex-wrap gap-2 text-xs font-semibold">
+      <a href="/tiktok" class="bg-pink-100 hover:bg-pink-200 text-pink-700 px-3 py-1.5 rounded-xl transition">
+        🎬 TikTok Uploader
+      </a>
+      <a href="/grok" class="bg-blue-100 hover:bg-blue-200 text-blue-700 px-3 py-1.5 rounded-xl transition">
+        🧠 Grok
+      </a>
+      <a href="/vidabot" class="bg-teal-100 hover:bg-teal-200 text-teal-700 px-3 py-1.5 rounded-xl transition">
+        🎬 Vidabot
+      </a>
+      <a href="/ytbot" class="bg-purple-100 hover:bg-purple-200 text-purple-700 px-3 py-1.5 rounded-xl transition">
+        🤖 YT Bot
+      </a>
+      <a href="/fb" class="bg-indigo-100 hover:bg-indigo-200 text-indigo-700 px-3 py-1.5 rounded-xl transition">
+        🎬 FB Reels
+      </a>
+      <a href="/git" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl transition border border-slate-300">
+        🛠️ Git & System
+      </a>
+      <a href="/whatsapp" class="bg-emerald-600 text-white px-3 py-1.5 rounded-xl shadow-sm">
+        💬 WhatsApp
+      </a>
+    </div>
+  </div>
+
+  <div class="max-w-4xl mx-auto space-y-8">
+
+    <!-- Header Card -->
+    <div class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      <div>
+        <div class="flex items-center gap-3">
+          <span class="text-3xl">💬</span>
+          <h1 class="text-2xl md:text-3xl font-extrabold text-slate-900 tracking-tight">WhatsApp Baileys Manager</h1>
+        </div>
+        <p class="text-sm text-slate-500 mt-1">Kelola sesi login multi-device WhatsApp langsung dari localhost tanpa aplikasi pihak ketiga.</p>
+      </div>
+
+      <!-- Badge Status -->
+      <div id="status-badge" class="px-4 py-2 rounded-2xl text-sm font-bold flex items-center gap-2 bg-slate-100 text-slate-600 border border-slate-200">
+        <span class="w-3 h-3 rounded-full bg-slate-400"></span>
+        <span>Memuat status...</span>
+      </div>
+    </div>
+
+    <!-- QR Scan & Connection Main Section -->
+    <div class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200">
+
+      <!-- Container Disconnected -->
+      <div id="view-disconnected" class="text-center py-10 space-y-4">
+        <div class="w-20 h-20 bg-slate-100 rounded-3xl flex items-center justify-center mx-auto text-4xl shadow-inner">
+          🔌
+        </div>
+        <h2 class="text-xl font-bold text-slate-800">WhatsApp Belum Terhubung</h2>
+        <p class="text-sm text-slate-500 max-w-md mx-auto">
+          Klik tombol di bawah untuk menghasilkan QR Code baru, lalu scan melalui WhatsApp di ponsel Anda.
+        </p>
+        <button onclick="startConnect()" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-8 py-3.5 rounded-2xl shadow-lg shadow-emerald-600/20 active:scale-95 transition flex items-center gap-2 mx-auto">
+          <span>🚀</span> Hubungkan & Munculkan QR
+        </button>
+      </div>
+
+      <!-- Container Connecting / Loading -->
+      <div id="view-connecting" class="hidden text-center py-12 space-y-4">
+        <div class="w-16 h-16 border-4 border-emerald-200 border-t-emerald-600 rounded-full animate-spin mx-auto"></div>
+        <h2 class="text-lg font-bold text-slate-800">Menghubungkan ke Server WhatsApp...</h2>
+        <p class="text-xs text-slate-400 pulse-loading">Memuat session atau menunggu pembuatan QR code baru</p>
+      </div>
+
+      <!-- Container QR Ready to Scan -->
+      <div id="view-qr" class="hidden text-center py-6 space-y-6">
+        <div class="inline-block bg-emerald-50 text-emerald-800 px-4 py-1.5 rounded-full text-xs font-semibold border border-emerald-200">
+          📱 Siap di-scan dengan HP
+        </div>
+
+        <div class="bg-white p-4 inline-block rounded-3xl shadow-xl border border-slate-200 relative group">
+          <img id="qr-image" src="" alt="Scan QR WhatsApp" class="w-72 h-72 md:w-80 md:h-80 mx-auto rounded-2xl block object-contain">
+          <div id="qr-overlay" class="hidden absolute inset-0 bg-white/90 backdrop-blur-sm rounded-3xl flex flex-col items-center justify-center p-6 space-y-3">
+            <span class="text-2xl">⏳</span>
+            <p class="text-xs font-bold text-slate-700">QR Code kedaluwarsa</p>
+            <button onclick="startConnect()" class="bg-emerald-600 text-white text-xs px-4 py-2 rounded-xl font-bold hover:bg-emerald-700 transition">
+              Refresh QR
+            </button>
+          </div>
+        </div>
+
+        <div class="max-w-md mx-auto text-left bg-slate-50 p-5 rounded-2xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-sm text-slate-800 flex items-center gap-2">
+            <span>📋</span> Cara Scan WhatsApp:
+          </h3>
+          <ol class="list-decimal list-inside text-xs text-slate-600 space-y-1.5">
+            <li>Buka WhatsApp di ponsel Anda</li>
+            <li>Buka <b>Menu (titik tiga)</b> atau <b>Pengaturan</b> &gt; <b>Perangkat Tertaut</b></li>
+            <li>Ketuk <b>Tautkan Perangkat</b></li>
+            <li>Arahkan kamera ke QR Code di layar ini</li>
+          </ol>
+        </div>
+
+        <div class="flex justify-center gap-3">
+          <button onclick="startConnect()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-5 py-2.5 rounded-xl font-bold text-xs transition flex items-center gap-2">
+            🔄 Refresh QR
+          </button>
+        </div>
+      </div>
+
+      <!-- Container Connected -->
+      <div id="view-connected" class="hidden py-6 space-y-6">
+        <div class="bg-emerald-50 border border-emerald-200 rounded-3xl p-6 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div class="flex items-center gap-4">
+            <div class="w-14 h-14 bg-emerald-600 text-white rounded-2xl flex items-center justify-center text-2xl shadow-md">
+              ✓
+            </div>
+            <div>
+              <div class="text-xs font-bold uppercase tracking-wider text-emerald-700">WhatsApp Aktif</div>
+              <h2 id="connected-user-name" class="text-xl font-extrabold text-slate-900">WhatsApp Bot</h2>
+              <p id="connected-user-id" class="text-xs text-slate-500 font-mono mt-0.5">ID: -</p>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 w-full md:w-auto">
+            <button onclick="doLogout()" class="w-full md:w-auto bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold px-5 py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center justify-center gap-2">
+              <span>🚪</span> Putuskan / Logout
+            </button>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div class="text-slate-400 font-semibold mb-1">Target Notifikasi Bot:</div>
+            <div id="target-group-display" class="font-mono font-bold text-slate-800 break-all">120363426226443899@g.us</div>
+          </div>
+          <div class="bg-slate-50 p-4 rounded-2xl border border-slate-200">
+            <div class="text-slate-400 font-semibold mb-1">Waktu Terhubung:</div>
+            <div id="connected-time-display" class="font-bold text-slate-800">-</div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Test Send Message Card -->
+    <div class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 space-y-5">
+      <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+        <span>✉️</span> Uji Kirim Pesan WhatsApp
+      </h2>
+      <p class="text-xs text-slate-500">Kirim pesan uji coba untuk memverifikasi bot dapat mengirimkan pesan ke kontak atau grup.</p>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Tujuan (Nomor HP atau ID Grup):</label>
+          <input id="test-target" type="text" placeholder="Contoh: 120363426226443899@g.us atau 628123456789"
+                 class="w-full border border-slate-200 rounded-xl px-4 py-2.5 text-xs focus:outline-none focus:border-emerald-500 font-mono">
+          <div class="text-[11px] text-slate-400 mt-1">Kosongkan untuk menggunakan target grup default bot.</div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-bold text-slate-700 mb-1">Isi Pesan:</label>
+          <textarea id="test-message" rows="3" placeholder="Tulis pesan uji coba di sini..."
+                    class="w-full border border-slate-200 rounded-xl p-3 text-xs focus:outline-none focus:border-emerald-500"></textarea>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <button onclick="sendTestMessage()" id="btn-send-test" class="bg-slate-900 hover:bg-slate-800 text-white font-bold px-6 py-2.5 rounded-xl text-xs transition active:scale-95 flex items-center gap-2">
+            <span>🚀</span> Kirim Pesan Uji Coba
+          </button>
+          <span id="send-test-result" class="text-xs font-semibold"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Commands & Features Info Card -->
+    <div class="bg-white rounded-3xl p-6 md:p-8 shadow-sm border border-slate-200 space-y-4">
+      <h2 class="text-lg font-bold text-slate-900 flex items-center gap-2">
+        <span>🤖</span> Fitur & Perintah Bot
+      </h2>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+          <div class="font-bold text-emerald-700">/list_schedule</div>
+          <div class="text-slate-600">Melihat informasi jadwal upload terakhir beserta status.</div>
+        </div>
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+          <div class="font-bold text-emerald-700">/list_grok</div>
+          <div class="text-slate-600">Melihat status dan waktu rate limit untuk seluruh akun Grok.</div>
+        </div>
+        <div class="p-4 rounded-2xl bg-slate-50 border border-slate-200 space-y-1">
+          <div class="font-bold text-emerald-700">/ping</div>
+          <div class="text-slate-600">Cek respon cepat apakah bot aktif dan mendengarkan pesan.</div>
+        </div>
+      </div>
+      <div class="text-[11px] text-slate-400">
+        💡 Notifikasi otomatis seperti "Schedule Dimulai", "Schedule Selesai", dan "Reminder 5 Jam" akan langsung dikirimkan ke target grup.
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    let pollTimer = null;
+    let currentStatus = 'disconnected';
+
+    function setBadge(text, colorClass, dotColor) {
+      const badge = document.getElementById('status-badge');
+      badge.className = `px-4 py-2 rounded-2xl text-xs font-bold flex items-center gap-2 border ${colorClass}`;
+      badge.innerHTML = `<span class="w-2.5 h-2.5 rounded-full ${dotColor} ${dotColor.includes('amber') || dotColor.includes('blue') ? 'animate-pulse' : ''}"></span><span>${text}</span>`;
+    }
+
+    function showView(viewId) {
+      ['view-disconnected', 'view-connecting', 'view-qr', 'view-connected'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.toggle('hidden', id !== viewId);
+      });
+    }
+
+    async function checkStatus() {
+      try {
+        const res = await fetch('/api/whatsapp/status');
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+
+        currentStatus = data.status;
+
+        if (data.targetGroup) {
+          const tgEl = document.getElementById('target-group-display');
+          if (tgEl) tgEl.innerText = data.targetGroup;
+          const targetInp = document.getElementById('test-target');
+          if (targetInp && !targetInp.value) {
+            targetInp.placeholder = `Target default: ${data.targetGroup}`;
+          }
+        }
+
+        if (data.status === 'connected') {
+          setBadge('Terhubung', 'bg-emerald-50 text-emerald-800 border-emerald-200', 'bg-emerald-500');
+          showView('view-connected');
+          if (data.user) {
+            document.getElementById('connected-user-name').innerText = data.user.name || 'WhatsApp User';
+            document.getElementById('connected-user-id').innerText = 'Nomor / ID: ' + (data.user.id || '-');
+          }
+          if (data.lastConnectedAt) {
+            const dt = new Date(data.lastConnectedAt);
+            document.getElementById('connected-time-display').innerText = dt.toLocaleString('id-ID');
+          }
+        } else if (data.status === 'qr_ready') {
+          setBadge('Menunggu Scan QR', 'bg-amber-50 text-amber-800 border-amber-200', 'bg-amber-500');
+          showView('view-qr');
+          if (data.qrCodeDataUrl) {
+            document.getElementById('qr-image').src = data.qrCodeDataUrl;
+            document.getElementById('qr-overlay').classList.add('hidden');
+          }
+        } else if (data.status === 'connecting') {
+          setBadge('Menghubungkan...', 'bg-blue-50 text-blue-800 border-blue-200', 'bg-blue-500');
+          showView('view-connecting');
+        } else {
+          setBadge('Terputus (Disconnected)', 'bg-slate-100 text-slate-600 border-slate-200', 'bg-slate-400');
+          showView('view-disconnected');
+        }
+      } catch (err) {
+        setBadge('Error Server: ' + err.message, 'bg-rose-50 text-rose-700 border-rose-200', 'bg-rose-500');
+      }
+    }
+
+    async function startConnect() {
+      try {
+        setBadge('Memulai Koneksi...', 'bg-blue-50 text-blue-800 border-blue-200', 'bg-blue-500');
+        showView('view-connecting');
+        const res = await fetch('/api/whatsapp/connect', { method: 'POST' });
+        const data = await res.json();
+        setTimeout(checkStatus, 1000);
+      } catch (e) {
+        alert('Gagal memulai koneksi: ' + e.message);
+        checkStatus();
+      }
+    }
+
+    async function doLogout() {
+      if (!confirm('Yakin ingin memutuskan koneksi WhatsApp dan menghapus sesi? Anda perlu scan QR ulang untuk masuk kembali.')) {
+        return;
+      }
+      try {
+        setBadge('Memproses Logout...', 'bg-amber-50 text-amber-800 border-amber-200', 'bg-amber-500');
+        const res = await fetch('/api/whatsapp/logout', { method: 'POST' });
+        await res.json();
+        setTimeout(checkStatus, 1500);
+      } catch (e) {
+        alert('Gagal logout: ' + e.message);
+        checkStatus();
+      }
+    }
+
+    async function sendTestMessage() {
+      const btn = document.getElementById('btn-send-test');
+      const resSpan = document.getElementById('send-test-result');
+      const targetInput = document.getElementById('test-target');
+      const msgInput = document.getElementById('test-message');
+
+      const message = msgInput.value.trim();
+      const target = targetInput.value.trim();
+
+      if (!message) {
+        alert('Silakan tulis isi pesan terlebih dahulu.');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = 'Mengirim...';
+      resSpan.innerText = '';
+
+      try {
+        const res = await fetch('/api/whatsapp/send-test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, target })
+        });
+        const data = await res.json();
+        if (data.success) {
+          resSpan.className = 'text-xs font-bold text-emerald-600';
+          resSpan.innerText = '✅ Pesan berhasil dikirim!';
+          msgInput.value = '';
+        } else {
+          resSpan.className = 'text-xs font-bold text-rose-600';
+          resSpan.innerText = '❌ Gagal: ' + (data.error || 'Unknown error');
+        }
+      } catch (err) {
+        resSpan.className = 'text-xs font-bold text-rose-600';
+        resSpan.innerText = '❌ Error: ' + err.message;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span>🚀</span> Kirim Pesan Uji Coba';
+      }
+    }
+
+    // Auto poll status setiap 2 detik
+    checkStatus();
+    pollTimer = setInterval(checkStatus, 2000);
+  </script>
+</body>
+</html>

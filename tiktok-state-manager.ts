@@ -36,8 +36,12 @@ import {
   startWAPolling,
   notifyScheduleStarted as originalNotifyScheduleStarted,
   sendWAMessage as originalSendWAMessage,
-  notifyScheduleFinished as originalNotifyScheduleFinished
-} from './whatsapp-service.js';
+  notifyScheduleFinished as originalNotifyScheduleFinished,
+  getBaileysStatus,
+  initBaileys,
+  logoutBaileys,
+  TARGET_GROUP
+} from './baileys-service.js';
 
 function buildScheduleListMessage(stateName: string, items: SchedulePlanItem[], brutalContent = false): string {
   const scheduleMode = brutalContent ? ' - 🔥 BRUTAL KONTEN' : '';
@@ -4695,6 +4699,51 @@ function initAutopull() {
     console.log('⚪ [AUTOPULL] Auto pull is disabled.');
   }
 }
+
+// WhatsApp Baileys endpoints
+app.get('/whatsapp', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'whatsapp.html'));
+});
+
+app.get('/api/whatsapp/status', (req, res) => {
+  res.json(getBaileysStatus());
+});
+
+app.post('/api/whatsapp/connect', async (req, res) => {
+  try {
+    void initBaileys();
+    res.json({ success: true, message: 'Initiating Baileys connection' });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/whatsapp/logout', async (req, res) => {
+  try {
+    const ok = await logoutBaileys();
+    res.json({ success: ok });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/whatsapp/send-test', async (req, res) => {
+  try {
+    const { message, target } = req.body || {};
+    if (!message) {
+      return res.status(400).json({ success: false, error: 'Pesan tidak boleh kosong' });
+    }
+    const targetJid = target ? String(target).trim() : TARGET_GROUP;
+    const ok = await originalSendWAMessage(message, targetJid);
+    if (ok) {
+      res.json({ success: true });
+    } else {
+      res.status(500).json({ success: false, error: 'Gagal mengirim pesan (cek status WhatsApp)' });
+    }
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Git and Server Restart endpoints
 app.get('/git', (req, res) => {

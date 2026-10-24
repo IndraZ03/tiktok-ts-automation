@@ -22,3 +22,8 @@ grov2test-captured-*.json
 
 # Grokbot V2 debug logs
 grokbotv2-logs/
+
+# WhatsApp Baileys Auth Session
+baileys_auth/
+baileys-session/
+

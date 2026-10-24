@@ -1,0 +1,119 @@
+
+> tiktok-ts-automation@1.0.0 start
+> node --import tsx tiktok-state-manager.ts
+
+🟢 [AUTOPULL] Auto pull is enabled. Starting background checks...
+WhatsApp polling started...
+🚀 State Manager berjalan di http://localhost:5000
+🎬 TikTok Auto Uploader: http://localhost:5000/tiktok
+🧠 Grok Imagine Generator: http://localhost:5000/grok
+🤖 YT to TikTok Bot: http://localhost:5000/ytbot
+🤖 Grok to TikTok Bot: http://localhost:5000/grokbot
+🎬 Vida to TikTok Bot: http://localhost:5000/vidabot
+🤖 Grok V2 to TikTok Bot: http://localhost:5000/grokbotv2
+📁 Folder state: C:\tiktok-ts-automation\tiktok-states & C:\tiktok-ts-automation\grok-states
+[VIDABOT_TEST] Memulai generate video (Aspect: portrait)...
+[VIDABOT_API] Memulai persiapan generasi video Vidabot...
+[VIDABOT_TEST] Memulai persiapan generasi video Vidabot... (5%)
+[VIDABOT_API] Membaca file bahan gambar: grok-image-6a1afd36-67f6-4990-9f89-eb6e980d2572.png...
+[VIDABOT_TEST] Membaca file bahan gambar: grok-image-6a1afd36-67f6-4990-9f89-eb6e980d2572.png... (10%)
+[VIDABOT_API] Mengirim POST request ke Vidabot (https://vidabot.markasai.com/api/veo/video-generate)...
+[VIDABOT_TEST] Mengirim POST request ke Vidabot (https://vidabot.markasai.com/api/veo/video-generate)... (20%)
+[VIDABOT_API] ✅ Job berhasil dibuat! Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2 (Status: queued)
+[VIDABOT_TEST] ✅ Job berhasil dibuat! Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2 (Status: queued) (30%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (33%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (33%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (36%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (36%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (39%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (39%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (42%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (42%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (45%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (45%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (48%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (48%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (51%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (51%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (54%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (54%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (57%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (57%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (60%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (60%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (63%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (63%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (66%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (66%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (69%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (69%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (72%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"processing","progress":"Worker AI sedang memproses...","prompts":[{"status":"processing","result":{"videoUrl":null,"error":null}}]} (0%)
+[VIDABOT_API] Status Job: processing
+[VIDABOT_TEST] Status Job: processing (72%)
+[VIDABOT_API] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)...
+[VIDABOT_TEST] Memeriksa status progress (Job ID: 36e0b4ae-766f-42ad-8919-04eb490bc6f2)... (75%)
+[VIDABOT_API] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"done","progress":"Video selesai!","prompts":[{"status":"done","result":{"videoUrl":"https://flow-content.google/video/8226461e-354b-4249-baba-993fff63253f?Expires=1787774805&KeyName=labs-flow-prod-cdn-key&Signature=5AnAJnQTLvtYlAx_0D4pWyfSwB0","error":null}}]}
+[VIDABOT_TEST] [DEBUG] Check response JSON: {"jobId":"36e0b4ae-766f-42ad-8919-04eb490bc6f2","mode":"i2v_start","engine":"veo-alt-relay","status":"done","progress":"Video selesai!","prompts":[{"status":"done","result":{"videoUrl":"https://flow-content.google/video/8226461e-354b-4249-baba-993fff63253f?Expires=1787774805&KeyName=labs-flow-prod-cdn-key&Signature=5AnAJnQTLvtYlAx_0D4pWyfSwB0","error":null}}]} (0%)
+[VIDABOT_API] 🎉 Job selesai (Status: done)! Mengunduh file hasil video...
+[VIDABOT_TEST] 🎉 Job selesai (Status: done)! Mengunduh file hasil video... (95%)
+[VIDABOT_API] Mengunduh video dari URL: https://flow-content.google/video/8226461e-354b-4249-baba-993fff63253f?Expires=1787774805&KeyName=la...
+[VIDABOT_TEST] Mengunduh video dari URL: https://flow-content.google/video/8226461e-354b-4249-baba-993fff63253f?Expires=1787774805&KeyName=la... (0%)
+[VIDABOT_API] ✅ Video berhasil di-generate dan disimpan di: C:\tiktok-ts-automation\vidabot-downloads\vidabot_1787753196847_661.mp4
+[VIDABOT_TEST] ✅ Video berhasil di-generate dan disimpan di: C:\tiktok-ts-automation\vidabot-downloads\vidabot_1787753196847_661.mp4 (100%)
+[AUTOPULL] Checking for updates...
+[AUTOPULL] Checking for updates...

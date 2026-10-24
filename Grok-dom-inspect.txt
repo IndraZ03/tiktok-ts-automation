@@ -1,0 +1,568 @@
+buka grok.com/imagine.
+
+pilih video :
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "DIV",
+  "idAttribute": "",
+  "className": "absolute inset-0 z-0 rounded-full bg-[hsl(var(--wd-composer-bg))] dark:bg-surface-l2-active shadow-xs shadow-black/5",
+  "text": "",
+  "ariaLabel": "",
+  "role": "",
+  "name": "",
+  "type": "",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10 > div.flex.w-full.min-w-0:nth-of-type(4) > div.inline-flex.items-center.ring-border:nth-of-type(2) > button.flex.items-center.relative:nth-of-type(2) > div.absolute.inset-0.z-0",
+  "xpath": "/form[1]/div[1]/div[1]/div[1]/div[4]/div[2]/button[2]/div[1]",
+  "outerHTML": "<div class=\"absolute inset-0 z-0 rounded-full bg-[hsl(var(--wd-composer-bg))] dark:bg-surface-l2-active shadow-xs shadow-black/5\" style=\"transform: none; transform-origin: 50% 50% 0px;\"></div>",
+  "attributes": [
+    {
+      "name": "class",
+      "value": "absolute inset-0 z-0 rounded-full bg-[hsl(var(--wd-composer-bg))] dark:bg-surface-l2-active shadow-xs shadow-black/5"
+    },
+    {
+      "name": "style",
+      "value": "transform: none; transform-origin: 50% 50% 0px;"
+    }
+  ],
+  "rect": {
+    "x": 171.60000610351562,
+    "y": 256.4375,
+    "width": 85.4000015258789,
+    "height": 36
+  },
+  "candidates": [
+    "form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10 > div.flex.w-full.min-w-0:nth-of-type(4) > div.inline-flex.items-center.ring-border:nth-of-type(2) > button.flex.items-center.relative:nth-of-type(2) > div.absolute.inset-0.z-0"
+  ],
+  "id": 14,
+  "capturedAt": "2026-09-05T12:27:19.857Z",
+  "automationCode": "await page.locator(\"form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\\\/query-bar.z-10 > div.flex.w-full.min-w-0:nth-of-type(4) > div.inline-flex.items-center.ring-border:nth-of-type(2) > button.flex.items-center.relative:nth-of-type(2) > div.absolute.inset-0.z-0\").click();"
+}
+pilih resolusi :
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "SPAN",
+  "idAttribute": "",
+  "className": "",
+  "text": "720p",
+  "ariaLabel": "",
+  "role": "",
+  "name": "",
+  "type": "",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10 > div.flex.w-full.min-w-0:nth-of-type(4) > div.relative.flex.min-w-0:nth-of-type(3) > div.no-scrollbar.flex.min-w-0 > div.inline-flex:nth-of-type(3) > button.flex.shrink-0.items-center > span:nth-of-type(2)",
+  "xpath": "/div[1]/div[1]/div[4]/div[3]/div[1]/div[3]/button[1]/span[2]",
+  "outerHTML": "<span>720p</span>",
+  "attributes": [],
+  "rect": {
+    "x": 509.8625183105469,
+    "y": 263.9375,
+    "width": 33.775001525878906,
+    "height": 21
+  },
+  "candidates": [
+    "div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10 > div.flex.w-full.min-w-0:nth-of-type(4) > div.relative.flex.min-w-0:nth-of-type(3) > div.no-scrollbar.flex.min-w-0 > div.inline-flex:nth-of-type(3) > button.flex.shrink-0.items-center > span:nth-of-type(2)"
+  ],
+  "id": 15,
+  "capturedAt": "2026-09-05T12:27:48.832Z",
+  "automationCode": "await page.locator(\"div.relative.min-w-0.w-full > div.query-bar.group\\\\/query-bar.z-10 > div.flex.w-full.min-w-0:nth-of-type(4) > div.relative.flex.min-w-0:nth-of-type(3) > div.no-scrollbar.flex.min-w-0 > div.inline-flex:nth-of-type(3) > button.flex.shrink-0.items-center > span:nth-of-type(2)\").click();"
+}
+pilih yang 720p:
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "DIV",
+  "idAttribute": "",
+  "className": "relative flex cursor-pointer select-none items-center rounded-xl py-1.5 outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&]:min-h-8 [.wd-refresh_&]:py-[3px] [.wd-refresh_&]:rounded-[10px] [.wd-refresh_&]:gap-1.5 [.wd-refresh_&]:leading-5 [body:not(.wd-refresh)_&]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight]/dropdown-content:hover:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight:not(:hover)]/dropdown-content:focus:bg-button-ghost-hover [.wd-refresh_&]:data-[highlighted]:bg-button-ghost-hover pl-3 pr-7 text-sm font-semibold text-primary",
+  "text": "720p",
+  "ariaLabel": "",
+  "role": "menuitemradio",
+  "name": "",
+  "type": "",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "div:nth-of-type(11) > div.group\\/dropdown-content.z-\\[150\\].overflow-auto > div > div.relative.flex.cursor-pointer:nth-of-type(2)",
+  "xpath": "/html[1]/body[1]/div[11]/div[1]/div[1]/div[2]",
+  "outerHTML": "<div role=\"menuitemradio\" aria-checked=\"true\" class=\"relative flex cursor-pointer select-none items-center rounded-xl py-1.5 outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&amp;]:min-h-8 [.wd-refresh_&amp;]:py-[3px] [.wd-refresh_&amp;]:rounded-[10px] [.wd-refresh_&amp;]:gap-1.5 [.wd-refresh_&amp;]:leading-5 [body:not(.wd-refresh)_&amp;]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&amp;]:group-[.menu-pointer-highlight]/dropdown-content:hover:bg-button-ghost-hover [body:not(.wd-refresh)_&amp;]:group-[.menu-pointer-highlight:not(:hover)]/dropdown-content:focus:bg-button-ghost-hover [.wd-refresh_&amp;]:data-[highlighted]:bg-button-ghost-hover pl-3 pr-7 text-sm font-semibold text-primary\" data-state=\"checked\" tabindex=\"0\" data-orientation=\"vertical\" data-radix-collection-item=\"\" data-highlighted=\"\"><span class=\"absolute flex h-3.5 w-3.5 items-center justify-center right-2\"><span data-state=\"checked\"><svg width=\"15\" height=\"15\" viewBox=\"0 0 15 15\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"size-4\"><path d=\"M11.4669 3.72684C11.7558 3.91574 11.8369 4.30308 11.648 4.59198L7.39799 11.092C7.29783 11.2452 7.13556 11.3467 6.95402 11.3699C6.77247 11.3931 6.58989 11.3355 6.45446 11.2124L3.70446 8.71241C3.44905 8.48022 3.43023 8.08494 3.66242 7.82953C3.89461 7.57412 4.28989 7.55529 4.5453 7.78749L6.75292 9.79441L10.6018 3.90792C10.7907 3.61902 11.178 3.53795 11.4669 3.72684Z\" fill=\"currentColor\" fill-rule=\"evenodd\" clip-rule=\"evenodd\"></path></svg></span></span>720p</div>",
+  "attributes": [
+    {
+      "name": "role",
+      "value": "menuitemradio"
+    },
+    {
+      "name": "aria-checked",
+      "value": "true"
+    },
+    {
+      "name": "class",
+      "value": "relative flex cursor-pointer select-none items-center rounded-xl py-1.5 outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&]:min-h-8 [.wd-refresh_&]:py-[3px] [.wd-refresh_&]:rounded-[10px] [.wd-refresh_&]:gap-1.5 [.wd-refresh_&]:leading-5 [body:not(.wd-refresh)_&]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight]/dropdown-content:hover:b"
+    },
+    {
+      "name": "data-state",
+      "value": "checked"
+    },
+    {
+      "name": "tabindex",
+      "value": "0"
+    },
+    {
+      "name": "data-orientation",
+      "value": "vertical"
+    },
+    {
+      "name": "data-radix-collection-item",
+      "value": ""
+    },
+    {
+      "name": "data-highlighted",
+      "value": ""
+    }
+  ],
+  "rect": {
+    "x": 482.8000183105469,
+    "y": 175.60000610351562,
+    "width": 194.40000915527344,
+    "height": 32
+  },
+  "candidates": [
+    "div:nth-of-type(11) > div.group\\/dropdown-content.z-\\[150\\].overflow-auto > div > div.relative.flex.cursor-pointer:nth-of-type(2)"
+  ],
+  "id": 16,
+  "capturedAt": "2026-09-05T12:28:05.605Z",
+  "automationCode": "await page.locator(\"div:nth-of-type(11) > div.group\\\\/dropdown-content.z-\\\\[150\\\\].overflow-auto > div > div.relative.flex.cursor-pointer:nth-of-type(2)\").click();"
+}
+pilih durasi :
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "BUTTON",
+  "idAttribute": "radix-_r_k1_",
+  "className": "flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm tracking-[-0.2px] font-medium ring-border dark:ring-transparent text-primary transition-colors [[data-quiet-menus]_&]:bg-transparent [[data-quiet-menus]_&]:ring-0 [[data-quiet-menus]_&]:hover:bg-surface-l2 [[data-quiet-menus]_&]:data-[state=open]:bg-surface-l2 [[data-wd-toolbar][data-quiet-menus]_&]:hover:bg-button-secondary-fill-hover [[data-wd-toolbar][data-quiet-menus]_&]:data-[state=open]:bg-button-secondary-fill-hover cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-full h-10 ring-0 bg-black/5 dark:bg-surface-l1 hover:bg-black/10 dark:hover:bg-white/10",
+  "text": "6s",
+  "ariaLabel": "Durasi Video",
+  "role": "",
+  "name": "",
+  "type": "button",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "#radix-_r_k1_",
+  "xpath": "//*[@id=\"radix-_r_k1_\"]",
+  "outerHTML": "<button type=\"button\" aria-label=\"Durasi Video\" class=\"flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm tracking-[-0.2px] font-medium ring-border dark:ring-transparent text-primary transition-colors [[data-quiet-menus]_&amp;]:bg-transparent [[data-quiet-menus]_&amp;]:ring-0 [[data-quiet-menus]_&amp;]:hover:bg-surface-l2 [[data-quiet-menus]_&amp;]:data-[state=open]:bg-surface-l2 [[data-wd-toolbar][data-quiet-menus]_&amp;]:hover:bg-button-secondary-fill-hover [[data-wd-toolbar][data-quiet-menus]_&amp;]:data-[state=open]:bg-button-secondary-fill-hover cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-full h-10 ring-0 bg-black/5 dark:bg-surface-l1 hover:bg-black/10 dark:hover:bg-white/10\" id=\"radix-_r_k1_\" aria-haspopup=\"menu\" aria-expanded=\"true\" data-state=\"open\" aria-controls=\"radix-_r_k2_\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"stroke-[2] text-secondary\"><path d=\"M13 11.3223L17.3711 13.0713L16.6289 14.9287L11 12.6768V6.5H13V11.3223Z\" fill=\"currentColor\"></path><path fill-rule=\"evenodd\" clip-rule=\"evenodd\" d=\"M12.002 2C17.5248 2 22.002 6.47715 22.002 12C22.002 17.5228 17.5248 22 12.002 22C6.47922 21.9999 2.00195 17.5228 2.00195 12C2.00195 6.47723 6.47922 2.00013 12.002 2ZM12.002 4C7.58379 4.00013 4.00195 7.5818 4.00195 12C4.00195 16.4182 7.58379 19.9999 12.002 20C16.4202 20 20.002 16.4183 20.002 12C20.002 7.58172 16.4202 4 12.002 4Z\" fill=\"currentColor\"></path></svg><span>6s</span></button>",
+  "attributes": [
+    {
+      "name": "type",
+      "value": "button"
+    },
+    {
+      "name": "aria-label",
+      "value": "Durasi Video"
+    },
+    {
+      "name": "class",
+      "value": "flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm tracking-[-0.2px] font-medium ring-border dark:ring-transparent text-primary transition-colors [[data-quiet-menus]_&]:bg-transparent [[data-quiet-menus]_&]:ring-0 [[data-quiet-menus]_&]:hover:bg-surface-l2 [[data-quiet-menus]_&]:data-[state=open]:bg-surface-l2 [[data-wd-toolbar][data-quiet-menus]_&]:hover:bg-button-secondary-fill-hover [[data-wd-toolbar][data-quiet-menus]_&]:data-[state=open]:bg-button-secondary-fill-hover cursor-"
+    },
+    {
+      "name": "id",
+      "value": "radix-_r_k1_"
+    },
+    {
+      "name": "aria-haspopup",
+      "value": "menu"
+    },
+    {
+      "name": "aria-expanded",
+      "value": "true"
+    },
+    {
+      "name": "data-state",
+      "value": "open"
+    },
+    {
+      "name": "aria-controls",
+      "value": "radix-_r_k2_"
+    }
+  ],
+  "rect": {
+    "x": 557.6375122070312,
+    "y": 254.4375,
+    "width": 61.79999923706055,
+    "height": 40
+  },
+  "candidates": [
+    "#radix-_r_k1_",
+    "[aria-label=\"Durasi Video\"]"
+  ],
+  "id": 17,
+  "capturedAt": "2026-09-05T12:28:17.183Z",
+  "automationCode": "await page.locator(\"#radix-_r_k1_\").click();"
+}
+pilih 10s:
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "DIV",
+  "idAttribute": "",
+  "className": "relative flex cursor-pointer select-none items-center rounded-xl py-1.5 outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&]:min-h-8 [.wd-refresh_&]:py-[3px] [.wd-refresh_&]:rounded-[10px] [.wd-refresh_&]:gap-1.5 [.wd-refresh_&]:leading-5 [body:not(.wd-refresh)_&]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight]/dropdown-content:hover:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight:not(:hover)]/dropdown-content:focus:bg-button-ghost-hover [.wd-refresh_&]:data-[highlighted]:bg-button-ghost-hover pl-3 pr-7 text-sm text-secondary",
+  "text": "10s",
+  "ariaLabel": "",
+  "role": "menuitemradio",
+  "name": "",
+  "type": "",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "div:nth-of-type(11) > div.group\\/dropdown-content.z-\\[150\\].overflow-auto > div > div.relative.flex.cursor-pointer:nth-of-type(2)",
+  "xpath": "/html[1]/body[1]/div[11]/div[1]/div[1]/div[2]",
+  "outerHTML": "<div role=\"menuitemradio\" aria-checked=\"false\" class=\"relative flex cursor-pointer select-none items-center rounded-xl py-1.5 outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&amp;]:min-h-8 [.wd-refresh_&amp;]:py-[3px] [.wd-refresh_&amp;]:rounded-[10px] [.wd-refresh_&amp;]:gap-1.5 [.wd-refresh_&amp;]:leading-5 [body:not(.wd-refresh)_&amp;]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&amp;]:group-[.menu-pointer-highlight]/dropdown-content:hover:bg-button-ghost-hover [body:not(.wd-refresh)_&amp;]:group-[.menu-pointer-highlight:not(:hover)]/dropdown-content:focus:bg-button-ghost-hover [.wd-refresh_&amp;]:data-[highlighted]:bg-button-ghost-hover pl-3 pr-7 text-sm text-secondary\" data-state=\"unchecked\" tabindex=\"0\" data-orientation=\"vertical\" data-radix-collection-item=\"\" data-highlighted=\"\"><span class=\"absolute flex h-3.5 w-3.5 items-center justify-center right-2\"></span>10s</div>",
+  "attributes": [
+    {
+      "name": "role",
+      "value": "menuitemradio"
+    },
+    {
+      "name": "aria-checked",
+      "value": "false"
+    },
+    {
+      "name": "class",
+      "value": "relative flex cursor-pointer select-none items-center rounded-xl py-1.5 outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&]:min-h-8 [.wd-refresh_&]:py-[3px] [.wd-refresh_&]:rounded-[10px] [.wd-refresh_&]:gap-1.5 [.wd-refresh_&]:leading-5 [body:not(.wd-refresh)_&]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight]/dropdown-content:hover:b"
+    },
+    {
+      "name": "data-state",
+      "value": "unchecked"
+    },
+    {
+      "name": "tabindex",
+      "value": "0"
+    },
+    {
+      "name": "data-orientation",
+      "value": "vertical"
+    },
+    {
+      "name": "data-radix-collection-item",
+      "value": ""
+    },
+    {
+      "name": "data-highlighted",
+      "value": ""
+    }
+  ],
+  "rect": {
+    "x": 550,
+    "y": 175.60000610351562,
+    "width": 194.40000915527344,
+    "height": 32
+  },
+  "candidates": [
+    "div:nth-of-type(11) > div.group\\/dropdown-content.z-\\[150\\].overflow-auto > div > div.relative.flex.cursor-pointer:nth-of-type(2)"
+  ],
+  "id": 18,
+  "capturedAt": "2026-09-05T12:28:34.286Z",
+  "automationCode": "await page.locator(\"div:nth-of-type(11) > div.group\\\\/dropdown-content.z-\\\\[150\\\\].overflow-auto > div > div.relative.flex.cursor-pointer:nth-of-type(2)\").click();"
+}
+pilih aspect ratio:
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "BUTTON",
+  "idAttribute": "radix-_r_i8_",
+  "className": "flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm tracking-[-0.2px] font-medium ring-border dark:ring-transparent text-primary transition-colors [[data-quiet-menus]_&]:bg-transparent [[data-quiet-menus]_&]:ring-0 [[data-quiet-menus]_&]:hover:bg-surface-l2 [[data-quiet-menus]_&]:data-[state=open]:bg-surface-l2 [[data-wd-toolbar][data-quiet-menus]_&]:hover:bg-button-secondary-fill-hover [[data-wd-toolbar][data-quiet-menus]_&]:data-[state=open]:bg-button-secondary-fill-hover cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-full h-10 ring-0 bg-black/5 dark:bg-surface-l1 hover:bg-black/10 dark:hover:bg-white/10",
+  "text": "2:3",
+  "ariaLabel": "Rasio Aspek",
+  "role": "",
+  "name": "",
+  "type": "button",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "#radix-_r_i8_",
+  "xpath": "//*[@id=\"radix-_r_i8_\"]",
+  "outerHTML": "<button type=\"button\" aria-label=\"Rasio Aspek\" class=\"flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm tracking-[-0.2px] font-medium ring-border dark:ring-transparent text-primary transition-colors [[data-quiet-menus]_&amp;]:bg-transparent [[data-quiet-menus]_&amp;]:ring-0 [[data-quiet-menus]_&amp;]:hover:bg-surface-l2 [[data-quiet-menus]_&amp;]:data-[state=open]:bg-surface-l2 [[data-wd-toolbar][data-quiet-menus]_&amp;]:hover:bg-button-secondary-fill-hover [[data-wd-toolbar][data-quiet-menus]_&amp;]:data-[state=open]:bg-button-secondary-fill-hover cursor-pointer select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-full h-10 ring-0 bg-black/5 dark:bg-surface-l1 hover:bg-black/10 dark:hover:bg-white/10\" id=\"radix-_r_i8_\" aria-haspopup=\"menu\" aria-expanded=\"false\" data-state=\"closed\"><div class=\"flex items-center justify-center text-secondary\" style=\"width: 16px; height: 16px;\"><div class=\"rounded-[2px] bg-current\" style=\"width: 9px; height: 14px;\"></div></div><span>2:3</span></button>",
+  "attributes": [
+    {
+      "name": "type",
+      "value": "button"
+    },
+    {
+      "name": "aria-label",
+      "value": "Rasio Aspek"
+    },
+    {
+      "name": "class",
+      "value": "flex shrink-0 items-center gap-1.5 whitespace-nowrap px-3 text-sm tracking-[-0.2px] font-medium ring-border dark:ring-transparent text-primary transition-colors [[data-quiet-menus]_&]:bg-transparent [[data-quiet-menus]_&]:ring-0 [[data-quiet-menus]_&]:hover:bg-surface-l2 [[data-quiet-menus]_&]:data-[state=open]:bg-surface-l2 [[data-wd-toolbar][data-quiet-menus]_&]:hover:bg-button-secondary-fill-hover [[data-wd-toolbar][data-quiet-menus]_&]:data-[state=open]:bg-button-secondary-fill-hover cursor-"
+    },
+    {
+      "name": "id",
+      "value": "radix-_r_i8_"
+    },
+    {
+      "name": "aria-haspopup",
+      "value": "menu"
+    },
+    {
+      "name": "aria-expanded",
+      "value": "false"
+    },
+    {
+      "name": "data-state",
+      "value": "closed"
+    }
+  ],
+  "rect": {
+    "x": 621.4375,
+    "y": 254.4375,
+    "width": 66.5625,
+    "height": 40
+  },
+  "candidates": [
+    "#radix-_r_i8_",
+    "[aria-label=\"Rasio Aspek\"]"
+  ],
+  "id": 22,
+  "capturedAt": "2026-09-05T12:28:55.390Z",
+  "automationCode": "await page.locator(\"#radix-_r_i8_\").click();"
+}
+pilih 9:16:
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "DIV",
+  "idAttribute": "",
+  "className": "relative flex cursor-pointer select-none items-center rounded-xl py-1.5 text-sm outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&]:min-h-8 [.wd-refresh_&]:py-[3px] [.wd-refresh_&]:rounded-[10px] [.wd-refresh_&]:gap-1.5 [.wd-refresh_&]:leading-5 [body:not(.wd-refresh)_&]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight]/dropdown-content:hover:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight:not(:hover)]/dropdown-content:focus:bg-button-ghost-hover [.wd-refresh_&]:data-[highlighted]:bg-button-ghost-hover pl-3 pr-7 gap-2.5",
+  "text": "9:16 Vertikal",
+  "ariaLabel": "",
+  "role": "menuitemradio",
+  "name": "",
+  "type": "",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "div:nth-of-type(11) > div.group\\/dropdown-content.z-\\[150\\].max-h-\\(--radix-dropdown-menu-content-available-height\\) > div.max-h-\\(--radix-dropdown-menu-content-available-height\\).overflow-auto:nth-of-type(1) > div > div.relative.flex.cursor-pointer:nth-of-type(5)",
+  "xpath": "/html[1]/body[1]/div[11]/div[1]/div[1]/div[1]/div[5]",
+  "outerHTML": "<div role=\"menuitemradio\" aria-checked=\"false\" class=\"relative flex cursor-pointer select-none items-center rounded-xl py-1.5 text-sm outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&amp;]:min-h-8 [.wd-refresh_&amp;]:py-[3px] [.wd-refresh_&amp;]:rounded-[10px] [.wd-refresh_&amp;]:gap-1.5 [.wd-refresh_&amp;]:leading-5 [body:not(.wd-refresh)_&amp;]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&amp;]:group-[.menu-pointer-highlight]/dropdown-content:hover:bg-button-ghost-hover [body:not(.wd-refresh)_&amp;]:group-[.menu-pointer-highlight:not(:hover)]/dropdown-content:focus:bg-button-ghost-hover [.wd-refresh_&amp;]:data-[highlighted]:bg-button-ghost-hover pl-3 pr-7 gap-2.5\" data-state=\"unchecked\" tabindex=\"0\" data-orientation=\"vertical\" data-radix-collection-item=\"\" data-highlighted=\"\"><span class=\"absolute flex h-3.5 w-3.5 items-center justify-center right-2\"></span><span class=\"text-sm flex items-center gap-2\"><span class=\"text-primary font-normal text-center min-w-8\">9:16</span><span class=\"text-secondary font-normal\">Vertikal</span></span></div>",
+  "attributes": [
+    {
+      "name": "role",
+      "value": "menuitemradio"
+    },
+    {
+      "name": "aria-checked",
+      "value": "false"
+    },
+    {
+      "name": "class",
+      "value": "relative flex cursor-pointer select-none items-center rounded-xl py-1.5 text-sm outline-hidden focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [.wd-refresh_&]:min-h-8 [.wd-refresh_&]:py-[3px] [.wd-refresh_&]:rounded-[10px] [.wd-refresh_&]:gap-1.5 [.wd-refresh_&]:leading-5 [body:not(.wd-refresh)_&]:group-[:not(.menu-pointer-highlight)]/dropdown-content:focus:bg-button-ghost-hover [body:not(.wd-refresh)_&]:group-[.menu-pointer-highlight]/dropdown-content"
+    },
+    {
+      "name": "data-state",
+      "value": "unchecked"
+    },
+    {
+      "name": "tabindex",
+      "value": "0"
+    },
+    {
+      "name": "data-orientation",
+      "value": "vertical"
+    },
+    {
+      "name": "data-radix-collection-item",
+      "value": ""
+    },
+    {
+      "name": "data-highlighted",
+      "value": ""
+    }
+  ],
+  "rect": {
+    "x": 550,
+    "y": 175.60000610351562,
+    "width": 194.40000915527344,
+    "height": 32
+  },
+  "candidates": [
+    "div:nth-of-type(11) > div.group\\/dropdown-content.z-\\[150\\].max-h-\\(--radix-dropdown-menu-content-available-height\\) > div.max-h-\\(--radix-dropdown-menu-content-available-height\\).overflow-auto:nth-of-type(1) > div > div.relative.flex.cursor-pointer:nth-of-type(5)"
+  ],
+  "id": 25,
+  "capturedAt": "2026-09-05T12:29:36.509Z",
+  "automationCode": "await page.locator(\"div:nth-of-type(11) > div.group\\\\/dropdown-content.z-\\\\[150\\\\].max-h-\\\\(--radix-dropdown-menu-content-available-height\\\\) > div.max-h-\\\\(--radix-dropdown-menu-content-available-height\\\\).overflow-auto:nth-of-type(1) > div > div.relative.flex.cursor-pointer:nth-of-type(5)\").click();"
+}
+pilih + :
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "BUTTON",
+  "idAttribute": "",
+  "className": "flex items-center justify-center rounded-full text-fg-secondary hover:text-fg-primary focus:outline-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring size-10 bg-transparent hover:bg-button-secondary-fill-hover active:bg-button-secondary-fill-active",
+  "text": "",
+  "ariaLabel": "Unggah",
+  "role": "",
+  "name": "",
+  "type": "button",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "div.pointer-events-auto:nth-of-type(2) > form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10:nth-of-type(1) > div.flex.w-full.min-w-0:nth-of-type(4) > div.shrink-0.self-end.mb-\\[10px\\]:nth-of-type(1) > button.flex.items-center.justify-center",
+  "xpath": "/div[2]/form[1]/div[1]/div[1]/div[1]/div[4]/div[1]/button[1]",
+  "outerHTML": "<button type=\"button\" aria-label=\"Unggah\" class=\"flex items-center justify-center rounded-full text-fg-secondary hover:text-fg-primary focus:outline-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring size-10 bg-transparent hover:bg-button-secondary-fill-hover active:bg-button-secondary-fill-active\" style=\"opacity: 1;\"><svg width=\"22\" height=\"22\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"stroke-[2] \"><path d=\"M6 12H18M12 6V18\" stroke=\"currentColor\" stroke-linecap=\"square\"></path></svg></button>",
+  "attributes": [
+    {
+      "name": "type",
+      "value": "button"
+    },
+    {
+      "name": "aria-label",
+      "value": "Unggah"
+    },
+    {
+      "name": "class",
+      "value": "flex items-center justify-center rounded-full text-fg-secondary hover:text-fg-primary focus:outline-none focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring size-10 bg-transparent hover:bg-button-secondary-fill-hover active:bg-button-secondary-fill-active"
+    },
+    {
+      "name": "style",
+      "value": "opacity: 1;"
+    }
+  ],
+  "rect": {
+    "x": 79.5999984741211,
+    "y": 253.4375,
+    "width": 40,
+    "height": 40
+  },
+  "candidates": [
+    "[aria-label=\"Unggah\"]",
+    "div.pointer-events-auto:nth-of-type(2) > form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10:nth-of-type(1) > div.flex.w-full.min-w-0:nth-of-type(4) > div.shrink-0.self-end.mb-\\[10px\\]:nth-of-type(1) > button.flex.items-center.justify-center"
+  ],
+  "id": 26,
+  "capturedAt": "2026-09-05T12:29:52.721Z",
+  "automationCode": "await page.locator(\"div.pointer-events-auto:nth-of-type(2) > form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\\\/query-bar.z-10:nth-of-type(1) > div.flex.w-full.min-w-0:nth-of-type(4) > div.shrink-0.self-end.mb-\\\\[10px\\\\]:nth-of-type(1) > button.flex.items-center.justify-center\").click();"
+}
+pilih unggah :
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "BUTTON",
+  "idAttribute": "",
+  "className": "inline-flex items-center justify-center whitespace-nowrap font-medium cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none [.wd-refresh_&]:outline-hidden [.wd-refresh_&]:focus:outline-hidden [.wd-refresh_&]:focus-visible:ring-fg-accent transition-colors duration-100 [&_svg]:shrink-0 select-none bg-button-filled text-fg-invert border border-border-invert-l1 hover:bg-button-filled-hover active:bg-button-filled-active rounded-full h-9 shrink-0 gap-1.5 px-3 text-sm tracking-[-0.2px]",
+  "text": "Unggah",
+  "ariaLabel": "",
+  "role": "",
+  "name": "",
+  "type": "button",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "div.overflow-hidden.absolute.inset-x-0:nth-of-type(2) > div.origin-bottom-left.\\[\\[data-composer-hero\\]_\\&\\]\\:origin-top-left.transition-\\[transform\\,translate\\,scale\\,rotate\\,opacity\\] > div.relative.h-96.bg-surface-l1 > div.grow.min-w-0.min-h-0:nth-of-type(2) > div.relative.h-full > div.pointer-events-none.absolute.inset-x-0:nth-of-type(2) > div.pointer-events-auto.ms-auto.flex > button.inline-flex.items-center.justify-center",
+  "xpath": "/div[2]/div[1]/div[1]/div[2]/div[1]/div[2]/div[1]/button[1]",
+  "outerHTML": "<button data-slot=\"button\" class=\"inline-flex items-center justify-center whitespace-nowrap font-medium cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none [.wd-refresh_&amp;]:outline-hidden [.wd-refresh_&amp;]:focus:outline-hidden [.wd-refresh_&amp;]:focus-visible:ring-fg-accent transition-colors duration-100 [&amp;_svg]:shrink-0 select-none bg-button-filled text-fg-invert border border-border-invert-l1 hover:bg-button-filled-hover active:bg-button-filled-active rounded-full h-9 shrink-0 gap-1.5 px-3 text-sm tracking-[-0.2px]\" type=\"button\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"stroke-[2] \"><path d=\"M6 12H18M12 6V18\" stroke=\"currentColor\" stroke-linecap=\"square\"></path></svg><span class=\"[text-box:trim-both_cap_alphabetic]\">Unggah</span></button>",
+  "attributes": [
+    {
+      "name": "data-slot",
+      "value": "button"
+    },
+    {
+      "name": "class",
+      "value": "inline-flex items-center justify-center whitespace-nowrap font-medium cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none [.wd-refresh_&]:outline-hidden [.wd-refresh_&]:focus:outline-hidden [.wd-refresh_&]:focus-visible:ring-fg-accent transition-colors duration-100 [&_svg]:shrink-0 select-none bg-button-filled text-fg-invert border border-border-invert-l1 hover:bg-button-filled-hover active:bg-button-filled-act"
+    },
+    {
+      "name": "type",
+      "value": "button"
+    }
+  ],
+  "rect": {
+    "x": 626.5875244140625,
+    "y": 329.0375061035156,
+    "width": 101.4124984741211,
+    "height": 36
+  },
+  "candidates": [
+    "div.overflow-hidden.absolute.inset-x-0:nth-of-type(2) > div.origin-bottom-left.\\[\\[data-composer-hero\\]_\\&\\]\\:origin-top-left.transition-\\[transform\\,translate\\,scale\\,rotate\\,opacity\\] > div.relative.h-96.bg-surface-l1 > div.grow.min-w-0.min-h-0:nth-of-type(2) > div.relative.h-full > div.pointer-events-none.absolute.inset-x-0:nth-of-type(2) > div.pointer-events-auto.ms-auto.flex > button.inline-flex.items-center.justify-center"
+  ],
+  "id": 30,
+  "capturedAt": "2026-09-05T12:30:19.478Z",
+  "automationCode": "await page.locator(\"div.overflow-hidden.absolute.inset-x-0:nth-of-type(2) > div.origin-bottom-left.\\\\[\\\\[data-composer-hero\\\\]_\\\\&\\\\]\\\\:origin-top-left.transition-\\\\[transform\\\\,translate\\\\,scale\\\\,rotate\\\\,opacity\\\\] > div.relative.h-96.bg-surface-l1 > div.grow.min-w-0.min-h-0:nth-of-type(2) > div.relative.h-full > div.pointer-events-none.absolute.inset-x-0:nth-of-type(2) > div.pointer-events-auto.ms-auto.flex > button.inline-flex.items-center.justify-center\").click();"
+}
+isi prompt :
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "P",
+  "idAttribute": "",
+  "className": "is-empty is-editor-empty",
+  "text": "",
+  "ariaLabel": "",
+  "role": "",
+  "name": "",
+  "type": "",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "div.query-bar.group\\/query-bar.z-10:nth-of-type(1) > div.relative:nth-of-type(2) > div.ps-2\\.5 > div > div[data-testid=\"chat-input\"] > div > div.tiptap.ProseMirror.w-full > p.is-empty.is-editor-empty",
+  "xpath": "/div[1]/div[2]/div[1]/div[1]/div[1]/div[1]/div[1]/p[1]",
+  "outerHTML": "<p data-placeholder=\"Ketik untuk Imagine, @ untuk mereferensikan gambar\" class=\"is-empty is-editor-empty\"><br class=\"ProseMirror-trailingBreak\"></p>",
+  "attributes": [
+    {
+      "name": "data-placeholder",
+      "value": "Ketik untuk Imagine, @ untuk mereferensikan gambar"
+    },
+    {
+      "name": "class",
+      "value": "is-empty is-editor-empty"
+    }
+  ],
+  "rect": {
+    "x": 87.5999984741211,
+    "y": 218.2375030517578,
+    "width": 648.4000244140625,
+    "height": 28
+  },
+  "candidates": [
+    "div.query-bar.group\\/query-bar.z-10:nth-of-type(1) > div.relative:nth-of-type(2) > div.ps-2\\.5 > div > div[data-testid=\"chat-input\"] > div > div.tiptap.ProseMirror.w-full > p.is-empty.is-editor-empty"
+  ],
+  "id": 34,
+  "capturedAt": "2026-09-05T12:30:57.008Z",
+  "automationCode": "await page.locator(\"div.query-bar.group\\\\/query-bar.z-10:nth-of-type(1) > div.relative:nth-of-type(2) > div.ps-2\\\\.5 > div > div[data-testid=\\\"chat-input\\\"] > div > div.tiptap.ProseMirror.w-full > p.is-empty.is-editor-empty\").click();"
+}
+klik generate :
+{
+  "pageUrl": "https://grok.com/imagine",
+  "tagName": "DIV",
+  "idAttribute": "",
+  "className": "relative aspect-square flex flex-col items-center justify-center rounded-full before:absolute before:inset-0 before:rounded-full before:bg-button-filled before:ring-0 h-10 ring-1 ring-inset before:transition-none [--button-filled:hsl(var(--wd-accent))] bg-button-filled ring-transparent before:[clip-path:circle(50%_at_50%_50%)] text-white",
+  "text": "",
+  "ariaLabel": "",
+  "role": "",
+  "name": "",
+  "type": "",
+  "value": "",
+  "placeholder": "",
+  "href": "",
+  "selector": "form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10:nth-of-type(1) > div.absolute.end-2.bottom-0:nth-of-type(3) > div.relative.z-10 > button.group.flex.flex-col > div.relative.aspect-square.flex",
+  "xpath": "/form[1]/div[1]/div[1]/div[1]/div[3]/div[1]/button[1]/div[1]",
+  "outerHTML": "<div class=\"relative aspect-square flex flex-col items-center justify-center rounded-full before:absolute before:inset-0 before:rounded-full before:bg-button-filled before:ring-0 h-10 ring-1 ring-inset before:transition-none [--button-filled:hsl(var(--wd-accent))] bg-button-filled ring-transparent before:[clip-path:circle(50%_at_50%_50%)] text-white\"><svg width=\"20\" height=\"20\" viewBox=\"0 0 24 24\" fill=\"none\" xmlns=\"http://www.w3.org/2000/svg\" class=\"stroke-[2] relative\"><path d=\"M6 11L12 5M12 5L18 11M12 5V19\" stroke=\"currentColor\" stroke-linecap=\"square\"></path></svg></div>",
+  "attributes": [
+    {
+      "name": "class",
+      "value": "relative aspect-square flex flex-col items-center justify-center rounded-full before:absolute before:inset-0 before:rounded-full before:bg-button-filled before:ring-0 h-10 ring-1 ring-inset before:transition-none [--button-filled:hsl(var(--wd-accent))] bg-button-filled ring-transparent before:[clip-path:circle(50%_at_50%_50%)] text-white"
+    }
+  ],
+  "rect": {
+    "x": 694.5125122070312,
+    "y": 254.74998474121094,
+    "width": 38.97500228881836,
+    "height": 38.97504806518555
+  },
+  "candidates": [
+    "form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\/query-bar.z-10:nth-of-type(1) > div.absolute.end-2.bottom-0:nth-of-type(3) > div.relative.z-10 > button.group.flex.flex-col > div.relative.aspect-square.flex"
+  ],
+  "id": 35,
+  "capturedAt": "2026-09-05T12:31:29.245Z",
+  "automationCode": "await page.locator(\"form.w-full.text-base.flex > div.flex.flex-row.items-end > div.relative.min-w-0.w-full > div.query-bar.group\\\\/query-bar.z-10:nth-of-type(1) > div.absolute.end-2.bottom-0:nth-of-type(3) > div.relative.z-10 > button.group.flex.flex-col > div.relative.aspect-square.flex\").click();"
+}
+monitoring presentase:
+<div class="flex justify-center items-center gap-2 border border-border-l1 rounded-full px-3 h-10 transition-opacity bg-[#000]/40 backdrop-blur-[2px] opacity-100"><div class="flex justify-center items-center gap-2"><span class="text-white text-sm font-semibold animate-pulse">Menghasilkan</span><span class="text-white text-sm font-semibold tabular-nums animate-pulse">70%</span></div><div class="w-[1px] h-4 bg-white/50"></div><button data-slot="button" class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium leading-[1.4] tracking-[-0.2px] cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none [.wd-refresh_&amp;]:outline-hidden [.wd-refresh_&amp;]:focus:outline-hidden [.wd-refresh_&amp;]:focus-visible:ring-fg-accent duration-100 [&amp;_svg]:shrink-0 select-none active:bg-button-secondary-fill-active border border-transparent gap-1 px-2.5 rounded-full hover:bg-transparent h-10 text-white/50 hover:text-white disabled:text-white/70 transition-colors" type="button"><span class="[text-box:trim-both_cap_alphabetic]">Batalkan</span></button></div>
+
+Unduh video :
+dari dom:
+<div class="grid"><img class="col-start-1 row-start-1 w-full h-full object-cover invisible pointer-events-none" alt="" src="https://assets.grok.com/users/5c4c2099-5c82-4dde-9a2c-e8b416b364a7/848b17ff-3721-40f0-877d-15b8d35a4c9b/content?cache=1" style="width: 400px; height: 711px; background-color: hsl(var(--surface-l1)); background-image: url(&quot;data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2216%22%20height%3D%2216%22%20shape-rendering%3D%22crispEdges%22%3E%3Crect%20width%3D%228%22%20height%3D%228%22%20fill%3D%22gray%22%20fill-opacity%3D%22.18%22%2F%3E%3Crect%20x%3D%228%22%20y%3D%228%22%20width%3D%228%22%20height%3D%228%22%20fill%3D%22gray%22%20fill-opacity%3D%22.18%22%2F%3E%3C%2Fsvg%3E&quot;); background-size: 16px 16px; background-position: center center;"><video id="sd-video" playsinline="" autoplay="" loop="" poster="https://assets.grok.com/users/5c4c2099-5c82-4dde-9a2c-e8b416b364a7/generated/668c6326-3114-444b-9612-9676d40f4929/preview_image.jpg?cache=1" class="col-start-1 row-start-1 w-full h-full object-cover" style="width: 400px; height: 711px; visibility: visible;" src="https://assets.grok.com/users/5c4c2099-5c82-4dde-9a2c-e8b416b364a7/generated/668c6326-3114-444b-9612-9676d40f4929/generated_video.mp4?cache=1" preload="auto">Peramban Anda tidak mendukung tag video.</video><video id="hd-video" playsinline="" autoplay="" loop="" poster="https://assets.grok.com/users/5c4c2099-5c82-4dde-9a2c-e8b416b364a7/generated/668c6326-3114-444b-9612-9676d40f4929/preview_image.jpg?cache=1" class="col-start-1 row-start-1 w-full h-full object-cover" style="width: 400px; height: 711px; visibility: hidden;">Peramban Anda tidak mendukung tag video.</video></div>
+dari button:
+<button data-slot="button" class="inline-flex items-center justify-center whitespace-nowrap text-sm font-medium leading-[1.4] tracking-[-0.2px] cursor-pointer focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50 disabled:pointer-events-none [.wd-refresh_&amp;]:outline-hidden [.wd-refresh_&amp;]:focus:outline-hidden [.wd-refresh_&amp;]:focus-visible:ring-fg-accent transition-colors duration-100 [&amp;_svg]:shrink-0 select-none text-fg-secondary hover:bg-button-secondary-fill-hover active:bg-button-secondary-fill-active hover:text-fg-primary border border-transparent h-8 gap-1 rounded-full overflow-hidden w-8 px-1.5 py-1.5" type="button" aria-label="Unduh" data-state="closed"><svg width="16" height="16" viewBox="0 0 20 20" fill="none" xmlns="http://www.w3.org/2000/svg" class="stroke-[2] size-4"><path d="M4.16667 13.3333C4.16667 13.9304 4.16693 14.3282 4.1919 14.6338C4.21604 14.9293 4.25893 15.0648 4.30257 15.1506C4.42242 15.3858 4.61425 15.5776 4.84945 15.6974C4.93524 15.7411 5.07075 15.784 5.36621 15.8081C5.6718 15.8331 6.06956 15.8333 6.66667 15.8333H13.3333C13.9304 15.8333 14.3282 15.8331 14.6338 15.8081C14.9293 15.784 15.0648 15.7411 15.1506 15.6974C15.3858 15.5776 15.5776 15.3858 15.6974 15.1506C15.7411 15.0648 15.784 14.9293 15.8081 14.6338C15.8331 14.3282 15.8333 13.9304 15.8333 13.3333V11.6667H17.5V13.3333C17.5 13.903 17.5009 14.3805 17.4691 14.7697C17.4365 15.1686 17.3652 15.5476 17.1818 15.9074C16.9022 16.4562 16.4562 16.9022 15.9074 17.1818C15.5476 17.3651 15.1686 17.4365 14.7697 17.4691C14.3805 17.5009 13.903 17.5 13.3333 17.5H6.66667C6.09703 17.5 5.61951 17.5009 5.23031 17.4691C4.83143 17.4365 4.45245 17.3651 4.09261 17.1818C3.54385 16.9022 3.09782 16.4562 2.8182 15.9074C2.63485 15.5476 2.56353 15.1686 2.53093 14.7697C2.49913 14.3805 2.5 13.903 2.5 13.3333V11.6667H4.16667V13.3333Z" fill="currentColor"></path><path d="M10.8333 10.2799L13.5775 7.53581L14.7559 8.71419L10 13.4701L5.24414 8.71419L6.42253 7.53581L9.16667 10.2799V2.5H10.8333V10.2799Z" fill="currentColor"></path></svg></button>
