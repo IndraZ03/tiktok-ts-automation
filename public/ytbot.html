@@ -781,9 +781,9 @@
 
           <!-- YT Links Stock -->
           <div class="mb-4">
-            <label class="text-sm text-gray-400 block mb-1.5">📺 Stok Link YouTube (${(cfg.ytLinks || []).length})</label>
+            <label class="text-sm text-gray-400 block mb-1.5">📺 Stok Link YouTube / Dailymotion / Bilibili.tv (${(cfg.ytLinks || []).length})</label>
             <div class="flex gap-2 mb-2">
-              <input id="yt-input-${escHtml(fn)}" type="url" placeholder="https://www.youtube.com/watch?v=..."
+              <input id="yt-input-${escHtml(fn)}" type="url" placeholder="URL video YouTube, Dailymotion, atau Bilibili.tv"
                      class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
               <button onclick="addLink(${escHtml(JSON.stringify(fn))})"
                       class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition flex-shrink-0">
@@ -891,20 +891,31 @@
     // ═══════════════════════════════════════
     //  ADD / REMOVE YT LINKS
     // ═══════════════════════════════════════
+    function isSupportedYtbotUrl(value) {
+      if (typeof value !== 'string' || !value.trim()) return false;
+      try {
+        const url = new URL(value.trim());
+        if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port) return false;
+        const host = url.hostname;
+        if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') return true;
+        if (host === 'dailymotion.com' || host === 'www.dailymotion.com') return /^\/video\/[a-zA-Z0-9]+(?:_[^/]*)?\/?$/.test(url.pathname);
+        if (host === 'bilibili.tv' || host === 'www.bilibili.tv') return /^\/(?:[a-z]{2}(?:-[a-zA-Z]{2})?\/)?video\/\d+\/?$/.test(url.pathname);
+        return host === 'dai.ly' && /^\/[a-zA-Z0-9]+\/?$/.test(url.pathname);
+      } catch {
+        return false;
+      }
+    }
+
     async function addLink(fn) {
       const input = document.getElementById('yt-input-' + fn);
       const link = input?.value?.trim();
       if (!link) return;
-      if (!link.includes('youtube.com/') && !link.includes('youtu.be/')) {
-        return alert('Masukkan link YouTube yang valid');
+      if (!isSupportedYtbotUrl(link)) {
+        return alert('Masukkan URL YouTube, Dailymotion, atau Bilibili.tv yang valid');
       }
       try {
-        const res = await fetch('/api/ytbot/links/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ stateFile: fn, link })
-        });
-        const data = await res.json();
+        const data = await sessionRequest('/api/ytbot/links/add', { stateFile: fn, link });
+        if (data.success !== true) throw new Error('Respons penambahan link tidak valid.');
         if (data.success) {
           if (!stateConfigs[fn]) stateConfigs[fn] = { ytLinks: [] };
           if (!stateConfigs[fn].ytLinks) stateConfigs[fn].ytLinks = [];
@@ -1172,7 +1183,7 @@
       // Set active task description
       let activeTask = 'Idle';
       if (dl < 100) {
-        activeTask = `Mengunduh video dari YouTube... (${dl}%)`;
+        activeTask = `Mengunduh video... (${dl}%)`;
       } else if (sp < 100) {
         activeTask = `Memotong video menjadi segmen 3 menit... (${sp}%)`;
       } else if (up < 100) {

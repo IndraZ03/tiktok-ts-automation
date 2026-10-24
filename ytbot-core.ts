@@ -12,6 +12,21 @@ export interface YtbotStateConfig {
   lastUploadTime?: string;
 }
 
+export function isSupportedYtbotUrl(value: unknown): boolean {
+  if (typeof value !== 'string' || !value.trim()) return false;
+  try {
+    const url = new URL(value.trim());
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.port) return false;
+    const host = url.hostname;
+    if (host === 'youtube.com' || host.endsWith('.youtube.com') || host === 'youtu.be') return true;
+    if (host === 'dailymotion.com' || host === 'www.dailymotion.com') return /^\/video\/[a-zA-Z0-9]+(?:_[^/]*)?\/?$/.test(url.pathname);
+    if (host === 'bilibili.tv' || host === 'www.bilibili.tv') return /^\/(?:[a-z]{2}(?:-[a-zA-Z]{2})?\/)?video\/\d+\/?$/.test(url.pathname);
+    return host === 'dai.ly' && /^\/[a-zA-Z0-9]+\/?$/.test(url.pathname);
+  } catch {
+    return false;
+  }
+}
+
 export interface YtbotGlobalConfig {
   sendWhatsApp?: boolean;
 }

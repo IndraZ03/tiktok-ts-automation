@@ -99,23 +99,55 @@ function emitProgress(
   onProgress?.(event);
 }
 
+function isBilibiliTvUrl(value: string): boolean {
+  try {
+    const url = new URL(value);
+    return ['http:', 'https:'].includes(url.protocol)
+      && (url.hostname === 'bilibili.tv' || url.hostname === 'www.bilibili.tv');
+  } catch {
+    return false;
+  }
+}
+
+function downloadFormat(youtubeUrl: string): string {
+  return isBilibiliTvUrl(youtubeUrl)
+    ? 'bv*[vcodec^=avc]+ba[ext=mp4]/bv*+ba/best'
+    : 'bv*[vcodec^=avc]+ba[ext=m4a]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best';
+}
+
+async function getDownloadedVideoDuration(inputPath: string): Promise<number> {
+  const { stderr } = await execa(ensureFfmpegPath(), ['-hide_banner', '-i', inputPath], {
+    windowsHide: true,
+    reject: false,
+  });
+  // FFmpeg keluar nonzero tanpa output; header input tetap memuat durasi.
+  const match = stderr.match(/Duration:\s*(\d+):(\d{2}):(\d{2}(?:\.\d+)?)/);
+  const duration = match ? Number(match[1]) * 3600 + Number(match[2]) * 60 + Number(match[3]) : 0;
+  if (!Number.isFinite(duration) || duration <= 0) {
+    throw new Error('Durasi video hasil download tidak dapat dibaca.');
+  }
+  return duration;
+}
+
 async function getYoutubeMetadata(youtubeUrl: string): Promise<YoutubeMetadata> {
   const { stdout } = await execa('yt-dlp', [
     '--dump-json',
     '--no-playlist',
+    ...(isBilibiliTvUrl(youtubeUrl) ? ['-f', downloadFormat(youtubeUrl)] : []),
+    '--',
     youtubeUrl,
   ], { windowsHide: true });
 
   const metadata = JSON.parse(stdout);
   const duration = Number(metadata.duration);
 
-  if (!Number.isFinite(duration) || duration <= 0) {
-    throw new Error('Durasi video YouTube tidak dapat dibaca.');
+  if ((!Number.isFinite(duration) || duration <= 0) && !isBilibiliTvUrl(youtubeUrl)) {
+    throw new Error('Durasi video tidak dapat dibaca.');
   }
 
   return {
     title: String(metadata.title || 'youtube-video'),
-    duration,
+    duration: Number.isFinite(duration) && duration > 0 ? duration : 0,
   };
 }
 
@@ -140,11 +172,12 @@ async function downloadYoutubeVideo(
     '--ffmpeg-location',
     ffmpegDir,
     '-f',
-    'bv*[vcodec^=avc]+ba[ext=m4a]/bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/best',
+    downloadFormat(youtubeUrl),
     '--merge-output-format',
     'mp4',
     '-o',
     outputPath,
+    '--',
     youtubeUrl,
   ], {
     all: true,
@@ -163,7 +196,7 @@ async function downloadYoutubeVideo(
           const percent = Number(match[1]);
           emitProgress(onProgress, {
             stage: 'download',
-            message: `Download video YouTube ${progressBar(percent)}`,
+            message: `Download video ${progressBar(percent)}`,
             percent,
           });
         }
@@ -283,7 +316,7 @@ async function splitPart(
 }
 
 /**
- * Download video dari link YouTube lalu membaginya menjadi beberapa video vertikal 9:16.
+ * Download video dari link sumber lalu membaginya menjadi beberapa video vertikal 9:16.
  * Parameter utama: youtubeUrl sebagai sumber, outputDir untuk hasil, tempDir opsional untuk file download,
  * segmentDuration opsional dalam detik (default 180), watermarkText opsional, dan onProgress untuk progress real-time.
  * Mengembalikan metadata video, jumlah part, daftar file output, dan status penghapusan file video asli hasil download.
@@ -291,6 +324,7 @@ async function splitPart(
 interface SplitterDependencies {
   getMetadata: typeof getYoutubeMetadata;
   download: typeof downloadYoutubeVideo;
+  getDownloadedDuration?: typeof getDownloadedVideoDuration;
   split: typeof splitPart;
   cleanup: (dir: string) => void;
 }
@@ -298,6 +332,7 @@ interface SplitterDependencies {
 const splitterDependencies: SplitterDependencies = {
   getMetadata: getYoutubeMetadata,
   download: downloadYoutubeVideo,
+  getDownloadedDuration: getDownloadedVideoDuration,
   split: splitPart,
   cleanup: dir => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }),
 };
@@ -322,12 +357,11 @@ export async function splitAndProcessVideo(
 
   emitProgress(options.onProgress, {
     stage: 'metadata',
-    message: 'Membaca metadata YouTube',
+    message: 'Membaca metadata video',
   });
 
   const metadata = await dependencies.getMetadata(options.youtubeUrl);
   const safeTitle = sanitizeFilename(metadata.title);
-  const totalParts = Math.ceil(metadata.duration / segmentDuration);
   const jobTempDir = fs.mkdtempSync(path.join(tempDir, 'split-'));
   const downloadedPath = path.join(jobTempDir, `${safeTitle}.mp4`);
   const outputFiles: string[] = [];
@@ -343,6 +377,13 @@ export async function splitAndProcessVideo(
       stage: 'download', phase: 'completed', title: metadata.title,
       message: `Download selesai: ${metadata.title}`,
     });
+    if (!Number.isFinite(metadata.duration) || metadata.duration <= 0) {
+      metadata.duration = await (dependencies.getDownloadedDuration || getDownloadedVideoDuration)(downloadedPath);
+      if (!Number.isFinite(metadata.duration) || metadata.duration <= 0) {
+        throw new Error('Durasi video hasil download tidak dapat dibaca.');
+      }
+    }
+    const totalParts = Math.ceil(metadata.duration / segmentDuration);
     emitProgress(options.onProgress, {
       stage: 'split', phase: 'started', title: metadata.title, totalParts,
       message: `Mulai split ${totalParts} part: ${metadata.title}`,

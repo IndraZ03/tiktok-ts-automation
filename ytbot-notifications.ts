@@ -58,8 +58,8 @@ export class YtbotNotifier {
         if (!event.phase) return;
         const title = event.title || url;
         const key = `${event.stage}:${event.phase}`;
-        if (key === 'download:started') notify(key, `Mulai mengunduh video YouTube: ${url}\nJudul: ${title}`);
-        else if (key === 'download:completed') notify(key, `Selesai mengunduh video YouTube: "${title}"`);
+        if (key === 'download:started') notify(key, `Mulai mengunduh video: ${url}\nJudul: ${title}`);
+        else if (key === 'download:completed') notify(key, `Selesai mengunduh video: "${title}"`);
         else if (key === 'split:started') notify(key, `Mulai split video menjadi part vertikal: "${title}"`);
         else if (key === 'split:completed') notify(key, `Selesai split video: ${event.totalParts ?? 0} part dari "${title}"`);
       },

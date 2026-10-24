@@ -32,7 +32,7 @@ import multer from 'multer';
 import ffmpegPath from 'ffmpeg-static';
 import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
-import { mutateYtbotData, removeYtLinkFromState, sortYtbotStatesOldestFirst, type YtbotData } from './ytbot-core.js';
+import { isSupportedYtbotUrl, mutateYtbotData, removeYtLinkFromState, sortYtbotStatesOldestFirst, type YtbotData } from './ytbot-core.js';
 import { YtbotNotifier } from './ytbot-notifications.js';
 import {
   startWAPolling,
@@ -3665,13 +3665,17 @@ app.post('/api/ytbot/config/save', (req, res) => {
 
 // Add YT link
 app.post('/api/ytbot/links/add', (req, res) => {
-  const { stateFile, link } = req.body;
-  if (!stateFile || !link) return res.status(400).json({ error: 'stateFile dan link diperlukan' });
+  const { stateFile, link } = req.body || {};
+  if (typeof stateFile !== 'string' || !stateFile.trim() || !link) return res.status(400).json({ error: 'stateFile dan link diperlukan' });
+  if (!isSupportedYtbotUrl(link)) {
+    return res.status(400).json({ error: 'URL tidak valid. Masukkan URL YouTube, Dailymotion, atau Bilibili.tv yang valid.' });
+  }
+  const cleanLink = String(link).trim();
   updateYtbotData(data => {
     if (!data.states[stateFile]) {
       data.states[stateFile] = { ytLinks: [], description: '', hashtags: '', scheduleDate: '', scheduleTime: '', intervalMinutes: 60 };
     }
-    data.states[stateFile].ytLinks.push(link);
+    data.states[stateFile].ytLinks.push(cleanLink);
   });
   res.json({ success: true });
 });
@@ -3781,7 +3785,7 @@ async function ytbotRunState(stateFile: string): Promise<void> {
       const freshData = loadYtbotData();
       const freshCfg = freshData.states[stateFile];
       if (!freshCfg || freshCfg.ytLinks.length === 0) {
-        ytbotLog(`ℹ Tidak ada video pending dan tidak ada link YT tersisa untuk ${stateName}`);
+        ytbotLog(`ℹ Tidak ada video pending dan tidak ada link video tersisa untuk ${stateName}`);
         break;
       }
 
