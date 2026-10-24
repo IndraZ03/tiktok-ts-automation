@@ -64,16 +64,63 @@
       0% { background-position: 0 0; }
       100% { background-position: 1rem 0; }
     }
+    .hidden { display: none !important; }
+    .ytbot-sidebar {
+      width: 80px; flex-shrink: 0; height: 100dvh; position: sticky; top: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: space-between;
+      padding: 24px 8px; background: rgba(3,7,18,0.85); border-right: 1px solid #1f2937;
+      backdrop-filter: blur(16px); z-index: 30;
+    }
+    .sidebar-button {
+      width: 64px; min-height: 64px; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 4px; border-radius: 12px;
+      border: 1px solid transparent; color: #9ca3af; font-size: 10px; transition: all .2s;
+    }
+    .sidebar-button:hover { background: #111827; color: #f9fafb; }
+    .sidebar-button[aria-current="page"] { color: #f472b6; background: #ec48991a; border-color: #ec489933; }
+    #nav-states[aria-current="page"] { color: #a5b4fc; background: #6366f11a; border-color: #6366f133; }
+    .sidebar-button:focus-visible, #tab-states button:focus-visible { outline: 2px solid #a5b4fc; outline-offset: 3px; }
+    .ytbot-main { flex: 1; min-width: 0; padding: 24px; }
+    #tab-states { overflow-wrap: anywhere; }
+    #tab-states button:disabled { opacity: .5; cursor: wait; }
+    .session-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+    .session-actions button { white-space: normal; }
+    @media (max-width: 640px) {
+      .ytbot-main { padding: 16px; }
+      #tab-dashboard .grid { grid-template-columns: minmax(0, 1fr); }
+      #tab-dashboard .state-card > .flex { flex-wrap: wrap; gap: 12px; }
+      #tab-dashboard .state-card input { min-width: 0; max-width: 100%; }
+      #tab-dashboard .state-card .flex { flex-wrap: wrap; }
+      #tab-dashboard .state-card .flex > input { flex-basis: 100%; }
+      #tab-dashboard .state-card, #tab-dashboard .space-y-4 { min-width: 0; }
+      #overall-progress-card > h2 { flex-wrap: wrap; gap: 8px; }
+      #live-log { overflow-wrap: anywhere; }
+    }
   </style>
 </head>
-<body class="bg-gray-950 text-gray-100 min-h-screen">
-  <div class="max-w-7xl mx-auto p-6">
+<body class="bg-gray-950 text-gray-100 min-h-screen flex">
+  <aside class="ytbot-sidebar" aria-label="Navigasi YTBot">
+    <div class="flex flex-col items-center gap-8">
+      <div class="w-10 h-10 rounded-xl gradient-btn flex items-center justify-center font-bold text-white" aria-hidden="true">YT</div>
+      <nav class="flex flex-col gap-3" aria-label="Menu YTBot">
+        <button id="nav-dashboard" type="button" class="sidebar-button" aria-controls="tab-dashboard" aria-current="page" onclick="switchTab('dashboard')">
+          <span class="text-xl" aria-hidden="true">📊</span><span>Dashboard</span>
+        </button>
+        <button id="nav-states" type="button" class="sidebar-button" aria-controls="tab-states" onclick="switchTab('states')">
+          <span class="text-xl" aria-hidden="true">🔑</span><span>Sesi</span>
+        </button>
+      </nav>
+    </div>
+    <a href="/" class="sidebar-button" title="Kembali ke State Manager"><span class="text-xl" aria-hidden="true">🏠</span><span>Home</span></a>
+  </aside>
+  <main class="ytbot-main">
+  <section id="tab-dashboard" aria-labelledby="nav-dashboard" class="max-w-7xl mx-auto">
     <!-- Header -->
-    <div class="flex items-center justify-between mb-6">
+    <div class="flex flex-wrap gap-4 items-center justify-between mb-6">
       <h1 class="text-3xl font-bold bg-gradient-to-r from-red-500 via-pink-500 to-purple-500 bg-clip-text text-transparent">
         🤖 YT to TikTok Bot
       </h1>
-      <div class="flex items-center gap-3">
+      <div class="flex flex-wrap items-center gap-3 min-w-0">
         <span id="status-badge" class="text-xs px-3 py-1.5 rounded-full bg-gray-800 text-gray-400">⏸ Idle</span>
         <a href="/tiktok" class="text-sm text-gray-400 hover:text-white transition">TikTok Uploader →</a>
         <a href="/" class="text-sm text-gray-400 hover:text-white transition">← State Manager</a>
@@ -193,7 +240,61 @@
         </div>
       </div>
     </div>
-  </div>
+  </section>
+
+  <section id="tab-states" aria-labelledby="nav-states" class="hidden max-w-6xl mx-auto space-y-6">
+    <header>
+      <h1 class="text-2xl font-bold text-indigo-300">Sesi TikTok</h1>
+      <p class="text-sm text-gray-400 mt-2">Tambah dan kelola sesi. Sesi tersimpan langsung tersedia di Dashboard.</p>
+    </header>
+    <p id="session-feedback" role="status" aria-live="polite" class="hidden rounded-xl p-4 text-sm border border-gray-700"></p>
+    <div class="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
+      <h2 class="text-lg font-semibold">Tambah Sesi</h2>
+      <div>
+        <label for="session-name" class="block text-sm text-gray-400 mb-2">Nama sesi</label>
+        <input id="session-name" maxlength="100" placeholder="contoh: akun_utama" class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+      </div>
+      <div class="session-actions">
+        <button type="button" onclick="startSessionLogin()" class="gradient-btn rounded-xl px-4 py-2 text-sm font-semibold">Buka Browser (Playwright)</button>
+        <button type="button" onclick="startNativeSession()" class="bg-indigo-600 hover:bg-indigo-500 rounded-xl px-4 py-2 text-sm">Chrome Native CMD</button>
+        <button type="button" onclick="toggleSessionPanel('paste')" class="bg-gray-800 hover:bg-gray-700 rounded-xl px-4 py-2 text-sm">Paste Cookies</button>
+        <button type="button" onclick="toggleSessionPanel('import')" class="bg-gray-800 hover:bg-gray-700 rounded-xl px-4 py-2 text-sm">Import JSON</button>
+      </div>
+      <div id="session-login-panel" class="hidden bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl space-y-3">
+        <p id="session-login-message" class="text-sm text-indigo-200"></p>
+        <p class="text-xs text-gray-400">Selesaikan login manual. Jangan mulai login sesi lain dari halaman lain sebelum menyimpan.</p>
+        <button type="button" onclick="saveSessionLogin()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl text-sm">Sudah Login — Simpan Sesi</button>
+      </div>
+      <div id="session-native-panel" class="hidden bg-indigo-500/10 border border-indigo-500/30 p-4 rounded-xl space-y-3">
+        <p id="session-native-message" class="text-sm text-indigo-200"></p>
+        <p class="text-xs text-gray-400">Login di Chrome, lalu tutup semua jendela profil tersebut sebelum sinkronisasi. Tutup Chrome saja belum menyimpan sesi ke daftar.</p>
+        <button type="button" onclick="syncNativeSession()" class="bg-emerald-600 hover:bg-emerald-500 px-4 py-2 rounded-xl text-sm">Sinkronkan &amp; Simpan</button>
+      </div>
+      <div id="session-paste-panel" class="hidden space-y-3">
+        <label for="session-cookies" class="block text-sm text-gray-400">Cookies (JSON array, storageState, atau cookie string)</label>
+        <textarea id="session-cookies" rows="5" spellcheck="false" class="w-full bg-gray-950 border border-gray-700 rounded-xl p-3 text-sm font-mono" placeholder="Paste cookies di sini"></textarea>
+        <div class="session-actions">
+          <button type="button" onclick="saveSessionCookies()" class="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 py-2 text-sm">Simpan Cookies</button>
+          <button type="button" onclick="toggleSessionPanel('paste')" class="bg-gray-800 rounded-xl px-4 py-2 text-sm">Batal</button>
+        </div>
+      </div>
+      <div id="session-import-panel" class="hidden space-y-3">
+        <label for="session-import-file" class="block text-sm text-gray-400">File JSON sesi (maksimal 1 MB). Nama tujuan memakai nama sesi di atas, atau nama file.</label>
+        <input id="session-import-file" type="file" accept=".json,application/json" class="block w-full min-w-0 text-sm text-gray-400">
+        <div class="session-actions">
+          <button type="button" onclick="importSessionFile()" class="bg-emerald-600 hover:bg-emerald-500 rounded-xl px-4 py-2 text-sm">Simpan Import</button>
+          <button type="button" onclick="toggleSessionPanel('import')" class="bg-gray-800 rounded-xl px-4 py-2 text-sm">Batal</button>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="text-lg font-semibold">Sesi Tersimpan</h2>
+      <button type="button" onclick="loadStates()" class="bg-gray-800 hover:bg-gray-700 rounded-xl px-4 py-2 text-sm">Refresh Sesi</button>
+    </div>
+    <p class="text-xs text-gray-500">Masa aktif berdasarkan expiry cookie lokal, bukan verifikasi login ke TikTok.</p>
+    <div id="session-list" class="grid grid-cols-1 lg:grid-cols-2 gap-4" aria-live="polite"><p class="text-gray-500 text-sm">Memuat sesi...</p></div>
+  </section>
+  </main>
 
   <script>
     // ═══════════════════════════════════════
@@ -210,8 +311,8 @@
     //  INIT
     // ═══════════════════════════════════════
     window.onload = async () => {
-      await loadStates();
       await loadConfigs();
+      await loadStates();
       pollStatus();
       setInterval(pollStatus, 5000);
     };
@@ -219,12 +320,258 @@
     // ═══════════════════════════════════════
     //  LOAD TIKTOK STATES
     // ═══════════════════════════════════════
-    async function loadStates() {
+    let statesRequest = null;
+    let sessionBusy = false;
+    let loginSession = null;
+    let nativeSession = null;
+    let selectionRestored = false;
+
+    function saveSelectedStates() {
       try {
-        const res = await fetch('/api/states');
-        allStates = await res.json();
-        renderDropdown();
-      } catch (e) { addLog('❌ Gagal load states: ' + e.message); }
+        if (selectedStates.length) localStorage.setItem('ytbot_selected_states', JSON.stringify(selectedStates));
+        else localStorage.removeItem('ytbot_selected_states');
+      } catch {}
+    }
+
+    function switchTab(tabId) {
+      if (!['dashboard', 'states'].includes(tabId)) return;
+      for (const id of ['dashboard', 'states']) {
+        document.getElementById('tab-' + id).classList.toggle('hidden', id !== tabId);
+        const button = document.getElementById('nav-' + id);
+        if (id === tabId) button.setAttribute('aria-current', 'page');
+        else button.removeAttribute('aria-current');
+      }
+      dropdownOpen = false;
+      document.getElementById('dropdown-menu').classList.remove('open');
+      if (tabId === 'states') loadStates();
+    }
+
+    async function sessionRequest(url, payload) {
+      const response = await fetch(url, payload === undefined ? {} : {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload)
+      });
+      let data;
+      try { data = await response.json(); }
+      catch { throw new Error('Respons server bukan JSON yang valid.'); }
+      if (!response.ok || data?.success === false || data?.error) throw new Error(data?.error || 'Request gagal: ' + response.status);
+      return data;
+    }
+
+    function sessionFeedback(message, error = false) {
+      const el = document.getElementById('session-feedback');
+      el.textContent = message;
+      el.classList.remove('hidden');
+      el.classList.toggle('text-red-300', error);
+      el.classList.toggle('text-emerald-300', !error);
+    }
+
+    function loadStates() {
+      if (statesRequest) return statesRequest;
+      statesRequest = (async () => {
+        try {
+          const states = await sessionRequest('/api/states?platform=tiktok');
+          if (!Array.isArray(states) || states.some(s => !s || typeof s.filename !== 'string' || typeof s.name !== 'string')) throw new Error('Daftar sesi tidak valid.');
+          allStates = states;
+          const available = new Set(states.map(s => s.filename));
+          const restoringSelection = !selectionRestored;
+          if (restoringSelection) {
+            try {
+              const saved = JSON.parse(localStorage.getItem('ytbot_selected_states') || '[]');
+              if (Array.isArray(saved)) selectedStates = [...new Set(saved.filter(fn => typeof fn === 'string'))];
+            } catch {}
+            selectionRestored = true;
+          }
+          selectedStates = selectedStates.filter(fn => available.has(fn));
+          saveSelectedStates();
+          document.querySelectorAll('#state-cards-container [data-state]').forEach(card => {
+            if (!available.has(card.dataset.state)) card.remove();
+          });
+          if (restoringSelection || !selectedStates.length) await renderAllCards();
+          renderDropdown();
+          renderSessionList();
+          return true;
+        } catch (error) {
+          if (!allStates.length) document.getElementById('session-list').textContent = 'Daftar sesi gagal dimuat. Tekan Refresh Sesi untuk mencoba lagi.';
+          sessionFeedback('Gagal memuat sesi: ' + error.message, true);
+          addLog('❌ Gagal load states: ' + error.message);
+          return false;
+        } finally { statesRequest = null; }
+      })();
+      return statesRequest;
+    }
+
+    function renderSessionList() {
+      const list = document.getElementById('session-list');
+      list.replaceChildren();
+      if (!allStates.length) {
+        const empty = document.createElement('p');
+        empty.className = 'text-sm text-gray-500';
+        empty.textContent = 'Belum ada sesi TikTok. Tambahkan sesi di atas.';
+        list.append(empty);
+      }
+      for (const state of allStates) {
+        const card = document.createElement('article');
+        card.className = 'bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-3 min-w-0';
+        const title = document.createElement('h3');
+        title.className = 'font-semibold text-indigo-200';
+        title.textContent = state.name;
+        const filename = document.createElement('p');
+        filename.className = 'text-xs text-gray-500 break-all';
+        filename.textContent = state.filename;
+        const expiry = document.createElement('p');
+        expiry.className = 'text-xs text-gray-400';
+        const labels = { safe: 'Belum kedaluwarsa', warning: 'Segera kedaluwarsa', expired: 'Kedaluwarsa' };
+        expiry.textContent = labels[state.expiry?.status] || 'Masa aktif tidak diketahui';
+        if (state.expiry?.daysLeft != null) expiry.textContent += ' · ' + state.expiry.daysLeft + ' hari';
+        const actions = document.createElement('div');
+        actions.className = 'session-actions';
+        for (const [label, action] of [
+          ['Buka / Login Ulang', () => startSessionLogin(state.filename)],
+          ['Chrome Native CMD', () => startNativeSession(state.filename)],
+          ['Hapus Sesi', () => deleteSession(state.filename)]
+        ]) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = 'bg-gray-800 hover:bg-gray-700 rounded-lg px-3 py-2 text-xs';
+          button.textContent = label;
+          button.disabled = sessionBusy;
+          button.addEventListener('click', action);
+          actions.append(button);
+        }
+        card.append(title, filename, expiry, actions);
+        list.append(card);
+      }
+    }
+
+    async function sessionOperation(action) {
+      if (sessionBusy) return;
+      sessionBusy = true;
+      document.querySelectorAll('#tab-states button').forEach(button => { button.disabled = true; });
+      try { await action(); }
+      catch (error) { sessionFeedback(error.message, true); }
+      finally {
+        sessionBusy = false;
+        document.querySelectorAll('#tab-states button').forEach(button => { button.disabled = false; });
+      }
+    }
+
+    function sessionName(value = document.getElementById('session-name').value) {
+      const name = value.trim();
+      if (!name || name.length > 100 || /[<>:"/\\|?*\x00-\x1f]/.test(name) || name === '.' || name === '..' || /[. ]$/.test(name)) throw new Error('Nama sesi wajib diisi, maksimal 100 karakter, tanpa karakter path.');
+      return name;
+    }
+
+    function allowSessionOverwrite(name) {
+      return !allStates.some(s => s.filename === `tiktok-state-${name}.json`) || confirm(`Sesi "${name}" sudah ada. Timpa sesi tersebut?`);
+    }
+
+    async function refreshSavedSession(message) {
+      // Tunggu refresh lama agar respons sebelum mutasi tidak menutupi hasil terbaru.
+      if (statesRequest) await statesRequest;
+      const refreshed = await loadStates();
+      sessionFeedback(message + (refreshed ? '' : ' Penyimpanan berhasil, tetapi daftar gagal diperbarui. Tekan Refresh Sesi.'), !refreshed);
+    }
+
+    function toggleSessionPanel(panel) {
+      const el = document.getElementById('session-' + panel + '-panel');
+      el.classList.toggle('hidden');
+    }
+
+    function startSessionLogin(filename) {
+      return sessionOperation(async () => {
+        if (loginSession) throw new Error('Simpan sesi Playwright yang sedang berjalan terlebih dahulu.');
+        const name = filename ? null : sessionName();
+        if (name && !allowSessionOverwrite(name)) return;
+        await sessionRequest(filename ? '/api/start-login-with-state' : '/api/start-login', filename ? { filename, platform: 'tiktok' } : { name, platform: 'tiktok' });
+        loginSession = { name, filename };
+        document.getElementById('session-login-message').textContent = 'Browser dibuka untuk: ' + (filename || name);
+        document.getElementById('session-login-panel').classList.remove('hidden');
+        sessionFeedback('Browser terbuka. Login manual, lalu tekan Simpan Sesi.');
+      });
+    }
+
+    function saveSessionLogin() {
+      return sessionOperation(async () => {
+        if (!loginSession) throw new Error('Buka browser login terlebih dahulu.');
+        await sessionRequest('/api/save-login', {});
+        loginSession = null;
+        document.getElementById('session-login-panel').classList.add('hidden');
+        await refreshSavedSession('Sesi berhasil disimpan.');
+      });
+    }
+
+    function startNativeSession(filename) {
+      return sessionOperation(async () => {
+        if (nativeSession) throw new Error('Sinkronkan sesi Chrome Native yang sedang berjalan terlebih dahulu.');
+        const name = filename ? '' : sessionName();
+        if (name && !allowSessionOverwrite(name)) return;
+        const target = { name, ...(filename ? { filename } : {}), platform: 'tiktok' };
+        await sessionRequest('/api/start-native-chrome', target);
+        nativeSession = target;
+        document.getElementById('session-native-message').textContent = 'Chrome dibuka untuk: ' + (filename || name);
+        document.getElementById('session-native-panel').classList.remove('hidden');
+        sessionFeedback('Login di Chrome, tutup profil, lalu tekan Sinkronkan & Simpan.');
+      });
+    }
+
+    function syncNativeSession() {
+      return sessionOperation(async () => {
+        if (!nativeSession) throw new Error('Buka Chrome Native terlebih dahulu.');
+        await sessionRequest('/api/sync-native-chrome', nativeSession);
+        nativeSession = null;
+        document.getElementById('session-native-panel').classList.add('hidden');
+        await refreshSavedSession('Sesi Chrome berhasil disinkronkan.');
+      });
+    }
+
+    function saveSessionCookies() {
+      return sessionOperation(async () => {
+        const name = sessionName();
+        const cookiesText = document.getElementById('session-cookies').value.trim();
+        if (!cookiesText) throw new Error('Paste cookies terlebih dahulu.');
+        if (/^[\[{]/.test(cookiesText)) {
+          let parsed;
+          try { parsed = JSON.parse(cookiesText); }
+          catch { throw new Error('Cookies bukan JSON yang valid.'); }
+          if (!Array.isArray(parsed) && !Array.isArray(parsed?.cookies)) throw new Error('JSON cookies harus berisi array cookies.');
+        } else if (!cookiesText.includes('=')) throw new Error('Gunakan JSON cookies atau cookie string dengan tanda =.');
+        if (!allowSessionOverwrite(name)) return;
+        await sessionRequest('/api/cookies/save', { name, cookiesText, platform: 'tiktok' });
+        document.getElementById('session-cookies').value = '';
+        document.getElementById('session-paste-panel').classList.add('hidden');
+        await refreshSavedSession('Cookies berhasil disimpan.');
+      });
+    }
+
+    function importSessionFile() {
+      return sessionOperation(async () => {
+        const file = document.getElementById('session-import-file').files[0];
+        if (!file || !/\.json$/i.test(file.name)) throw new Error('Pilih file .json terlebih dahulu.');
+        if (file.size > 1024 * 1024) throw new Error('Ukuran JSON maksimal 1 MB.');
+        let content;
+        try { content = JSON.parse(await file.text()); }
+        catch { throw new Error('File bukan JSON yang valid.'); }
+        if (!Array.isArray(content) && !Array.isArray(content?.cookies)) throw new Error('JSON harus berupa array cookies atau storageState dengan cookies array.');
+        // Samakan nama tujuan dengan normalisasi endpoint import sebelum konfirmasi timpa.
+        const rawName = document.getElementById('session-name').value.trim() || file.name;
+        const name = sessionName(rawName.replace(/\.json$/i, '').replace(/^tiktok-state-/, '').replace(/\s+/g, '_'));
+        if (!allowSessionOverwrite(name)) return;
+        await sessionRequest('/api/states/import', { filename: name, content, platform: 'tiktok' });
+        document.getElementById('session-import-file').value = '';
+        document.getElementById('session-import-panel').classList.add('hidden');
+        await refreshSavedSession('Import sesi berhasil.');
+      });
+    }
+
+    function deleteSession(filename) {
+      return sessionOperation(async () => {
+        const loginFilename = loginSession && (loginSession.filename || `tiktok-state-${loginSession.name}.json`);
+        const nativeFilename = nativeSession && (nativeSession.filename || `tiktok-state-${nativeSession.name}.json`);
+        if (loginFilename === filename || nativeFilename === filename) throw new Error('Sesi sedang dibuka. Simpan atau sinkronkan terlebih dahulu.');
+        if (!confirm(`Hapus sesi "${filename}"?`)) return;
+        await sessionRequest('/api/delete-state', { filename, platform: 'tiktok' });
+        await refreshSavedSession('Sesi berhasil dihapus.');
+      });
     }
 
     // ═══════════════════════════════════════
@@ -255,15 +602,28 @@
 
     function renderDropdown() {
       const menu = document.getElementById('dropdown-menu');
-      menu.innerHTML = allStates.map(s => {
-        const checked = selectedStates.includes(s.filename) ? 'checked' : '';
-        const statusIcon = s.expiry.status === 'safe' ? '🟢' : s.expiry.status === 'warning' ? '🟡' : s.expiry.status === 'expired' ? '🔴' : '⏳';
-        return `<label class="multiselect-item">
-          <input type="checkbox" ${checked} onchange="toggleState('${s.filename}')">
-          <span class="text-sm flex-1">${statusIcon} ${s.name}</span>
-          <span class="text-xs text-gray-500">${s.expiry.daysLeft != null ? s.expiry.daysLeft + 'd' : ''}</span>
-        </label>`;
-      }).join('');
+      menu.replaceChildren();
+      for (const s of allStates) {
+        const label = document.createElement('label');
+        label.className = 'multiselect-item';
+
+        const input = document.createElement('input');
+        input.type = 'checkbox';
+        input.checked = selectedStates.includes(s.filename);
+        input.addEventListener('change', () => toggleState(s.filename));
+
+        const nameSpan = document.createElement('span');
+        nameSpan.className = 'text-sm flex-1';
+        const statusIcon = s.expiry?.status === 'safe' ? '🟢' : s.expiry?.status === 'warning' ? '🟡' : s.expiry?.status === 'expired' ? '🔴' : '⏳';
+        nameSpan.textContent = `${statusIcon} ${s.name}`;
+
+        const expirySpan = document.createElement('span');
+        expirySpan.className = 'text-xs text-gray-500';
+        expirySpan.textContent = s.expiry?.daysLeft != null ? `${s.expiry.daysLeft}d` : '';
+
+        label.append(input, nameSpan, expirySpan);
+        menu.append(label);
+      }
       updateDropdownLabel();
     }
 
@@ -274,6 +634,7 @@
       } else {
         selectedStates.push(filename);
       }
+      saveSelectedStates();
       renderDropdown();
       renderAllCards();
     }
@@ -323,14 +684,14 @@
           `<div class="yt-link-item">
             <span class="text-red-400 flex-shrink-0">▶</span>
             <a href="${escHtml(link)}" target="_blank" class="text-sm text-blue-400 hover:text-blue-300 truncate flex-1" title="${escHtml(link)}">${escHtml(link)}</a>
-            <button onclick="removeLink('${fn}', ${i})" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-1.5 py-0.5 rounded transition flex-shrink-0">✕</button>
+            <button onclick="removeLink(${escHtml(JSON.stringify(fn))}, ${i})" class="text-xs text-red-400 hover:text-red-300 hover:bg-red-500/10 px-1.5 py-0.5 rounded transition flex-shrink-0">✕</button>
           </div>`
         ).join('');
 
         const today = new Date().toISOString().split('T')[0];
         const nowTime = new Date().toTimeString().slice(0, 5);
 
-        return `<div class="state-card rounded-2xl p-5" data-state="${fn}">
+        return `<div class="state-card rounded-2xl p-5" data-state="${escHtml(fn)}">
           <div class="flex items-center justify-between mb-4">
             <h3 class="text-lg font-semibold flex items-center gap-2">
               <span class="w-2.5 h-2.5 rounded-full bg-pink-500"></span>
@@ -340,7 +701,7 @@
               <span class="text-xs bg-gray-800 px-2.5 py-1 rounded-lg">
                 <span class="text-green-400">${uploadedCount}✓</span> · <span class="text-gray-300">${pendingCount} pending</span>
               </span>
-              <button onclick="scheduleState('${fn}')" class="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition">
+              <button onclick="scheduleState(${escHtml(JSON.stringify(fn))})" class="bg-green-600 hover:bg-green-500 text-white text-xs px-3 py-1.5 rounded-lg font-medium transition">
                 ▶ Jadwalkan
               </button>
             </div>
@@ -350,9 +711,9 @@
           <div class="mb-4">
             <label class="text-sm text-gray-400 block mb-1.5">📺 Stok Link YouTube (${(cfg.ytLinks || []).length})</label>
             <div class="flex gap-2 mb-2">
-              <input id="yt-input-${fn}" type="url" placeholder="https://www.youtube.com/watch?v=..."
+              <input id="yt-input-${escHtml(fn)}" type="url" placeholder="https://www.youtube.com/watch?v=..."
                      class="flex-1 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
-              <button onclick="addLink('${fn}')"
+              <button onclick="addLink(${escHtml(JSON.stringify(fn))})"
                       class="bg-red-600 hover:bg-red-500 text-white px-4 py-2 rounded-xl text-sm font-medium transition flex-shrink-0">
                 + Tambah
               </button>
@@ -364,12 +725,12 @@
           <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
             <div>
               <label class="text-sm text-gray-400 block mb-1">📝 Deskripsi</label>
-              <textarea id="desc-${fn}" rows="2" placeholder="Deskripsi video TikTok..."
+              <textarea id="desc-${escHtml(fn)}" rows="2" placeholder="Deskripsi video TikTok..."
                         class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 resize-none transition">${escHtml(cfg.description || '')}</textarea>
             </div>
             <div>
               <label class="text-sm text-gray-400 block mb-1"># Hashtag</label>
-              <input id="tags-${fn}" type="text" placeholder="fyp,viral,trending" value="${escHtml(cfg.hashtags || '')}"
+              <input id="tags-${escHtml(fn)}" type="text" placeholder="fyp,viral,trending" value="${escHtml(cfg.hashtags || '')}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
           </div>
@@ -378,12 +739,12 @@
           <div class="grid grid-cols-2 gap-3 mb-3">
             <div>
               <label class="text-[10px] text-gray-400 font-bold block mb-1">📅 Upload Terakhir (Tanggal)</label>
-              <input id="last-date-${fn}" type="date" value="${cfg.lastUploadDate || ''}"
+              <input id="last-date-${escHtml(fn)}" type="date" value="${cfg.lastUploadDate || ''}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
             <div>
               <label class="text-[10px] text-gray-400 font-bold block mb-1">⏰ Upload Terakhir (Jam)</label>
-              <input id="last-time-${fn}" type="time" value="${cfg.lastUploadTime || ''}"
+              <input id="last-time-${escHtml(fn)}" type="time" value="${cfg.lastUploadTime || ''}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
           </div>
@@ -392,22 +753,22 @@
           <div class="grid grid-cols-3 gap-3 mb-4">
             <div>
               <label class="text-sm text-gray-400 block mb-1">📅 Sched Date (Awal)</label>
-              <input id="sdate-${fn}" type="date" value="${cfg.scheduleDate || today}"
+              <input id="sdate-${escHtml(fn)}" type="date" value="${cfg.scheduleDate || today}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
             <div>
               <label class="text-sm text-gray-400 block mb-1">⏰ Sched Time (Awal)</label>
-              <input id="stime-${fn}" type="time" value="${cfg.scheduleTime || nowTime}"
+              <input id="stime-${escHtml(fn)}" type="time" value="${cfg.scheduleTime || nowTime}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
             <div>
               <label class="text-sm text-gray-400 block mb-1">⏱ Interval (menit)</label>
-              <input id="interval-${fn}" type="number" min="1" value="${cfg.intervalMinutes || 60}"
+              <input id="interval-${escHtml(fn)}" type="number" min="1" value="${cfg.intervalMinutes || 60}"
                      class="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-pink-500 transition">
             </div>
           </div>
 
-          <button onclick="saveConfig('${fn}')"
+          <button onclick="saveConfig(${escHtml(JSON.stringify(fn))})"
                   class="w-full bg-gray-700 hover:bg-gray-600 text-white py-2.5 rounded-xl text-sm font-medium transition">
             💾 Simpan Konfigurasi
           </button>

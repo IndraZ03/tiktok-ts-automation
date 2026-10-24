@@ -7,6 +7,8 @@ export type SplitProgressStage = 'metadata' | 'download' | 'split' | 'cleanup' |
 
 export interface SplitProgressEvent {
   stage: SplitProgressStage;
+  phase?: 'started' | 'completed';
+  title?: string;
   message: string;
   percent?: number;
   part?: number;
@@ -286,8 +288,23 @@ async function splitPart(
  * segmentDuration opsional dalam detik (default 180), watermarkText opsional, dan onProgress untuk progress real-time.
  * Mengembalikan metadata video, jumlah part, daftar file output, dan status penghapusan file video asli hasil download.
  */
+interface SplitterDependencies {
+  getMetadata: typeof getYoutubeMetadata;
+  download: typeof downloadYoutubeVideo;
+  split: typeof splitPart;
+  cleanup: (dir: string) => void;
+}
+
+const splitterDependencies: SplitterDependencies = {
+  getMetadata: getYoutubeMetadata,
+  download: downloadYoutubeVideo,
+  split: splitPart,
+  cleanup: dir => fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 }),
+};
+
 export async function splitAndProcessVideo(
-  options: SplitAndProcessVideoOptions
+  options: SplitAndProcessVideoOptions,
+  dependencies: SplitterDependencies = splitterDependencies
 ): Promise<SplitAndProcessVideoResult> {
   const segmentDuration = options.segmentDuration || 180;
   if (!options.youtubeUrl) {
@@ -308,15 +325,28 @@ export async function splitAndProcessVideo(
     message: 'Membaca metadata YouTube',
   });
 
-  const metadata = await getYoutubeMetadata(options.youtubeUrl);
+  const metadata = await dependencies.getMetadata(options.youtubeUrl);
   const safeTitle = sanitizeFilename(metadata.title);
   const totalParts = Math.ceil(metadata.duration / segmentDuration);
-  const downloadedPath = path.join(tempDir, `${safeTitle}-${Date.now()}.mp4`);
+  const jobTempDir = fs.mkdtempSync(path.join(tempDir, 'split-'));
+  const downloadedPath = path.join(jobTempDir, `${safeTitle}.mp4`);
   const outputFiles: string[] = [];
   let downloadedVideoDeleted = false;
 
   try {
-    await downloadYoutubeVideo(options.youtubeUrl, downloadedPath, options.onProgress);
+    emitProgress(options.onProgress, {
+      stage: 'download', phase: 'started', title: metadata.title,
+      message: `Mulai download: ${metadata.title}`,
+    });
+    await dependencies.download(options.youtubeUrl, downloadedPath, options.onProgress);
+    emitProgress(options.onProgress, {
+      stage: 'download', phase: 'completed', title: metadata.title,
+      message: `Download selesai: ${metadata.title}`,
+    });
+    emitProgress(options.onProgress, {
+      stage: 'split', phase: 'started', title: metadata.title, totalParts,
+      message: `Mulai split ${totalParts} part: ${metadata.title}`,
+    });
 
     for (let index = 0; index < totalParts; index += 1) {
       const part = index + 1;
@@ -332,7 +362,7 @@ export async function splitAndProcessVideo(
         totalParts,
       });
 
-      await splitPart(
+      await dependencies.split(
         downloadedPath,
         outputPath,
         startSeconds,
@@ -347,6 +377,10 @@ export async function splitAndProcessVideo(
       outputFiles.push(outputPath);
     }
 
+    emitProgress(options.onProgress, {
+      stage: 'split', phase: 'completed', title: metadata.title, totalParts: outputFiles.length,
+      message: `Split selesai: ${outputFiles.length} part dari ${metadata.title}`,
+    });
     fs.unlinkSync(downloadedPath);
     downloadedVideoDeleted = true;
     emitProgress(options.onProgress, {
@@ -369,16 +403,11 @@ export async function splitAndProcessVideo(
       outputFiles,
       downloadedVideoDeleted,
     };
-  } catch (error) {
-    if (fs.existsSync(downloadedPath) && outputFiles.length === totalParts) {
-      try {
-        fs.unlinkSync(downloadedPath);
-        downloadedVideoDeleted = true;
-      } catch {
-        downloadedVideoDeleted = false;
-      }
+  } finally {
+    try {
+      dependencies.cleanup(jobTempDir);
+    } catch (error) {
+      console.warn(`[SPLITTER] Gagal membersihkan temporary ${jobTempDir}:`, error);
     }
-
-    throw error;
   }
 }
