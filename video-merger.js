@@ -62,7 +62,7 @@ export async function mergeVideosCopy(videoPaths, outputPath, options = {}) {
         }
     }
 }
-export async function replaceVideoAudio(videoPath, audioPath, outputPath) {
+export async function replaceVideoAudio(videoPath, audioPath, outputPath, durationSeconds) {
     const videoStat = fs.existsSync(videoPath) ? fs.statSync(videoPath) : null;
     if (!videoStat?.isFile()) {
         throw new Error(`File video tidak ditemukan: ${videoPath}`);
@@ -73,12 +73,14 @@ export async function replaceVideoAudio(videoPath, audioPath, outputPath) {
     }
     const resolvedOutput = path.resolve(outputPath);
     fs.mkdirSync(path.dirname(resolvedOutput), { recursive: true });
-    await execa(ensureFfmpegPath(), [
+    const ffmpegArgs = [
         '-hide_banner',
         '-loglevel',
         'error',
         '-i',
         path.resolve(videoPath),
+        '-stream_loop',
+        '-1',
         '-i',
         path.resolve(audioPath),
         '-map',
@@ -89,10 +91,18 @@ export async function replaceVideoAudio(videoPath, audioPath, outputPath) {
         'copy',
         '-c:a',
         'aac',
-        '-shortest',
-        '-y',
-        resolvedOutput,
-    ], { windowsHide: true });
+    ];
+    if (durationSeconds !== undefined) {
+        if (!Number.isFinite(durationSeconds) || durationSeconds <= 0) throw new Error('Durasi video harus positif dan terbatas.');
+        const codecIndex = ffmpegArgs.indexOf('-c:v');
+        ffmpegArgs.splice(codecIndex, 2, '-c:v', 'libx264', '-preset', 'fast', '-crf', '18');
+        ffmpegArgs.push('-vf', `setpts=PTS-STARTPTS,tpad=stop_mode=clone:stop_duration=${durationSeconds}`,
+            '-af', 'asetpts=PTS-STARTPTS', '-t', String(durationSeconds));
+    } else {
+        ffmpegArgs.push('-shortest');
+    }
+    ffmpegArgs.push('-y', resolvedOutput);
+    await execa(ensureFfmpegPath(), ffmpegArgs, { windowsHide: true });
     return { outputPath: resolvedOutput };
 }
 export async function mergeVideosCopyWithOptionalAudio(videoPaths, outputPath, audioPath, options = {}) {
@@ -105,7 +115,7 @@ export async function mergeVideosCopyWithOptionalAudio(videoPaths, outputPath, a
     const tempMergedPath = path.join(tempRoot, `merged-video-${Date.now()}-${Math.random().toString(16).slice(2)}.mp4`);
     try {
         const merged = await mergeVideosCopy(videoPaths, tempMergedPath, options);
-        await replaceVideoAudio(tempMergedPath, audioPath, resolvedOutput);
+        await replaceVideoAudio(tempMergedPath, audioPath, resolvedOutput, options.durationSeconds);
         return {
             outputPath: resolvedOutput,
             inputCount: merged.inputCount,

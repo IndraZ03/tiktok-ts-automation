@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SoundTT — TikTok ke WAV</title>
+  <style>
+    :root { color-scheme: dark; --bg: #0a0b10; --card: rgba(20,22,33,.88); --text: #f3f4f6; --muted: #aeb4c0; --border: rgba(255,255,255,.12); --amber: #f59e0b; --orange: #f97316; --green: #6ee7b7; --red: #fca5a5; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: radial-gradient(ellipse at 50% 0%, #2b1d0c, var(--bg) 65%); background-color: var(--bg); color: var(--text); font: 15px/1.6 system-ui, -apple-system, 'Segoe UI', sans-serif; min-height: 100vh; }
+    .wrap { max-width: 1152px; margin: auto; padding: 24px 24px 64px; }
+    nav, .card { background: var(--card); border: 1px solid var(--border); box-shadow: 0 16px 40px #0003; }
+    nav { border-radius: 16px; padding: 16px; display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+    .nav-title { font-weight: 700; color: #d1d5db; }
+    .nav-links { display: flex; flex-wrap: wrap; gap: 4px; }
+    nav a { color: #d1d5db; text-decoration: none; padding: 7px 10px; border-radius: 10px; font-size: 13px; font-weight: 600; }
+    nav a:hover { background: #ffffff12; }
+    nav a[aria-current] { background: var(--amber); color: #17100a; }
+    header { margin: 32px 0 24px; }
+    .eyebrow { color: #fbbf24; font-size: 12px; letter-spacing: .13em; font-weight: 700; }
+    h1 { margin: 6px 0; font-size: clamp(28px, 5vw, 38px); line-height: 1.2; letter-spacing: -.03em; }
+    h1 span { color: #fbbf24; }
+    h2 { margin: 0 0 16px; font-size: 20px; }
+    p { margin: 8px 0; }
+    .muted, .help { color: var(--muted); }
+    .help { font-size: 13px; }
+    .card { border-radius: 24px; padding: 28px; margin-bottom: 24px; }
+    label { font-weight: 600; }
+    textarea { display: block; width: 100%; resize: vertical; min-height: 180px; margin: 10px 0; padding: 16px; border-radius: 14px; border: 1px solid var(--border); background: #0a0b10b3; color: var(--text); font: inherit; line-height: 1.7; }
+    textarea::placeholder { color: #858d9c; }
+    :focus-visible { outline: 3px solid #fbbf24; outline-offset: 3px; }
+    .actions, .toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+    .actions { margin-top: 18px; }
+    button, .download { display: inline-flex; align-items: center; justify-content: center; border: 1px solid var(--border); border-radius: 12px; padding: 11px 16px; background: #ffffff0d; color: var(--text); font: inherit; font-weight: 650; cursor: pointer; text-decoration: none; min-height: 44px; }
+    button:hover:not(:disabled), .download:hover { background: #ffffff1a; }
+    button.primary { background: linear-gradient(135deg, var(--amber), var(--orange)); color: #191007; border: 0; padding-inline: 25px; }
+    button:disabled { opacity: .45; cursor: not-allowed; }
+    input[type=checkbox] { width: 19px; height: 19px; accent-color: var(--amber); flex-shrink: 0; }
+    .select-label { display: inline-flex; align-items: center; gap: 9px; min-height: 44px; }
+    .toolbar { padding: 14px 0; border-block: 1px solid var(--border); margin: 16px 0; }
+    .toolbar .select-label { margin-right: auto; }
+    .notice { border-left: 3px solid var(--amber); padding-left: 16px; margin-top: 24px; }
+    #status { margin-top: 16px; min-height: 24px; }
+    #errors { color: var(--red); white-space: pre-line; overflow-wrap: anywhere; }
+    #errors:empty { display: none; }
+    #results { list-style: none; padding: 0; margin: 0; }
+    .item { display: flex; align-items: flex-start; gap: 12px; padding: 18px 0; border-bottom: 1px solid var(--border); }
+    .item:last-child { border-bottom: 0; }
+    .item input { margin-top: 6px; }
+    .item-body { flex: 1; min-width: 0; }
+    .item-title { display: block; font-weight: 650; overflow-wrap: anywhere; }
+    .item-url, .item-error { font-size: 13px; overflow-wrap: anywhere; }
+    .item-url { color: var(--muted); }
+    .item-error { color: var(--red); }
+    .badge { font-size: 12px; color: #fcd68a; }
+    .badge.ready { color: var(--green); }
+    .badge.failed { color: var(--red); }
+    .empty { text-align: center; color: var(--muted); padding: 32px 12px; border: 1px dashed var(--border); border-radius: 14px; }
+    [hidden] { display: none !important; }
+    @media (max-width: 600px) {
+      .wrap { padding: 16px 16px 40px; }
+      .card { padding: 20px; border-radius: 18px; }
+      nav { padding: 12px; }
+      .item { flex-wrap: wrap; }
+      .item .download { margin-left: 31px; }
+      .toolbar button { flex: 1; }
+      .toolbar .select-label { width: 100%; }
+      .actions .primary { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <nav aria-label="Navigasi Bot">
+      <span class="nav-title">Navigasi Bot</span>
+      <div class="nav-links">
+        <a href="/">StorageState</a><a href="/tiktok">TikTok Uploader</a><a href="/grok">Grok Imagine</a><a href="/ytbot">YT Bot</a><a href="/leonardo">Leonardo Kling</a><a href="/merge-upload">Merge &amp; Upload</a><a href="/fb">FB Reels</a><a href="/bahan">Downloader Bahan</a><a href="/soundtt" aria-current="page">SoundTT</a><a href="/git">Git &amp; System</a>
+      </div>
+    </nav>
+    <header>
+      <div class="eyebrow">AUDIO TIKTOK · WAV</div>
+      <h1><span>SoundTT</span> — TikTok ke WAV</h1>
+      <p class="muted">Tempel tautan video, proses audio, lalu unduh satu per satu atau sekaligus.</p>
+    </header>
+    <main>
+      <section class="card" aria-labelledby="input-title">
+        <h2 id="input-title">Siapkan tautan</h2>
+        <form id="job-form">
+          <label for="urls">URL video TikTok</label>
+          <textarea id="urls" rows="6" aria-describedby="url-help url-count errors" placeholder="https://www.tiktok.com/@akun/video/…&#10;https://vt.tiktok.com/…" required spellcheck="false" autocapitalize="off"></textarea>
+          <div id="url-help" class="help">Satu URL per baris, maksimal 50 URL. Baris kosong diabaikan.</div>
+          <div id="url-count" class="help">0 / 50 URL</div>
+          <div class="actions"><button class="primary" id="submit" type="submit">Proses WAV</button><span class="help">WAV · PCM 16-bit · Stereo · 44.100 Hz</span></div>
+          <p id="errors" role="alert"></p>
+        </form>
+        <p id="status" role="status" aria-live="polite" aria-atomic="true">Belum ada proses. Masukkan URL untuk memulai.</p>
+        <aside class="notice help" aria-label="Informasi audio">
+          <p>Hasil berisi <strong>seluruh audio video</strong>, termasuk suara, musik, dan efek; bukan lagu yang dipisahkan atau diisolasi.</p>
+          <p>File tersedia selama <strong>30 menit</strong>, lalu kedaluwarsa. Unduh segera setelah siap. Gunakan hanya konten yang berhak Anda unduh.</p>
+        </aside>
+      </section>
+      <section class="card" aria-labelledby="result-title">
+        <h2 id="result-title">Hasil WAV</h2>
+        <p id="summary" class="muted">Belum ada hasil.</p>
+        <p id="expiry" class="help"></p>
+        <div class="toolbar">
+          <label class="select-label" for="select-all"><input id="select-all" type="checkbox" disabled>Pilih semua yang siap</label>
+          <button id="download-selected" type="button" disabled>Unduh terpilih</button>
+          <button id="download-all" type="button" disabled>Unduh semua</button>
+        </div>
+        <p class="help">Untuk unduhan sekaligus, izinkan <strong>beberapa unduhan otomatis</strong> pada pengaturan situs di browser. File dikirim berurutan; jika diblokir, gunakan tautan Unduh WAV masing-masing.</p>
+        <p id="download-status" class="help" role="status" aria-live="polite"></p>
+        <div id="empty" class="empty">Daftar audio akan muncul di sini setelah Anda menekan Proses WAV.</div>
+        <ul id="results" aria-label="Daftar hasil audio"></ul>
+      </section>
+    </main>
+  </div>
+  <script>
+    'use strict';
+    const $ = id => document.getElementById(id);
+    const selected = new Set();
+    const rows = new Map();
+    const labels = { queued: 'Menunggu', processing: 'Memproses', ready: 'Siap', failed: 'Gagal' };
+    let job = null, busy = false, downloading = false, stopped = false;
+    let pollTimer, expiryTimer, downloadTimer, requestController;
+    let retries = 0;
+
+    function lines() {
+      return $('urls').value.split(/\r?\n/).map((url, index) => ({ url: url.trim(), line: index + 1 })).filter(entry => entry.url);
+    }
+    function setBusy(value) {
+      busy = value;
+      $('submit').disabled = busy || downloading;
+      $('urls').readOnly = busy;
+      $('submit').textContent = busy ? 'Sedang memproses…' : 'Proses WAV';
+    }
+    function expired() {
+      return job && Number.isFinite(job.expiresAt) && Date.now() >= job.expiresAt;
+    }
+    function downloadUrl(item) {
+      if (!item.downloadUrl) return null;
+      try {
+        const url = new URL(item.downloadUrl, location.href);
+        return /^https?:$/.test(url.protocol) && url.origin === location.origin ? url.href : null;
+      } catch { return null; }
+    }
+    function readyItems() {
+      return !job || expired() ? [] : job.items.filter(item => item.status === 'ready' && downloadUrl(item));
+    }
+    function updateSelection() {
+      const ready = readyItems();
+      const count = ready.filter(item => selected.has(item.id)).length;
+      $('select-all').checked = ready.length > 0 && count === ready.length;
+      $('select-all').indeterminate = count > 0 && count < ready.length;
+      $('select-all').disabled = !ready.length || downloading;
+      $('download-selected').disabled = !count || downloading;
+      $('download-all').disabled = !ready.length || downloading;
+      $('download-selected').textContent = count ? `Unduh terpilih (${count})` : 'Unduh terpilih';
+      for (const item of job ? job.items : []) {
+        const row = rows.get(item.id);
+        row.check.checked = selected.has(item.id);
+        row.check.disabled = !ready.some(entry => entry.id === item.id) || downloading;
+      }
+    }
+    function makeRow(item) {
+      const li = document.createElement('li'); li.className = 'item';
+      const check = document.createElement('input'); check.type = 'checkbox';
+      const body = document.createElement('div'); body.className = 'item-body';
+      const title = document.createElement('label'); title.className = 'item-title';
+      check.id = `audio-${rows.size}`; title.htmlFor = check.id;
+      const url = document.createElement('div'); url.className = 'item-url';
+      const badge = document.createElement('div');
+      const error = document.createElement('div'); error.className = 'item-error';
+      const link = document.createElement('a'); link.className = 'download'; link.textContent = 'Unduh WAV';
+      link.addEventListener('click', event => {
+        if (expired()) { event.preventDefault(); render(); }
+      });
+      check.addEventListener('change', () => {
+        if (check.checked) selected.add(item.id); else selected.delete(item.id);
+        updateSelection();
+      });
+      body.append(title, url, badge, error); li.append(check, body, link);
+      $('results').append(li);
+      const row = { li, check, title, url, badge, error, link };
+      rows.set(item.id, row); return row;
+    }
+    function render() {
+      if (!job) return;
+      const isExpired = expired();
+      $('empty').hidden = job.items.length > 0;
+      $('empty').textContent = 'Akun proses ini tidak memiliki hasil audio.';
+      $('summary').textContent = `${job.readyCount} siap · ${job.failedCount} gagal · ${job.total} total`;
+      const end = new Date(job.expiresAt);
+      $('expiry').textContent = isExpired ? 'File sudah kedaluwarsa. Proses ulang URL untuk membuat file baru.' : Number.isFinite(end.getTime()) ? `File kedaluwarsa pada ${end.toLocaleString('id-ID')}.` : 'File kedaluwarsa setelah 30 menit.';
+      const currentIds = new Set(job.items.map(item => item.id));
+      for (const [id, row] of rows) {
+        if (!currentIds.has(id)) { row.li.remove(); rows.delete(id); selected.delete(id); }
+      }
+      for (const item of job.items) {
+        const row = rows.get(item.id) || makeRow(item);
+        const title = item.title || item.filename || 'Audio TikTok';
+        row.title.textContent = title;
+        row.url.textContent = item.originalUrl || '';
+        row.badge.className = `badge ${Object.hasOwn(labels, item.status) ? item.status : ''}`;
+        row.badge.textContent = labels[item.status] || 'Status tidak dikenal';
+        row.error.textContent = item.error || '';
+        const href = downloadUrl(item);
+        const usable = item.status === 'ready' && href && !isExpired;
+        row.link.hidden = !usable;
+        row.link.removeAttribute('href');
+        if (usable) {
+          row.link.href = href;
+          row.link.download = item.filename || 'audio.wav';
+          row.link.setAttribute('aria-label', `Unduh WAV: ${title}`);
+        } else selected.delete(item.id);
+        if (item.status === 'ready' && !href) row.error.textContent = 'Tautan unduhan tidak tersedia atau tidak valid.';
+      }
+      updateSelection();
+    }
+    async function request(url, options = {}) {
+      requestController = new AbortController();
+      const timeout = setTimeout(() => requestController.abort(), 20000);
+      try {
+        const response = await fetch(url, { ...options, signal: requestController.signal, cache: 'no-store' });
+        let data;
+        try { data = await response.json(); } catch { throw new Error('Respons server tidak valid.'); }
+        if (!response.ok || data.success !== true) {
+          const error = new Error(data.error || `Server mengembalikan HTTP ${response.status}.`);
+          error.invalidUrls = data.invalidUrls;
+          error.permanent = response.status >= 400 && response.status < 500 && response.status !== 408 && response.status !== 429;
+          throw error;
+        }
+        if (!data.job || !Array.isArray(data.job.items) || !data.job.id || !['queued', 'running', 'completed'].includes(data.job.status)) throw new Error('Data proses dari server tidak valid.');
+        return data.job;
+      } finally { clearTimeout(timeout); requestController = null; }
+    }
+    function acceptJob(next) {
+      job = next;
+      render();
+      clearTimeout(expiryTimer);
+      const remaining = Number.isFinite(job.expiresAt) ? job.expiresAt - Date.now() : NaN;
+      if (Number.isFinite(remaining) && remaining > 0) expiryTimer = setTimeout(render, Math.min(remaining + 50, 2147483647));
+      if (job.status === 'completed') {
+        setBusy(false);
+        $('status').textContent = `Selesai. ${job.readyCount} audio siap, ${job.failedCount} gagal.`;
+      } else {
+        $('status').textContent = job.status === 'queued' ? 'Proses masuk antrean. Menunggu giliran…' : `Audio sedang diproses. ${job.readyCount} dari ${job.total} siap.`;
+        pollTimer = setTimeout(poll, 1500);
+      }
+    }
+    async function poll() {
+      if (stopped || !job) return;
+      try {
+        const next = await request(`/api/soundtt/jobs/${encodeURIComponent(job.id)}`);
+        if (stopped) return;
+        retries = 0;
+        acceptJob(next);
+      } catch (error) {
+        if (stopped) return;
+        if (error.permanent) {
+          setBusy(false);
+          $('status').textContent = `Pemantauan berhenti: ${error.message} Anda dapat memulai proses baru.`;
+        } else {
+          retries++;
+          $('status').textContent = `Koneksi terganggu (${retries}). Mencoba lagi dalam 1,5 detik. ${error.message}`;
+          pollTimer = setTimeout(poll, 1500);
+        }
+      }
+    }
+    $('urls').addEventListener('input', () => {
+      const count = lines().length;
+      $('url-count').textContent = `${count} / 50 URL`;
+      $('urls').setAttribute('aria-invalid', String(count > 50));
+    });
+    $('job-form').addEventListener('submit', async event => {
+      event.preventDefault();
+      if (busy || downloading) return;
+      $('errors').textContent = '';
+      const entries = lines();
+      const invalid = entries.filter(({ url }) => {
+        try {
+          const parsed = new URL(url);
+          return !['http:', 'https:'].includes(parsed.protocol) || !(parsed.hostname === 'tiktok.com' || parsed.hostname.endsWith('.tiktok.com')) || !!parsed.username || !!parsed.password;
+        } catch { return true; }
+      });
+      if (!entries.length || entries.length > 50 || invalid.length) {
+        $('errors').textContent = !entries.length ? 'Masukkan minimal satu URL TikTok.' : entries.length > 50 ? 'Maksimal 50 URL per proses.' : `URL TikTok tidak valid pada baris ${invalid.map(entry => entry.line).join(', ')}.`;
+        $('urls').setAttribute('aria-invalid', 'true'); $('urls').focus(); return;
+      }
+      $('urls').setAttribute('aria-invalid', 'false');
+      clearTimeout(pollTimer); clearTimeout(expiryTimer);
+      setBusy(true); retries = 0;
+      $('status').textContent = 'Mengirim URL ke server…';
+      $('download-status').textContent = '';
+      try {
+        const next = await request('/api/soundtt/jobs', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls: entries.map(entry => entry.url) }) });
+        if (stopped) return;
+        selected.clear(); rows.clear(); $('results').replaceChildren();
+        acceptJob(next);
+      } catch (error) {
+        if (stopped) return;
+        setBusy(false);
+        const details = Array.isArray(error.invalidUrls) ? error.invalidUrls.map(entry => `Baris ${entries[entry.index]?.line ?? '?'}: ${entry.reason}`).join('\n') : '';
+        $('errors').textContent = error.message + (details ? `\n${details}` : '');
+        $('status').textContent = 'Permintaan tidak dapat dikonfirmasi. Tidak dikirim ulang otomatis untuk menghindari proses ganda. Periksa koneksi sebelum mencoba lagi.';
+        render();
+      }
+    });
+    $('select-all').addEventListener('change', event => {
+      for (const item of readyItems()) {
+        if (event.target.checked) selected.add(item.id); else selected.delete(item.id);
+      }
+      updateSelection();
+    });
+    function queueDownloads(items) {
+      if (downloading || !items.length) return;
+      downloading = true; setBusy(busy); updateSelection();
+      let index = 0;
+      function next() {
+        if (stopped) return;
+        if (expired() || index >= items.length) {
+          downloading = false; setBusy(busy); render();
+          $('download-status').textContent = `Permintaan unduhan dikirim ke browser: ${index} file. Periksa daftar unduhan dan izin beberapa unduhan; pengiriman bukan konfirmasi file tersimpan.`;
+          return;
+        }
+        const item = items[index++];
+        const link = document.createElement('a');
+        link.href = downloadUrl(item); link.download = item.filename || 'audio.wav';
+        link.hidden = true; document.body.append(link); link.click(); link.remove();
+        $('download-status').textContent = `Mengirim unduhan ${index} dari ${items.length} ke browser…`;
+        downloadTimer = setTimeout(next, 600);
+      }
+      next();
+    }
+    $('download-selected').addEventListener('click', () => queueDownloads(readyItems().filter(item => selected.has(item.id))));
+    $('download-all').addEventListener('click', () => queueDownloads(readyItems()));
+    window.addEventListener('pagehide', () => {
+      stopped = true;
+      clearTimeout(pollTimer); clearTimeout(expiryTimer); clearTimeout(downloadTimer);
+      if (requestController) requestController.abort();
+    });
+    window.addEventListener('pageshow', event => {
+      if (!event.persisted) return;
+      stopped = false; downloading = false; setBusy(busy);
+      if (job && busy && job.status !== 'completed') poll(); else render();
+    });
+  </script>
+</body>
+</html>

@@ -34,6 +34,8 @@ import { mergeVideosCopyWithOptionalAudio } from './video-merger.js';
 import { splitAndProcessVideo, SplitProgressEvent } from './video-splitter.js';
 import { isSupportedYtbotUrl, mutateYtbotData, removeYtLinkFromState, sortYtbotStatesOldestFirst, type YtbotData } from './ytbot-core.js';
 import { YtbotNotifier } from './ytbot-notifications.js';
+import { SoundttService } from './soundtt-service.js';
+import { createSoundttRouter } from './soundtt-router.js';
 import {
   startWAPolling,
   notifyScheduleStarted as originalNotifyScheduleStarted,
@@ -69,6 +71,7 @@ import {
   LeonardoAccount,
   LeonardoPrompt
 } from './leonardo-helper.js';
+import { startAzkayangBot, stopAzkayangBot } from './telegram-azkayang-service.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -137,6 +140,9 @@ app.use((req, _res, next) => {
 });
 
 app.use(express.json({ limit: '50mb' }));
+const soundttService = new SoundttService();
+app.use('/api/soundtt', createSoundttRouter(soundttService));
+app.get('/soundtt', (_req, res) => res.sendFile(path.join(__dirname, 'public', 'soundtt.html')));
 app.use(express.static('public'));
 app.use('/bahan', express.static(path.join(__dirname, 'bahan')));
 app.use('/audio', express.static(path.join(__dirname, 'audio')));
@@ -11243,6 +11249,7 @@ app.get('/api/vidabot/logs', (req, res) => {
 const httpServer = app.listen(PORT, () => {
   initAutopull();
   startWAPolling();
+  void startAzkayangBot().catch(error => recordBackendError('azkayangStartup', error));
   if (loadGrokbotV2Data().infiniteSchedule?.active) void runGrokbotV2InfiniteSchedule();
   grokbotDashboardContext.run({ version: 3 }, () => {
     if (loadGrokbotV2Data().infiniteBrutal?.active) void runInfiniteBrutalV3();
@@ -11268,4 +11275,23 @@ httpServer.on('error', (error: NodeJS.ErrnoException) => {
     setImmediate(() => process.exit(1));
   }
 });
+
+let azkayangShuttingDown = false;
+const cleanupAzkayangOnExit = async (exitCode: number) => {
+  if (azkayangShuttingDown) return;
+  azkayangShuttingDown = true;
+  // Other workers may keep handles open; preserve bounded signal termination.
+  const deadline = setTimeout(() => process.exit(exitCode), 20_000);
+  httpServer.close();
+  try {
+    await stopAzkayangBot();
+  } catch (error) {
+    recordBackendError('azkayangShutdown', error);
+  } finally {
+    clearTimeout(deadline);
+    process.exit(exitCode);
+  }
+};
+process.once('SIGINT', () => { void cleanupAzkayangOnExit(130); });
+process.once('SIGTERM', () => { void cleanupAzkayangOnExit(143); });
 
